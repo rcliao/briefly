@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/joho/godotenv"
-	"rcliao/briefly/llmclient" // Assuming your module path is rcliao/briefly
+	"briefly/llmclient" // Corrected import path
 )
 
 // ArticleData holds information about each processed article
@@ -51,12 +51,44 @@ func readMarkdownFile(filePath string) (string, error) {
 
 // extractURLs parses the given markdown content and extracts all URLs.
 func extractURLs(markdownContent string) ([]string, error) {
-	// A simple regex to find URLs. This can be improved for more complex cases.
-	// It looks for http:// or https:// followed by non-whitespace characters.
-	urlRegex := regexp.MustCompile(`https?://[^\s)]+`)
-	urls := urlRegex.FindAllString(markdownContent, -1)
-	if urls == nil {
-		return []string{}, nil // Return empty slice if no URLs found
+	// Regex for Markdown links: extracts the URL part from [text](URL)
+	// This handles URLs with parentheses by matching non-parentheses chars and parentheses pairs
+	markdownLinkRegex := regexp.MustCompile(`\[[^\]]*\]\((https?://[^)]*\([^)]*\)[^)]*|https?://[^)]*)\)`)
+	// Regex for standalone URLs: finds http(s):// followed by non-whitespace characters,
+	// excluding common trailing punctuation if not part of the URL itself.
+	standaloneURLRegex := regexp.MustCompile(`https?://[^\s<>"\'']+(?:[^\s<>"\'\.?!,;:)])`)
+
+	foundURLs := make(map[string]bool)
+	var urls []string
+
+	// First, extract URLs from Markdown links
+	markdownMatches := markdownLinkRegex.FindAllStringSubmatch(markdownContent, -1)
+	for _, match := range markdownMatches {
+		if len(match) > 1 && match[1] != "" {
+			url := match[1]
+			if !foundURLs[url] {
+				urls = append(urls, url)
+				foundURLs[url] = true
+			}
+		}
+	}
+
+	// Then, extract standalone URLs (and avoid re-adding those already found in Markdown links)
+	// To avoid capturing parts of markdown links again, we can temporarily replace them.
+	// This is a simplification; a proper parser would be better for complex cases.
+	tempContent := markdownLinkRegex.ReplaceAllString(markdownContent, "")
+	standaloneMatches := standaloneURLRegex.FindAllString(tempContent, -1)
+	for _, url := range standaloneMatches {
+		// Basic cleaning of common trailing punctuation for standalone URLs
+		cleanedURL := strings.TrimRight(url, ".?!,;:")
+		if !foundURLs[cleanedURL] {
+			urls = append(urls, cleanedURL)
+			foundURLs[cleanedURL] = true
+		}
+	}
+
+	if len(urls) == 0 {
+		return []string{}, nil
 	}
 	return urls, nil
 }
@@ -343,7 +375,7 @@ func main() {
 	log.Println("-----------------------------------------------------")
 	fmt.Println("\n✨ --- FINAL DIGEST --- ✨")
 	fmt.Println(finalDigest)
-	fmt.Println("✨ --- END OF DIGEST --- ✨\n")
+	fmt.Println("✨ --- END OF DIGEST --- ✨")
 
 	dateStr := time.Now().Format("2006-01-02")
 	digestFilename := fmt.Sprintf("digest_%s.md", dateStr)
