@@ -1,0 +1,24 @@
+# Briefly Configuration
+# Copy this file to .briefly.yaml in your home directory or current directory
+
+# Gemini AI Configuration
+gemini:
+  # API key for Gemini (alternatively use GEMINI_API_KEY environment variable)
+  api_key: ""
+  # Model to use for summarization
+  model: "gemini-1.5-flash-latest"
+
+# Output Configuration
+output:
+  # Directory to save digest files
+  directory: "digests"
+
+# Future configuration options can be added here
+# For example:
+# cache:
+#   enabled: true
+#   ttl: "24h"
+# 
+# feeds:
+#   - url: "https://example.com/feed.xml"
+#     name: "Example Feed"
