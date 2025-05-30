@@ -1,30 +1,33 @@
 # Briefly: AI-Powered Digest Generator
 
-Briefly is a command-line application written in Go that takes a Markdown file containing a list of URLs, fetches the content from each URL, summarizes the text using a Large Language Model (LLM) via the Gemini API, and then generates a cohesive Markdown-formatted digest of all the summarized content.
+Briefly is a modern command-line application written in Go that takes a Markdown file containing a list of URLs, fetches the content from each URL, summarizes the text using a Large Language Model (LLM) via the Gemini API, and then generates a cohesive Markdown-formatted digest of all the summarized content.
 
 ## Features
 
-- Reads URLs from a specified Markdown file.
-- Fetches and parses HTML content from each URL to extract the main text.
-- Saves extracted text to a local temporary folder.
-- Summarizes each article's text using the Gemini API.
-- Generates a final, cohesive Markdown digest from all individual summaries, also using the Gemini API.
-- Includes citations (links back to original URLs) in the final digest.
-- Outputs the final digest to the console and saves it to a Markdown file.
-- Configurable via command-line flags for API key, model, input/output paths.
-- Provides detailed logging of its operations.
+- **Smart Content Processing**: Reads URLs from Markdown files and intelligently extracts main article content
+- **AI-Powered Summarization**: Uses Gemini API to generate concise, meaningful summaries
+- **Multiple Digest Formats**: Choose from brief, standard, detailed, or newsletter formats
+- **Intelligent Caching**: SQLite-based caching system to avoid re-processing articles and summaries
+- **Cost Estimation**: Dry-run mode to estimate API costs before processing
+- **Template System**: Customizable output formats with built-in templates
+- **Terminal UI**: Interactive TUI for browsing articles and summaries
+- **Modern CLI**: Built with Cobra for intuitive command-line experience
+- **Structured Logging**: Comprehensive logging with multiple output formats
+- **Configuration Management**: Flexible configuration via files, environment variables, or flags
 
 ## Prerequisites
 
-- Go (version 1.18 or higher recommended)
+- Go (version 1.23 or higher recommended)
 - A Gemini API Key
 
-## Setup
+## Installation
+
+### From Source
 
 1. **Clone the Repository:**
 
    ```bash
-   git clone https://your-repository-url.git # Replace with your actual repository URL
+   git clone https://github.com/rcliao/briefly.git
    cd briefly
    ```
 
@@ -34,113 +37,303 @@ Briefly is a command-line application written in Go that takes a Markdown file c
    go mod tidy
    ```
 
-3. **Set up Gemini API Key:**
+3. **Build the Application:**
 
-   You need to provide your Gemini API key to the application. You can do this in one of two ways:
+   ```bash
+   # Build for current platform
+   go build -o briefly ./cmd/briefly
+   
+   # Or build and install to $GOPATH/bin
+   go install ./cmd/briefly
+   ```
 
-   - **Environment Variable (Recommended):** Create a file named `.env` in the root of the project directory and add your API key:
+### Pre-built Binaries
 
-     ```
-     GEMINI_API_KEY="YOUR_API_KEY_HERE"
-     ```
+Check the [Releases](https://github.com/rcliao/briefly/releases) page for pre-built binaries for your platform.
 
-     Make sure `.env` is listed in your `.gitignore` file to prevent committing your key.
+## Configuration
 
-   - **Command-Line Flag:** Use the `-api-key` flag when running the application (see Usage section).
+### API Key Setup
+
+You can provide your Gemini API key in several ways:
+
+1. **Environment Variable (Recommended):**
+   ```bash
+   export GEMINI_API_KEY="your_api_key_here"
+   ```
+
+2. **`.env` File:**
+   Create a `.env` file in the project root:
+   ```
+   GEMINI_API_KEY=your_api_key_here
+   ```
+
+3. **Configuration File:**
+   Create a `.briefly.yaml` file in your home directory or current directory:
+   ```yaml
+   gemini:
+     api_key: "your_api_key_here"
+     model: "gemini-1.5-flash-latest"
+   output:
+     directory: "digests"
+   ```
+
+4. **Command-line Flag:**
+   Use the `--config` flag to specify an API key in a config file.
+
+### Configuration Precedence
+
+Configuration is loaded in the following order (later sources override earlier ones):
+1. Default values
+2. Configuration file (`.briefly.yaml`)
+3. Environment variables
+4. Command-line flags
 
 ## Usage
 
-The application is run from the command line.
+Briefly uses a modern CLI interface with subcommands. Here are the main commands:
+
+### Generate a Digest
 
 ```bash
-go run main.go -input <path_to_markdown_file> [flags]
+# Basic usage
+briefly digest input/my-links.md
+
+# Specify output directory and format
+briefly digest --output ./my-digests --format newsletter input/my-links.md
+
+# Estimate costs before processing (dry run)
+briefly digest --dry-run input/my-links.md
+
+# Use custom configuration file
+briefly --config ~/.my-config.yaml digest input/my-links.md
 ```
 
-**Required Flag:**
+### Available Digest Formats
 
-- `-input <filepath>`: Path to the Markdown file containing the list of URLs to process.
+Use the `--format` flag to specify the output style:
 
-**Optional Flags:**
-
-- `-api-key <key>`: Your Gemini API Key. If not provided, the application will try to read it from the `GEMINI_API_KEY` environment variable (loaded from an `.env` file if present).
-- `-model <model_name>`: The Gemini model to use for summarization and digest generation.
-  - Default: `gemini-1.5-flash-latest`
-- `-temp-path <path>`: Path to the directory where temporary files (fetched article text) will be stored.
-  - Default: `./temp_content/`
-- `-output-path <path>`: Path to the directory where the final Markdown digest file will be saved. The digest file will be named `digest_YYYY-MM-DD.md`.
-  - Default: `./digests/`
-
-**Example:**
+- `brief`: Concise digest with key highlights only
+- `standard`: Balanced digest with summaries and key points (default)
+- `detailed`: Comprehensive digest with full summaries and analysis
+- `newsletter`: Newsletter-style digest optimized for sharing
 
 ```bash
-# Using an .env file for the API key
-go run main.go -input ./input/my_links.md
+# List all available formats
+briefly formats
+```
 
-# Providing API key via flag and specifying a different model
-go run main.go -input ./input/my_links.md -api-key "YOUR_GEMINI_KEY" -model "gemini-1.0-pro"
+### Cache Management
 
-# Specifying custom temporary and output paths
-go run main.go -input ./input/weekly_articles.md -temp-path /tmp/briefly_cache -output-path ./generated_digests
+Briefly includes intelligent caching to avoid re-processing articles:
+
+```bash
+# View cache statistics
+briefly cache stats
+
+# Clear all cached data
+briefly cache clear --confirm
+```
+
+### Terminal User Interface
+
+Launch an interactive TUI to browse articles and summaries:
+
+```bash
+briefly tui
+```
+
+### Command-line Options
+
+**Global Flags:**
+- `--config`: Specify a configuration file
+
+**Digest Command Flags:**
+- `--output, -o`: Output directory for digest files (default: "digests")
+- `--format, -f`: Digest format: brief, standard, detailed, newsletter (default: "standard")
+- `--dry-run`: Estimate costs without making API calls
+
+### Examples
+
+```bash
+# Basic digest generation
+briefly digest input/weekly-links.md
+
+# Newsletter format with custom output directory
+briefly digest --format newsletter --output ./newsletters input/links.md
+
+# Cost estimation before processing
+briefly digest --dry-run input/expensive-links.md
+
+# Using environment variable for API key
+export GEMINI_API_KEY="your_key_here"
+briefly digest input/links.md
 ```
 
 ## Input File Format
 
-The input file specified with `-input` should be a plain Markdown file. The application will extract all URLs (starting with `http://` or `https://`) found anywhere in this file.
+Input files should be Markdown files containing URLs. Briefly will extract all HTTP/HTTPS URLs found anywhere in the file.
 
-Example `input/links.md`:
+### Example Input File
 
 ```markdown
-# Weekly Links
+---
+date: 2025-05-30
+title: "Weekly Tech Links"
+---
 
-Here are some interesting articles I found this week:
+# Interesting Articles This Week
 
-- https://blog.example.com/article-one
-- Check this out: https://news.example.org/important-update
+Here are some articles I found interesting:
 
-Another one: (https://another.example.net/research-paper)
+- https://example.com/article-1
+- https://news.site.com/important-update
+- Check this out: https://blog.example.org/research-paper
+
+## AI and Development
+
+- [Claude 4 Release](https://anthropic.com/news/claude-4)
+- https://zed.dev/blog/fastest-ai-code-editor
+
+Some inline links like https://github.com/project/repo are also extracted.
 ```
 
-## Workflow
+The application will automatically extract all URLs regardless of their formatting (plain text, markdown links, inline, etc.).
 
-1. **Configuration & Initialization**: The application starts, loads configuration from flags and environment variables, and sets up logging.
-2. **Read Input**: Reads the specified Markdown file.
-3. **Extract URLs**: Parses the Markdown content to find all URLs.
-4. **Validate URLs**: Filters out invalid or non-HTTP/HTTPS URLs.
-5. **Process Each URL**: For each valid URL:
-   - **Fetch Content**: Retrieves the HTML content from the URL.
-   - **Extract Text**: Parses the HTML to extract the main textual content, removing boilerplate like navigation, ads, etc.
-   - **Save Text**: Saves the extracted plain text to a file in the configured temporary directory.
-   - **Summarize Text**: Sends the extracted text to the Gemini API to generate a concise summary.
-6. **Generate Final Digest**:
-   - Collects all individual summaries (and their source URLs).
-   - Sends the collected summaries to the Gemini API with a prompt to create a single, cohesive, friendly Markdown-formatted weekly digest.
-7. **Output Digest**:
-   - Prints the final digest to the console.
-   - Saves the final digest to a Markdown file (e.g., `digest_YYYY-MM-DD.md`) in the configured output directory.
+## How It Works
 
-## Logging
+1. **URL Extraction**: Parses the input Markdown file to find all HTTP/HTTPS URLs
+2. **Content Fetching**: Downloads and extracts main content from each URL using intelligent HTML parsing
+3. **Smart Caching**: Checks cache for previously processed articles to avoid redundant API calls
+4. **Content Cleaning**: Removes boilerplate content (navigation, ads, etc.) to focus on main article text
+5. **AI Summarization**: Uses Gemini API to generate concise summaries of each article
+6. **Template Processing**: Applies the selected format template to structure the output
+7. **Final Digest Generation**: Creates a cohesive digest with proper citations and formatting
+8. **Output**: Saves the final digest as a Markdown file and displays cache statistics
 
-The application logs its progress and any errors to the console. Log messages are prefixed with tags like `[CONFIG]`, `[EXTRACT]`, `[PROCESS]`, `[ERROR]`, etc., to indicate the stage or type of message. Timestamps with microsecond precision are included.
+### Intelligent Features
+
+- **Caching**: Articles and summaries are cached to avoid re-processing
+- **Content Extraction**: Advanced HTML parsing focuses on main article content
+- **Cost Estimation**: Dry-run mode provides cost estimates before processing
+- **Error Handling**: Graceful handling of failed URLs with detailed logging
+- **Multiple Formats**: Choose from different digest styles for various use cases
+
+## Advanced Usage
+
+### Configuration Management
+
+Create a `.briefly.yaml` configuration file for persistent settings:
+
+```yaml
+# Gemini AI Configuration
+gemini:
+  api_key: ""  # Or use GEMINI_API_KEY environment variable
+  model: "gemini-1.5-flash-latest"
+
+# Output Configuration
+output:
+  directory: "digests"
+
+# Future configuration options can be added here
+# cache:
+#   enabled: true
+#   ttl: "24h"
+```
+
+### Development and Testing
+
+```bash
+# Run from source during development
+go run ./cmd/briefly digest input/test-links.md
+
+# Run tests
+go test ./...
+
+# Build for multiple platforms
+GOOS=linux GOARCH=amd64 go build -o briefly-linux-amd64 ./cmd/briefly
+GOOS=windows GOARCH=amd64 go build -o briefly-windows-amd64.exe ./cmd/briefly
+GOOS=darwin GOARCH=amd64 go build -o briefly-darwin-amd64 ./cmd/briefly
+```
+
+### API Cost Management
+
+Briefly includes built-in cost estimation to help manage Gemini API usage:
+
+```bash
+# Estimate costs before processing
+briefly digest --dry-run input/large-link-list.md
+
+# Example output:
+# Cost Estimation for Digest Generation
+# =====================================
+# Articles to process: 25
+# Estimated tokens per article: ~2000
+# Total estimated input tokens: ~50,000
+# Estimated output tokens: ~5,000
+# 
+# Estimated costs (USD):
+# - Input tokens: $0.025
+# - Output tokens: $0.015
+# - Total estimated cost: $0.040
+```
+
+### Troubleshooting
+
+**Common Issues:**
+
+1. **API Key not found**: Ensure `GEMINI_API_KEY` is set or configured in `.briefly.yaml`
+2. **Permission denied**: Make sure the output directory is writable
+3. **Network timeouts**: Some websites may be slow or block requests
+4. **Cache issues**: Clear cache with `briefly cache clear --confirm`
+
+**Debug Logging:**
+
+The application provides detailed logging. Check logs for specific error messages when articles fail to process.
 
 ## Project Structure
 
 ```
 briefly/
-├── .env                   # For API key (add to .gitignore)
-├── EXECUTION_PLAN.md      # Development plan
-├── go.mod                 # Go module file
-├── go.sum                 # Go module checksums
-├── main.go                # Main application logic
-├── README.md              # This file
-├── digests/               # Default output directory for generated digests
-│   └── digest_YYYY-MM-DD.md
-├── input/                 # Example directory for input markdown files
-│   └── example.md
-├── llmclient/             # Package for interacting with the LLM
+├── cmd/
+│   ├── briefly/              # Main application entry point
+│   │   └── main.go
+│   ├── cmd/                  # CLI commands and configuration
+│   │   └── root.go          # Cobra CLI setup and command definitions
+│   └── main.go              # Alternative entry point
+├── internal/                # Internal packages
+│   ├── core/                # Core data structures (Article, Summary, etc.)
+│   ├── cost/                # Cost estimation functionality
+│   ├── fetch/               # URL fetching and content extraction
+│   ├── llm/                 # LLM client abstraction
+│   ├── logger/              # Structured logging setup
+│   ├── render/              # Digest rendering and output
+│   ├── store/               # SQLite caching system
+│   ├── templates/           # Digest format templates
+│   └── tui/                 # Terminal user interface
+├── llmclient/               # Legacy Gemini client (being phased out)
 │   └── gemini_client.go
-└── temp_content/          # Default directory for temporary fetched content
-    └── some_sanitized_url.txt
+├── input/                   # Example input files
+├── digests/                 # Generated digest outputs
+├── temp_content/            # Cached article content
+├── docs/                    # Documentation
+├── .env                     # Environment variables (local)
+├── .briefly.yaml           # Configuration file
+├── go.mod                   # Go module definition
+├── go.sum                   # Dependency checksums
+└── README.md               # This file
 ```
+
+### Key Components
+
+- **`cmd/briefly/main.go`**: Application entry point
+- **`cmd/cmd/root.go`**: CLI command definitions and routing
+- **`internal/core/`**: Core data structures and business logic
+- **`internal/fetch/`**: Web scraping and content extraction
+- **`internal/llm/`**: AI/LLM integration layer
+- **`internal/store/`**: SQLite-based caching system
+- **`internal/templates/`**: Output format templates
+- **`internal/tui/`**: Interactive terminal interface
 
 ## Further Development (Planned from EXECUTION_PLAN.md)
 
