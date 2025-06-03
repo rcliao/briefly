@@ -7,6 +7,8 @@ Briefly is a modern command-line application written in Go that takes a Markdown
 - **Smart Content Processing**: Reads URLs from Markdown files and intelligently extracts main article content
 - **AI-Powered Summarization**: Uses Gemini API to generate concise, meaningful summaries
 - **Multiple Digest Formats**: Choose from brief, standard, detailed, or newsletter formats
+- **Prompt Corner**: Newsletter format includes AI-generated prompts based on digest content that readers can copy and use with any LLM (ChatGPT, Gemini, Claude, etc.)
+- **Personal Commentary**: Add your own "My Take" to any digest with AI-powered regeneration that integrates your voice throughout the entire content
 - **Intelligent Caching**: SQLite-based caching system to avoid re-processing articles and summaries
 - **Cost Estimation**: Dry-run mode to estimate API costs before processing
 - **Template System**: Customizable output formats with built-in templates
@@ -116,7 +118,7 @@ Use the `--format` flag to specify the output style:
 - `brief`: Concise digest with key highlights only
 - `standard`: Balanced digest with summaries and key points (default)
 - `detailed`: Comprehensive digest with full summaries and analysis
-- `newsletter`: Newsletter-style digest optimized for sharing
+- `newsletter`: Newsletter-style digest optimized for sharing, includes "Prompt Corner" with AI-generated prompts readers can copy and use
 
 ```bash
 # List all available formats
@@ -135,6 +137,60 @@ briefly cache stats
 briefly cache clear --confirm
 ```
 
+### My Take Feature
+
+Transform any generated digest into a personalized version that reflects your voice and perspective throughout the entire content using AI-powered regeneration:
+
+```bash
+# List all digests and their my-take status
+briefly my-take list
+
+# Add your take to a digest (interactive mode)
+briefly my-take add 1234abcd
+
+# Add your take directly from command line
+briefly my-take add 1234abcd "This digest highlights important trends in AI development that I think will impact our industry significantly."
+
+# Update an existing take
+briefly my-take add 1234abcd "Updated thoughts: The AI developments are even more significant than I initially thought."
+
+# Regenerate digest with your perspective woven throughout
+briefly my-take regenerate 1234abcd
+```
+
+**My Take Features:**
+- **AI-Powered Regeneration**: Uses Gemini LLM to completely rewrite digests with your personal voice integrated naturally throughout
+- **Seamless Integration**: Your perspective becomes part of the narrative flow, not just an appended section
+- **Partial ID Matching**: Use just the first few characters of a digest ID (e.g., `1234` instead of the full UUID)
+- **Multiple Input Methods**: Add takes interactively or via command-line arguments
+- **Update Support**: Easily modify existing takes and regenerate with new perspectives
+- **Timestamped Output**: Creates new files with `_with_my_take_` naming convention to preserve originals
+- **Format Preservation**: Maintains the original digest format while incorporating your voice
+
+**Example Transformation:**
+
+*Original digest excerpt:*
+```markdown
+# Daily Digest - 2025-05-30
+
+Here's what's worth knowing from today's articles:
+
+## Executive Summary
+The example domain (https://example.com) is freely available for illustrative use...
+```
+
+*Your take: "This brief format is really convenient for quick updates"*
+
+*Regenerated digest:*
+```markdown
+# Brief Digest - 2025-05-30
+
+Quick highlights from today's reading – I find this brief format really convenient for staying up-to-date without getting bogged down!
+
+## Executive Summary
+This week's highlight is a bit meta, but honestly, a real time-saver: I discovered that the domain example.com is available for illustrative purposes...
+```
+
 ### Terminal User Interface
 
 Launch an interactive TUI to browse articles and summaries:
@@ -142,6 +198,33 @@ Launch an interactive TUI to browse articles and summaries:
 ```bash
 briefly tui
 ```
+
+### Prompt Corner Feature
+
+The newsletter format includes a special "Prompt Corner" section that automatically generates interesting prompts based on the digest content. These prompts are designed to be copied and pasted into any LLM (ChatGPT, Gemini, Claude, etc.) for further exploration of the topics covered.
+
+**Example Prompt Corner Output:**
+```markdown
+## 🎯 Prompt Corner
+
+Here are some prompts inspired by today's digest:
+
+```
+"Act as a senior software engineer. I'm trying to refactor a legacy section of Python code. Using the capabilities of a hypothetical 'Claude Opus 4' coding model with access to the filesystem and web search, propose a refactoring plan, including justifications and potential risks."
+```
+This prompt simulates using advanced AI coding features for real-world refactoring problems.
+
+```
+"I have a list of small bug fixes for a Node.js application. As GitHub Copilot Coding Agent, suggest a prioritized order for these tasks, outlining the approach and estimated time for each."
+```
+This prompt leverages AI task delegation capabilities for project management.
+```
+
+The prompts are:
+- **Contextual**: Directly inspired by the articles in your digest
+- **Practical**: Ready to use for real development scenarios  
+- **Portable**: Work with any LLM platform
+- **Educational**: Include explanations of what each prompt accomplishes
 
 ### Command-line Options
 
@@ -159,6 +242,7 @@ briefly tui
 # Basic digest generation
 briefly digest input/weekly-links.md
 
+```bash
 # Newsletter format with custom output directory
 briefly digest --format newsletter --output ./newsletters input/links.md
 
@@ -168,6 +252,12 @@ briefly digest --dry-run input/expensive-links.md
 # Using environment variable for API key
 export GEMINI_API_KEY="your_key_here"
 briefly digest input/links.md
+
+# Complete workflow with AI-powered personal commentary
+briefly digest input/weekly-links.md                    # Generate digest
+briefly my-take list                                     # See available digests  
+briefly my-take add 1234abcd "Great insights this week!" # Add your perspective
+briefly my-take regenerate 1234abcd                     # AI regenerates entire digest with your voice integrated throughout
 ```
 
 ## Input File Format
@@ -202,6 +292,8 @@ The application will automatically extract all URLs regardless of their formatti
 
 ## How It Works
 
+### Digest Generation
+
 1. **URL Extraction**: Parses the input Markdown file to find all HTTP/HTTPS URLs
 2. **Content Fetching**: Downloads and extracts main content from each URL using intelligent HTML parsing
 3. **Smart Caching**: Checks cache for previously processed articles to avoid redundant API calls
@@ -210,6 +302,14 @@ The application will automatically extract all URLs regardless of their formatti
 6. **Template Processing**: Applies the selected format template to structure the output
 7. **Final Digest Generation**: Creates a cohesive digest with proper citations and formatting
 8. **Output**: Saves the final digest as a Markdown file and displays cache statistics
+
+### My Take Regeneration
+
+1. **Personal Perspective Storage**: Your "my take" is stored in the local database linked to the specific digest
+2. **Content Retrieval**: System retrieves the original digest content and your personal take
+3. **AI-Powered Rewriting**: Gemini LLM receives sophisticated prompts to completely rewrite the digest incorporating your voice naturally throughout
+4. **Cohesive Integration**: Your perspective becomes part of the narrative flow rather than a separate section
+5. **Timestamped Output**: Creates a new file with `_with_my_take_` suffix while preserving the original
 
 ### Intelligent Features
 
@@ -335,7 +435,16 @@ briefly/
 - **`internal/templates/`**: Output format templates
 - **`internal/tui/`**: Interactive terminal interface
 
-## Further Development (Planned from EXECUTION_PLAN.md)
+## Further Development
+
+See [`docs/plan/execution_plan_v0.md`](docs/plan/execution_plan_v0.md) for the complete development roadmap and current implementation status.
+
+**Current Status**: Most core features are implemented and production-ready. The primary remaining work involves completing the Prompt Corner database and enhanced TUI features.
+
+**Next Priority**: Complete the v0.2 "Human Voice" milestone by implementing:
+- Prompt Corner database with ratings and usage tracking
+- Enhanced TUI for prompt management and rating
+- Clipboard integration for easy prompt copying
 
 - **Phase 5: Testing and Documentation**
   - Write unit tests for key functions.

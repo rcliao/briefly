@@ -12,20 +12,71 @@ import (
 // Prompts are now package-level constants for easy iteration and visibility.
 const (
 	summarizeTextPromptTemplate = "Please summarize the following text concisely:\n\n---\n%s\n---"
+	summarizeTextWithFormatPromptTemplate = `Please summarize the following text for a %s digest format.
+
+FORMAT GUIDELINES:
+- Brief: Create a very concise summary (50-100 words) focusing only on the most essential information
+- Standard: Provide a balanced summary (100-200 words) with key points and context
+- Detailed: Generate a comprehensive summary (200-300 words) with thorough analysis and context
+- Newsletter: Write an engaging summary (150-250 words) in a conversational, shareable style
+
+Please tailor your summary to match the %s format characteristics.
+
+---
+%s
+---`
 	finalDigestPromptTemplate   = `You are an assistant tasked with creating a friendly and cohesive weekly digest in Markdown format.
 Below are several summaries of articles, each explicitly linked to its original source URL.
 Your goal is to synthesize these into a single, engaging narrative digest.
-Please ensure that you properly cite the original URLs for the information presented using Markdown links.
-The digest should be well-structured, easy to read, and have a friendly tone.
+
+CRITICAL: You MUST use numbered footnote citations throughout your response. Do NOT use inline "Source:" links.
+
+DIGEST FORMAT GUIDELINES:
+- Format: %s
+- Target Style: %s
+- Maximum Summary Length: %s
+- Key Features: %s
+
+Please tailor your response to match the specified format characteristics:
+- Brief: Very concise, key highlights only, under 150 words per topic
+- Standard: Balanced coverage, moderate detail, around 300 words per topic
+- Detailed: Comprehensive analysis, full context, no length restrictions
+- Newsletter: Engaging, shareable style with clear sections and call-to-action tone
+
+NEWSLETTER FORMAT SPECIAL INSTRUCTIONS:
+When creating a newsletter format, organize the content with logical sub-headings that group related topics. Common newsletter sections include:
+- ## 🤖 AI & Machine Learning
+- ## 💻 Development Tools & Workflows  
+- ## 🏗️ Platform & Infrastructure
+- ## 🔬 Research & Analysis
+- ## 📱 Mobile & Edge Computing
+- ## 🛠️ Enterprise Solutions
+- ## 📊 Data & Analytics Platforms
+- ## 🔧 DevOps & Cloud Services
+Choose appropriate sub-headings based on the actual content themes. Group 2-4 related articles under each sub-heading. If an article doesn't fit well into any major section, include it in the most relevant existing section rather than creating a separate section for a single article.
 
 Here are the summaries and their sources:
 
 %s
 
 ---
-Please generate the final weekly digest based on the provided content.
-Ensure the output is in Markdown format, includes a main title for the digest, and incorporates the summaries smoothly with citations.
-For example, a citation might look like: "This was discussed in an article about X ([source](URL))".`
+Please generate the final weekly digest based on the provided content and format specifications.
+Ensure the output is in Markdown format, includes a main title for the digest, and incorporates the summaries smoothly with numbered footnote citations.
+
+MANDATORY CITATION FORMAT:
+- Use inline citations like: "AI agents are beginning to self-optimize across workflows [^1]."
+- Include footnotes at the end in this format:
+  [^1]: https://example.com/article-about-ai-agents
+- Number citations sequentially (1, 2, 3, etc.)
+- Multiple sources can be cited in the same paragraph using different numbers
+- Place footnotes after the main content but before any appendix or individual articles section
+- NEVER use "Source:" followed by a URL - always use footnote citations instead
+
+EXAMPLE FORMAT:
+Recent developments in AI show promise [^1]. New tools are emerging [^2] that enable...
+
+[^1]: https://example.com/first-article
+[^2]: https://example.com/second-article`
 )
 
 // SummarizeText sends the given text content to the Gemini API for summarization.
@@ -70,9 +121,9 @@ func SummarizeText(apiKey string, modelName string, textContent string) (string,
 	return string(summary), nil
 }
 
-// GenerateFinalDigest sends the combined summaries and sources to the Gemini API to generate a cohesive digest.
-// It now requires the apiKey and modelName to be passed directly.
-func GenerateFinalDigest(apiKey string, modelName string, combinedSummariesAndSources string) (string, error) {
+// SummarizeTextWithFormat sends the given text content to the Gemini API for summarization
+// with format-specific guidance to tailor the summary appropriately for the target digest format.
+func SummarizeTextWithFormat(apiKey string, modelName string, textContent string, format string) (string, error) {
 	if apiKey == "" {
 		return "", fmt.Errorf("Gemini API key is not provided")
 	}
@@ -88,9 +139,57 @@ func GenerateFinalDigest(apiKey string, modelName string, combinedSummariesAndSo
 	defer client.Close()
 
 	model := client.GenerativeModel(modelName)
-	prompt := fmt.Sprintf(finalDigestPromptTemplate, combinedSummariesAndSources)
+	prompt := fmt.Sprintf(summarizeTextWithFormatPromptTemplate, format, format, textContent)
 
-	log.Printf("llmclient: Sending final digest generation request to Gemini (model: %s). Prompt length: %d chars.", modelName, len(prompt))
+	log.Printf("llmclient: Sending format-aware summarization request to Gemini (model: %s, format: %s). Prompt length: %d chars.", modelName, format, len(prompt))
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", fmt.Errorf("failed to generate content for summarization: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("no content generated by the API for summarization")
+	}
+
+	summaryPart := resp.Candidates[0].Content.Parts[0]
+	summary, ok := summaryPart.(genai.Text)
+	if !ok {
+		return "", fmt.Errorf("unexpected response format from API for summarization, expected genai.Text")
+	}
+
+	return string(summary), nil
+}
+
+// GenerateFinalDigest sends the combined summaries and sources to the Gemini API to generate a cohesive digest.
+// It now requires the apiKey and modelName to be passed directly.
+func GenerateFinalDigest(apiKey string, modelName string, combinedSummariesAndSources string) (string, error) {
+	// Use the enhanced function with default template information
+	return GenerateFinalDigestWithTemplate(apiKey, modelName, combinedSummariesAndSources, "standard", "Standard", "300 words", "Balanced coverage with summaries and key insights")
+}
+
+// GenerateFinalDigestWithTemplate sends the combined summaries and sources to the Gemini API to generate a cohesive digest
+// with specific format and template information to guide the LLM's output.
+func GenerateFinalDigestWithTemplate(apiKey string, modelName string, combinedSummariesAndSources string, 
+	format string, targetStyle string, maxSummaryLength string, keyFeatures string) (string, error) {
+	if apiKey == "" {
+		return "", fmt.Errorf("Gemini API key is not provided")
+	}
+	if modelName == "" {
+		return "", fmt.Errorf("Gemini model name is not provided")
+	}
+
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	if err != nil {
+		return "", fmt.Errorf("failed to create Gemini client: %w", err)
+	}
+	defer client.Close()
+
+	model := client.GenerativeModel(modelName)
+	prompt := fmt.Sprintf(finalDigestPromptTemplate, format, targetStyle, maxSummaryLength, keyFeatures, combinedSummariesAndSources)
+
+	log.Printf("llmclient: Sending final digest generation request to Gemini (model: %s, format: %s). Prompt length: %d chars.", modelName, format, len(prompt))
 
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
