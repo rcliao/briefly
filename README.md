@@ -7,6 +7,11 @@ Briefly is a modern command-line application written in Go that takes a Markdown
 - **Smart Content Processing**: Reads URLs from Markdown files and intelligently extracts main article content
 - **AI-Powered Summarization**: Uses Gemini API to generate concise, meaningful summaries
 - **Multiple Digest Formats**: Choose from brief, standard, detailed, or newsletter formats
+- **AI-Powered Insights**: Comprehensive insights automatically integrated into every digest:
+  - **Sentiment Analysis**: Emotional tone analysis with emoji indicators (😊 positive, 😞 negative, 🤔 neutral)
+  - **Alert Monitoring**: Configurable alert conditions with automatic evaluation and notifications
+  - **Trend Analysis**: Week-over-week comparison of topics and themes when historical data is available
+  - **Deep Research**: AI-driven research suggestions and topic exploration with configurable depth
 - **Prompt Corner**: Newsletter format includes AI-generated prompts based on digest content that readers can copy and use with any LLM (ChatGPT, Gemini, Claude, etc.)
 - **Personal Commentary**: Add your own "My Take" to any digest with AI-powered regeneration that integrates your voice throughout the entire content
 - **Intelligent Caching**: SQLite-based caching system to avoid re-processing articles and summaries
@@ -137,6 +142,24 @@ briefly cache stats
 briefly cache clear --confirm
 ```
 
+### Insights and Analytics
+
+Briefly automatically provides AI-powered insights with every digest generation. These insights include sentiment analysis, alert monitoring, trend detection, and research suggestions.
+
+```bash
+# View alert configurations
+briefly insights alerts list
+
+# Add a new alert condition
+briefly insights alerts add --keyword "security breach" --priority high
+
+# View trend analysis for recent digests
+briefly insights trends --days 7
+
+# Generate deep research suggestions for a topic
+briefly research --topic "AI coding assistants" --depth 3
+```
+
 ### My Take Feature
 
 Transform any generated digest into a personalized version that reflects your voice and perspective throughout the entire content using AI-powered regeneration:
@@ -242,7 +265,6 @@ The prompts are:
 # Basic digest generation
 briefly digest input/weekly-links.md
 
-```bash
 # Newsletter format with custom output directory
 briefly digest --format newsletter --output ./newsletters input/links.md
 
@@ -258,6 +280,76 @@ briefly digest input/weekly-links.md                    # Generate digest
 briefly my-take list                                     # See available digests  
 briefly my-take add 1234abcd "Great insights this week!" # Add your perspective
 briefly my-take regenerate 1234abcd                     # AI regenerates entire digest with your voice integrated throughout
+
+# AI-powered insights and research workflow
+briefly digest input/weekly-links.md                    # Generate digest with automatic insights
+briefly insights alerts list                            # View current alert configurations
+briefly insights alerts add --keyword "AI" --priority high  # Add new alert condition
+briefly research --topic "AI development trends" --depth 2  # Deep research on emerging topics
+```
+
+## AI-Powered Insights Features
+
+### Automatic Insights Integration
+
+Every digest automatically includes a comprehensive "AI-Powered Insights" section with:
+
+- **📊 Sentiment Analysis**: Emotional tone analysis with emoji indicators
+- **🚨 Alert Monitoring**: Configurable alert conditions and notifications  
+- **📈 Trend Analysis**: Week-over-week topic and theme comparison
+- **🔍 Research Suggestions**: AI-generated queries for deeper topic exploration
+
+### Insights Commands
+
+```bash
+# Alert Management
+briefly insights alerts list                              # List all configured alerts
+briefly insights alerts add --keyword "security" --priority high  # Add keyword alert
+briefly insights alerts add --topic "AI" --threshold 3   # Add topic frequency alert
+briefly insights alerts remove <alert-id>                # Remove specific alert
+
+# Trend Analysis  
+briefly insights trends                                   # Show recent trend analysis
+briefly insights trends --days 14                        # Trends over specific period
+briefly insights trends --topic "AI"                     # Trends for specific topic
+
+# Deep Research
+briefly research --topic "machine learning" --depth 2    # Research with 2 iterations
+briefly research --topic "cybersecurity" --depth 3 --max-results 10  # Detailed research
+briefly research --list                                   # Show recent research sessions
+```
+
+### Research Integration
+
+The deep research feature provides AI-driven topic exploration:
+
+1. **AI Query Generation**: Gemini generates relevant search queries for your topic
+2. **Iterative Research**: Configurable depth for multi-level topic exploration  
+3. **Source Discovery**: Finds and processes additional relevant sources
+4. **Integration**: Research results can be integrated into future digests
+5. **Mock Search Provider**: Currently uses a mock search provider for demonstration
+
+**Example Research Session:**
+```bash
+briefly research --topic "AI coding assistants" --depth 2
+
+# Output:
+# 🔍 Starting Deep Research Session
+# Topic: AI coding assistants
+# Depth: 2 iterations
+# 
+# Iteration 1: Generated 3 search queries
+# - "best AI coding assistants 2025 comparison"
+# - "GitHub Copilot vs ChatGPT vs Claude coding"  
+# - "AI pair programming tools developer productivity"
+# 
+# Iteration 2: Generated 3 additional queries
+# - "AI code completion accuracy benchmarks"
+# - "enterprise AI coding tools integration"
+# - "future of AI-assisted software development"
+# 
+# Research completed. Found 6 relevant sources.
+# Results stored and can be included in future digests.
 ```
 
 ## Input File Format
@@ -299,9 +391,38 @@ The application will automatically extract all URLs regardless of their formatti
 3. **Smart Caching**: Checks cache for previously processed articles to avoid redundant API calls
 4. **Content Cleaning**: Removes boilerplate content (navigation, ads, etc.) to focus on main article text
 5. **AI Summarization**: Uses Gemini API to generate concise summaries of each article
-6. **Template Processing**: Applies the selected format template to structure the output
-7. **Final Digest Generation**: Creates a cohesive digest with proper citations and formatting
-8. **Output**: Saves the final digest as a Markdown file and displays cache statistics
+6. **AI-Powered Insights Generation**: Automatically analyzes content for:
+   - **Sentiment Analysis**: Determines emotional tone and assigns appropriate emoji indicators
+   - **Alert Evaluation**: Checks configured alert conditions against article content and topics
+   - **Trend Detection**: Compares current topics with historical data when available
+   - **Research Suggestions**: Generates AI-driven research queries for deeper topic exploration
+7. **Template Processing**: Applies the selected format template to structure the output with insights integrated
+8. **Final Digest Generation**: Creates a cohesive digest with proper citations, formatting, and comprehensive insights section
+9. **Output**: Saves the final digest as a Markdown file and displays cache statistics
+
+### AI-Powered Insights
+
+Every digest automatically includes a comprehensive "AI-Powered Insights" section featuring:
+
+1. **Sentiment Analysis**: 
+   - Analyzes the emotional tone of each article using AI
+   - Displays sentiment with emoji indicators (😊 positive, 😞 negative, 🤔 neutral/mixed)
+   - Provides overall digest sentiment summary
+
+2. **Alert Monitoring**:
+   - Evaluates configurable alert conditions against article content
+   - Triggers notifications for high-priority topics or keywords
+   - Displays triggered alerts with context and priority levels
+
+3. **Trend Analysis**:
+   - Compares current digest topics with historical data when available
+   - Identifies emerging themes and topic frequency changes
+   - Provides week-over-week trend insights
+
+4. **Deep Research Suggestions**:
+   - AI generates relevant research queries based on digest content
+   - Provides suggestions for deeper exploration of covered topics
+   - Can automatically execute research with configurable depth using `briefly research` command
 
 ### My Take Regeneration
 
@@ -318,6 +439,9 @@ The application will automatically extract all URLs regardless of their formatti
 - **Cost Estimation**: Dry-run mode provides cost estimates before processing
 - **Error Handling**: Graceful handling of failed URLs with detailed logging
 - **Multiple Formats**: Choose from different digest styles for various use cases
+- **AI-Powered Insights**: Automatic sentiment analysis, alert monitoring, trend detection, and research suggestions
+- **Alert System**: Configurable conditions for monitoring specific topics, keywords, or content patterns
+- **Research Integration**: AI-driven deep research capabilities with iterative topic exploration
 
 ## Advanced Usage
 
@@ -402,14 +526,20 @@ briefly/
 │   │   └── root.go          # Cobra CLI setup and command definitions
 │   └── main.go              # Alternative entry point
 ├── internal/                # Internal packages
+│   ├── alerts/              # Alert monitoring and evaluation system
+│   ├── clustering/          # Topic clustering and analysis
 │   ├── core/                # Core data structures (Article, Summary, etc.)
 │   ├── cost/                # Cost estimation functionality
+│   ├── feeds/               # RSS feed processing (future feature)
 │   ├── fetch/               # URL fetching and content extraction
 │   ├── llm/                 # LLM client abstraction
 │   ├── logger/              # Structured logging setup
 │   ├── render/              # Digest rendering and output
+│   ├── research/            # Deep research and AI query generation
+│   ├── sentiment/           # Sentiment analysis functionality
 │   ├── store/               # SQLite caching system
 │   ├── templates/           # Digest format templates
+│   ├── trends/              # Trend analysis and historical comparison  
 │   └── tui/                 # Terminal user interface
 ├── llmclient/               # Legacy Gemini client (being phased out)
 │   └── gemini_client.go
@@ -434,17 +564,23 @@ briefly/
 - **`internal/store/`**: SQLite-based caching system
 - **`internal/templates/`**: Output format templates
 - **`internal/tui/`**: Interactive terminal interface
+- **`internal/alerts/`**: Alert monitoring and evaluation system
+- **`internal/sentiment/`**: Sentiment analysis functionality
+- **`internal/trends/`**: Trend analysis and historical comparison
+- **`internal/research/`**: Deep research and AI query generation
+- **`internal/clustering/`**: Topic clustering and analysis
 
 ## Further Development
 
 See [`docs/plan/execution_plan_v0.md`](docs/plan/execution_plan_v0.md) for the complete development roadmap and current implementation status.
 
-**Current Status**: Most core features are implemented and production-ready. The primary remaining work involves completing the Prompt Corner database and enhanced TUI features.
+**Current Status**: v0.4 "Insights" milestone is complete with comprehensive AI-powered insights automatically integrated into every digest. Core features are production-ready.
 
-**Next Priority**: Complete the v0.2 "Human Voice" milestone by implementing:
-- Prompt Corner database with ratings and usage tracking
-- Enhanced TUI for prompt management and rating
-- Clipboard integration for easy prompt copying
+**Next Priority**: Complete the v1.0 "Multi-Channel" milestone by implementing:
+- HTML email output with beautiful templates
+- Slack/Discord integration for short bullet summaries
+- Text-to-Speech (TTS) MP3 generation
+- Polished documentation and user guides
 
 - **Phase 5: Testing and Documentation**
   - Write unit tests for key functions.

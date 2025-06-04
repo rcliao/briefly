@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"briefly/internal/alerts"
 	"briefly/internal/clustering"
 	"briefly/internal/core"
 	"briefly/internal/cost"
@@ -24,14 +25,13 @@ import (
 	"briefly/internal/llm"
 	"briefly/internal/logger"
 	"briefly/internal/render"
+	"briefly/internal/research"
+	"briefly/internal/sentiment"
 	"briefly/internal/store"
 	"briefly/internal/templates"
+	"briefly/internal/trends"
 	"briefly/internal/tui"
 	"briefly/llmclient"
-	"briefly/internal/trends"
-	"briefly/internal/alerts" 
-	"briefly/internal/sentiment"
-	"briefly/internal/research"
 	"bufio"
 	"fmt"
 	"os"
@@ -102,15 +102,15 @@ func initConfig() {
 		cobra.CheckErr(err)
 
 		// Search config in current directory and home directory
-		viper.AddConfigPath(".")         // Current directory
-		viper.AddConfigPath(home)        // Home directory
+		viper.AddConfigPath(".")  // Current directory
+		viper.AddConfigPath(home) // Home directory
 		viper.SetConfigType("yaml")
 		viper.SetConfigName(".briefly")
 	}
 
 	// Automatically bind environment variables
 	viper.AutomaticEnv()
-	
+
 	// Set defaults for configuration
 	viper.SetDefault("gemini.api_key", "")
 	viper.SetDefault("gemini.model", "gemini-1.5-flash-latest")
@@ -162,7 +162,7 @@ Example:
 		inputFile := args[0]
 		outputDir, _ := cmd.Flags().GetString("output")
 		format, _ := cmd.Flags().GetString("format")
-		
+
 		// If no output directory specified via flag, try config then default
 		if outputDir == "digests" { // Default value
 			configOutputDir := viper.GetString("output.directory")
@@ -170,7 +170,7 @@ Example:
 				outputDir = configOutputDir
 			}
 		}
-		
+
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 		if err := runDigest(inputFile, outputDir, format, dryRun); err != nil {
@@ -198,22 +198,22 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 
 	if dryRun {
 		logger.Info("Dry run mode - performing cost estimation", "links_count", len(links))
-		
+
 		// Get model from config
 		model := viper.GetString("gemini.model")
 		if model == "" {
 			model = "gemini-1.5-flash-latest"
 		}
-		
+
 		// Generate detailed cost estimate
 		estimate, err := cost.EstimateDigestCost(links, model)
 		if err != nil {
 			return fmt.Errorf("failed to estimate costs: %w", err)
 		}
-		
+
 		// Display formatted estimate
 		fmt.Print(estimate.FormatEstimate())
-		
+
 		return nil
 	}
 
@@ -249,7 +249,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 	for i, link := range links {
 		logger.Info("Processing link", "index", i+1, "total", len(links), "url", link.URL)
 		fmt.Printf("Processing %d/%d: %s\n", i+1, len(links), link.URL)
-		
+
 		var article core.Article
 		var summary core.Summary
 		var usedCache bool
@@ -293,7 +293,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				article.ID = uuid.NewString()
 				article.LinkID = link.URL // Use URL as LinkID for compatibility
 				article.DateFetched = time.Now().UTC()
-				
+
 				if err := cacheStore.CacheArticle(article); err != nil {
 					logger.Error("Failed to cache article", err)
 				}
@@ -344,10 +344,10 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			URL:             link.URL,
 			SummaryText:     summary.SummaryText,
 			MyTake:          article.MyTake,
-			TopicCluster:    "", // Will be populated after clustering
+			TopicCluster:    "",  // Will be populated after clustering
 			TopicConfidence: 0.0, // Will be populated after clustering
 		}
-		
+
 		digestItems = append(digestItems, digestItem)
 		processedArticles = append(processedArticles, article) // Track for clustering
 		logger.Info("Successfully processed article", "title", article.Title)
@@ -356,14 +356,14 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 
 	// Display cache statistics
 	if cacheStore != nil {
-		fmt.Printf("\n📊 Cache Statistics: %d hits, %d misses (%.1f%% hit rate)\n", 
+		fmt.Printf("\n📊 Cache Statistics: %d hits, %d misses (%.1f%% hit rate)\n",
 			cacheHits, cacheMisses, float64(cacheHits)/float64(cacheHits+cacheMisses)*100)
 	}
 
 	// Generate embeddings and perform topic clustering
 	if len(digestItems) > 1 && llmClient != nil {
 		fmt.Println("\n🧮 Generating embeddings and clustering articles...")
-		
+
 		// Collect articles for clustering (those that were processed successfully)
 		var articlesForClustering []core.Article
 		for i, item := range digestItems {
@@ -376,7 +376,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 						continue
 					}
 					processedArticles[i].Embedding = embedding
-					
+
 					// Update the article in cache with embedding
 					if cacheStore != nil {
 						if err := cacheStore.CacheArticle(processedArticles[i]); err != nil {
@@ -387,11 +387,11 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				articlesForClustering = append(articlesForClustering, processedArticles[i])
 			}
 		}
-		
+
 		// Perform clustering if we have enough articles
 		if len(articlesForClustering) >= 2 {
 			fmt.Printf("🔍 Clustering %d articles...\n", len(articlesForClustering))
-			
+
 			// Auto-detect optimal number of clusters (max 5 for readability)
 			maxClusters := len(articlesForClustering) / 2
 			if maxClusters > 5 {
@@ -400,13 +400,13 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			if maxClusters < 2 {
 				maxClusters = 2
 			}
-			
+
 			optimalClusters, err := clustering.AutoDetectOptimalClusters(articlesForClustering, maxClusters)
 			if err != nil {
 				logger.Warn("Failed to detect optimal clusters, using 3 clusters", "error", err)
 				optimalClusters = 3
 			}
-			
+
 			// Perform clustering
 			clusterer := clustering.NewKMeansClusterer()
 			clusters, err := clusterer.Cluster(articlesForClustering, optimalClusters)
@@ -414,7 +414,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				logger.Warn("Failed to cluster articles", "error", err)
 			} else {
 				fmt.Printf("✅ Created %d topic clusters\n", len(clusters))
-				
+
 				// Update articles with cluster assignments
 				for _, cluster := range clusters {
 					for _, articleID := range cluster.ArticleIDs {
@@ -427,7 +427,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 						}
 					}
 				}
-				
+
 				// Update cache with cluster assignments
 				if cacheStore != nil {
 					for _, article := range articlesForClustering {
@@ -438,12 +438,12 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 						}
 					}
 				}
-				
+
 				// Print cluster summary
 				for _, cluster := range clusters {
 					fmt.Printf("  📂 %s: %d articles\n", cluster.Label, len(cluster.ArticleIDs))
 				}
-				
+
 				// Update digestItems with cluster information
 				for i := range digestItems {
 					if i < len(articlesForClustering) {
@@ -453,19 +453,19 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				}
 			}
 		}
-		
+
 		processedArticles = articlesForClustering
 	}
 
-	// Generate insights for the digest  
+	// Generate insights for the digest
 	var insightsContent strings.Builder
 	var overallSentiment sentiment.DigestSentiment
 	var triggeredAlerts []alerts.Alert
 	var researchSuggestions []string
-	
+
 	if len(processedArticles) > 0 {
 		fmt.Println("\n🧠 Generating insights...")
-		
+
 		// 1. Sentiment Analysis with enhanced data population
 		fmt.Printf("📊 Analyzing sentiment...\n")
 		digestSentiment, err := sentimentAnalyzer.AnalyzeDigest(processedArticles, "digest-"+time.Now().Format("20060102"))
@@ -476,14 +476,14 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			sentimentSection := sentimentAnalyzer.FormatSentimentSummary(digestSentiment)
 			insightsContent.WriteString(sentimentSection)
 			insightsContent.WriteString("\n")
-			
+
 			// Update digestItems with comprehensive sentiment data
 			for i, articleSentiment := range digestSentiment.ArticleSentiments {
 				if i < len(digestItems) {
 					digestItems[i].SentimentScore = articleSentiment.Score.Overall
 					digestItems[i].SentimentLabel = string(articleSentiment.Classification)
 					digestItems[i].SentimentEmoji = articleSentiment.Emoji
-					
+
 					// Update the corresponding article in processedArticles
 					if i < len(processedArticles) {
 						processedArticles[i].SentimentScore = articleSentiment.Score.Overall
@@ -493,14 +493,14 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				}
 			}
 		}
-		
+
 		// 2. Alert Evaluation with enhanced data population
 		fmt.Printf("🚨 Evaluating alerts...\n")
 		alertContext := alerts.AlertContext{
 			Articles:      processedArticles,
 			EstimatedCost: 0.0, // Could integrate with cost estimation
 		}
-		
+
 		// Get current topics for alert context
 		var currentTopics []string
 		for _, article := range processedArticles {
@@ -509,18 +509,18 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			}
 		}
 		alertContext.CurrentTopics = currentTopics
-		
+
 		triggeredAlerts = alertManager.CheckConditions(alertContext)
 		if len(triggeredAlerts) > 0 {
 			alertSection := alertManager.FormatAlertsSection(triggeredAlerts)
 			insightsContent.WriteString(alertSection)
 			insightsContent.WriteString("\n")
-			
+
 			// Update digestItems and articles with alert information
 			for i := range digestItems {
 				var alertConditions []string
 				alertTriggered := false
-				
+
 				// Check if this article triggered any alerts by examining alert context
 				for _, alert := range triggeredAlerts {
 					if matchedArticles, ok := alert.Context["matched_articles"].([]string); ok {
@@ -532,22 +532,22 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 						}
 					}
 				}
-				
+
 				digestItems[i].AlertTriggered = alertTriggered
 				digestItems[i].AlertConditions = alertConditions
-				
+
 				// Update corresponding article
 				if i < len(processedArticles) {
 					processedArticles[i].AlertTriggered = alertTriggered
 					processedArticles[i].AlertConditions = alertConditions
 				}
 			}
-			
+
 			fmt.Printf("   ⚠️ %d alerts triggered\n", len(triggeredAlerts))
 		} else {
 			fmt.Printf("   ✅ No alerts triggered\n")
 		}
-		
+
 		// 3. Research Query Generation
 		fmt.Printf("🔍 Generating research queries...\n")
 		for i := range digestItems {
@@ -562,15 +562,15 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				}
 			}
 		}
-		
+
 		// 4. Trend Analysis (only if we have cached data for comparison)
 		if cacheStore != nil {
 			fmt.Printf("📈 Analyzing trends...\n")
-			
+
 			// Get articles from previous week for comparison
 			previousWeekArticles, err := cacheStore.GetArticlesByDateRange(
 				time.Now().AddDate(0, 0, -14), // Two weeks ago
-				time.Now().AddDate(0, 0, -7),  // One week ago  
+				time.Now().AddDate(0, 0, -7),  // One week ago
 			)
 			if err == nil && len(previousWeekArticles) > 0 {
 				// Use the updated trend analysis that works directly with articles
@@ -587,7 +587,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				fmt.Printf("   ℹ️ Not enough historical data for trend analysis\n")
 			}
 		}
-		
+
 		fmt.Printf("✅ Insights generation complete\n")
 	}
 
@@ -610,11 +610,11 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 		}
 
 		template := templates.GetTemplate(digestFormat)
-		
+
 		// Generate final digest summary using LLM
 		fmt.Printf("Generating final digest summary using %s format...\n", format)
 		logger.Info("Generating final digest summary", "format", format)
-		
+
 		// Prepare combined summaries and sources for final digest
 		var combinedSummaries strings.Builder
 		for i, item := range digestItems {
@@ -622,7 +622,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
 			combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
 		}
-		
+
 		// Get API key from environment or config (prefer environment)
 		apiKey := os.Getenv("GEMINI_API_KEY")
 		if apiKey == "" {
@@ -632,7 +632,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 		if model == "" {
 			model = "gemini-1.5-flash-latest"
 		}
-		
+
 		// Generate final digest using llmclient with template information
 		var maxLengthStr string
 		if template.MaxSummaryLength == 0 {
@@ -640,7 +640,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 		} else {
 			maxLengthStr = fmt.Sprintf("%d characters", template.MaxSummaryLength)
 		}
-		
+
 		// Build key features description
 		var features []string
 		if template.IncludeSummaries {
@@ -656,10 +656,10 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			features = append(features, "source links")
 		}
 		keyFeatures := strings.Join(features, ", ")
-		
+
 		finalDigest, err := llmclient.GenerateFinalDigestWithTemplate(
-			apiKey, 
-			model, 
+			apiKey,
+			model,
 			combinedSummaries.String(),
 			string(template.Format),
 			template.Title, // This is the generic template title, will be replaced by dynamic one later for rendering
@@ -674,7 +674,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			logger.Error("Failed to generate final digest", err)
 			fmt.Printf("⚠️  Failed to generate final digest summary, using individual summaries: %s\n", err)
 			contentForTitleGeneration = combinedSummaries.String() // Use combined summaries for title if final digest failed
-			
+
 			// Generate title even in fallback
 			if llmClient != nil {
 				title, titleErr := llmClient.GenerateDigestTitle(contentForTitleGeneration, format)
@@ -690,17 +690,17 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			}
 
 			// Pass generatedTitle to the rendering function
-			
+
 			// Prepare insights data for rendering
 			var overallSentimentText string
 			var alertsSummaryText string
 			var trendsSummaryText string
-			
+
 			if len(processedArticles) > 0 {
 				// Format overall sentiment
-				overallSentimentText = fmt.Sprintf("Overall: %s (%.2f)", 
+				overallSentimentText = fmt.Sprintf("Overall: %s (%.2f)",
 					overallSentiment.OverallEmoji, overallSentiment.OverallScore.Overall)
-				
+
 				// Format alerts summary
 				if len(triggeredAlerts) > 0 {
 					alertsSummaryText = fmt.Sprintf("%d alerts triggered", len(triggeredAlerts))
@@ -708,13 +708,13 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 					alertsSummaryText = "No alerts triggered"
 				}
 			}
-			
+
 			renderedContent, digestPath, renderErr := templates.RenderWithInsights(digestItems, outputDir, "", "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions)
 			if renderErr != nil {
 				return fmt.Errorf("failed to render digest with template: %w", renderErr)
 			}
 
-			// Cache the digest with actual content if store is available  
+			// Cache the digest with actual content if store is available
 			if cacheStore != nil {
 				digestID := uuid.NewString()
 				var articleURLs []string
@@ -747,17 +747,17 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			}
 
 			// Render digest with template and final summary, passing the generatedTitle
-			
+
 			// Prepare insights data for rendering
 			var overallSentimentText string
 			var alertsSummaryText string
 			var trendsSummaryText string
-			
+
 			if len(processedArticles) > 0 {
 				// Format overall sentiment
-				overallSentimentText = fmt.Sprintf("Overall: %s (%.2f)", 
+				overallSentimentText = fmt.Sprintf("Overall: %s (%.2f)",
 					overallSentiment.OverallEmoji, overallSentiment.OverallScore.Overall)
-				
+
 				// Format alerts summary
 				if len(triggeredAlerts) > 0 {
 					alertsSummaryText = fmt.Sprintf("%d alerts triggered", len(triggeredAlerts))
@@ -765,7 +765,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 					alertsSummaryText = "No alerts triggered"
 				}
 			}
-			
+
 			renderedContent, digestPath, renderErr := templates.RenderWithInsights(digestItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions)
 			if renderErr != nil {
 				return fmt.Errorf("failed to render digest with template: %w", renderErr)
@@ -818,18 +818,18 @@ var listFormatsCmd = &cobra.Command{
 		fmt.Println("Available Digest Formats:")
 		fmt.Println("========================")
 		fmt.Println()
-		
+
 		formats := map[string]string{
 			"brief":      "Concise digest with key highlights only",
 			"standard":   "Balanced digest with summaries and key points",
 			"detailed":   "Comprehensive digest with full summaries and analysis",
 			"newsletter": "Newsletter-style digest optimized for sharing",
 		}
-		
+
 		for format, description := range formats {
 			fmt.Printf("• %-12s %s\n", format+":", description)
 		}
-		
+
 		fmt.Println()
 		fmt.Printf("Usage: briefly digest --format <format> input.md\n")
 	},
@@ -846,13 +846,13 @@ var cacheStatsCmd = &cobra.Command{
 			return
 		}
 		defer cacheStore.Close()
-		
+
 		stats, err := cacheStore.GetCacheStats()
 		if err != nil {
 			fmt.Printf("Error getting cache stats: %s\n", err)
 			return
 		}
-		
+
 		fmt.Println("Cache Statistics:")
 		fmt.Println("================")
 		fmt.Printf("Articles: %d\n", stats.ArticleCount)
@@ -860,7 +860,7 @@ var cacheStatsCmd = &cobra.Command{
 		fmt.Printf("Digests: %d\n", stats.DigestCount)
 		fmt.Printf("Cache size: %.2f MB\n", float64(stats.CacheSize)/(1024*1024))
 		fmt.Printf("Last updated: %s\n", stats.LastUpdated.Format("2006-01-02 15:04:05"))
-		
+
 		// RSS Feed Statistics
 		fmt.Println("\nRSS Feed Statistics:")
 		fmt.Println("===================")
@@ -872,7 +872,7 @@ var cacheStatsCmd = &cobra.Command{
 			processingRate := float64(stats.ProcessedItemCount) / float64(stats.FeedItemCount) * 100
 			fmt.Printf("Processing rate: %.1f%%\n", processingRate)
 		}
-		
+
 		// Topic Clustering Statistics
 		if len(stats.TopicClusters) > 0 {
 			fmt.Println("\nTopic Clusters:")
@@ -897,19 +897,19 @@ var cacheClearCmd = &cobra.Command{
 			fmt.Println("This will delete all cached data. Use --confirm to proceed.")
 			return
 		}
-		
+
 		cacheStore, err := store.NewStore(".briefly-cache")
 		if err != nil {
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
 		defer cacheStore.Close()
-		
+
 		if err := cacheStore.ClearCache(); err != nil {
 			fmt.Printf("Error clearing cache: %s\n", err)
 			return
 		}
-		
+
 		fmt.Println("✅ Cache cleared successfully")
 	},
 }
@@ -958,10 +958,10 @@ Example:
 				if digest.MyTake != "" {
 					myTakeStatus = "✅ Has take"
 				}
-				fmt.Printf("%d. %s (%s) [%s] - %s\n", 
-					i+1, 
-					digest.ID[:8], 
-					digest.Format, 
+				fmt.Printf("%d. %s (%s) [%s] - %s\n",
+					i+1,
+					digest.ID[:8],
+					digest.Format,
 					digest.DateGenerated.Format("2006-01-02 15:04"),
 					myTakeStatus)
 			}
@@ -987,14 +987,14 @@ Example:
 		}
 
 		var myTake string
-		
+
 		if len(args) >= 2 {
 			// My-take provided as argument
 			myTake = strings.Join(args[1:], " ")
 		} else {
 			// No my-take provided, use a simple prompt
 			fmt.Print("Enter your take: ")
-			
+
 			// Read input from stdin using os.Stdin
 			reader := bufio.NewReader(os.Stdin)
 			input, err := reader.ReadString('\n')
@@ -1051,13 +1051,13 @@ var listMyTakeCmd = &cobra.Command{
 			if digest.MyTake != "" {
 				myTakeStatus = "✅"
 			}
-			fmt.Printf("%s %s (%s) - %s [%s]\n", 
+			fmt.Printf("%s %s (%s) - %s [%s]\n",
 				myTakeStatus,
-				digest.ID[:8], 
+				digest.ID[:8],
 				digest.Format,
 				digest.DateGenerated.Format("2006-01-02 15:04"),
 				digest.Title)
-			
+
 			if digest.MyTake != "" {
 				fmt.Printf("   Take: %s\n", digest.MyTake)
 			}
@@ -1076,7 +1076,7 @@ Example:
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		digestID := args[0]
-		
+
 		cacheStore, err := store.NewStore(".briefly-cache")
 		if err != nil {
 			fmt.Printf("Error opening cache: %s\n", err)
@@ -1101,7 +1101,7 @@ Example:
 		}
 
 		fmt.Printf("Regenerating digest with your personal voice integrated throughout...\n")
-		
+
 		// Use LLM to regenerate the entire digest with my-take integrated
 		regeneratedContent, err := llm.RegenerateDigestWithMyTake(digest.Content, digest.MyTake, digest.Format)
 		if err != nil {
@@ -1114,11 +1114,11 @@ Example:
 		if _, err := os.Stat(outputDir); os.IsNotExist(err) {
 			os.MkdirAll(outputDir, 0755)
 		}
-		
+
 		timestamp := time.Now().Format("2006-01-02_15-04-05")
 		filename := fmt.Sprintf("digest_%s_with_my_take_%s.md", digest.Format, timestamp)
 		outputPath := fmt.Sprintf("%s/%s", outputDir, filename)
-		
+
 		err = os.WriteFile(outputPath, []byte(regeneratedContent), 0644)
 		if err != nil {
 			fmt.Printf("Error writing regenerated digest: %s\n", err)
@@ -1126,7 +1126,7 @@ Example:
 		}
 
 		fmt.Printf("✅ Digest regenerated with your voice integrated: %s\n", outputPath)
-		
+
 		// Show a preview of the regenerated content
 		previewLength := 200
 		if len(regeneratedContent) < previewLength {
@@ -1154,7 +1154,7 @@ Example:
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		feedURL := args[0]
-		
+
 		cacheStore, err := store.NewStore(".briefly-cache")
 		if err != nil {
 			fmt.Printf("Error opening cache: %s\n", err)
@@ -1163,7 +1163,7 @@ Example:
 		defer cacheStore.Close()
 
 		feedManager := feeds.NewFeedManager()
-		
+
 		// Validate the feed URL first
 		fmt.Printf("Validating feed: %s\n", feedURL)
 		if err := feedManager.ValidateFeedURL(feedURL); err != nil {
@@ -1245,7 +1245,7 @@ var listFeedsCmd = &cobra.Command{
 			if !feed.Active {
 				status = "❌ Inactive"
 			}
-			
+
 			errorInfo := ""
 			if feed.ErrorCount > 0 {
 				errorInfo = fmt.Sprintf(" (⚠️  %d errors)", feed.ErrorCount)
@@ -1268,7 +1268,7 @@ var listFeedsCmd = &cobra.Command{
 var pullFeedsCmd = &cobra.Command{
 	Use:   "pull",
 	Short: "Pull latest items from all active feeds",
-	Long: `Fetch the latest items from all active RSS/Atom feeds and add new items to the processing queue.`,
+	Long:  `Fetch the latest items from all active RSS/Atom feeds and add new items to the processing queue.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cacheStore, err := store.NewStore(".briefly-cache")
 		if err != nil {
@@ -1278,7 +1278,7 @@ var pullFeedsCmd = &cobra.Command{
 		defer cacheStore.Close()
 
 		feedManager := feeds.NewFeedManager()
-		
+
 		// Get all active feeds
 		activeFeeds, err := cacheStore.GetFeeds(true)
 		if err != nil {
@@ -1292,13 +1292,13 @@ var pullFeedsCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Pulling from %d active feeds...\n", len(activeFeeds))
-		
+
 		totalNewItems := 0
 		successCount := 0
-		
+
 		for _, feed := range activeFeeds {
 			fmt.Printf("Fetching: %s\n", feed.Title)
-			
+
 			parsedFeed, err := feedManager.FetchFeed(feed.URL, feed.LastModified, feed.ETag)
 			if err != nil {
 				fmt.Printf("  ❌ Error: %s\n", err)
@@ -1313,7 +1313,7 @@ var pullFeedsCmd = &cobra.Command{
 			}
 
 			// Update feed metadata
-			err = cacheStore.UpdateFeed(feed.ID, parsedFeed.Feed.Title, parsedFeed.Feed.Description, 
+			err = cacheStore.UpdateFeed(feed.ID, parsedFeed.Feed.Title, parsedFeed.Feed.Description,
 				parsedFeed.LastModified, parsedFeed.ETag, time.Now().UTC())
 			if err != nil {
 				fmt.Printf("  ⚠️  Warning: Could not update feed metadata: %s\n", err)
@@ -1333,7 +1333,7 @@ var pullFeedsCmd = &cobra.Command{
 		}
 
 		fmt.Printf("\n📊 Summary: %d feeds processed, %d new items discovered\n", successCount, totalNewItems)
-		
+
 		if totalNewItems > 0 {
 			fmt.Println("Use 'briefly feed items' to see unprocessed items")
 		}
@@ -1355,7 +1355,7 @@ Example:
 		disable, _ := cmd.Flags().GetBool("disable")
 		enable, _ := cmd.Flags().GetBool("enable")
 		remove, _ := cmd.Flags().GetBool("remove")
-		
+
 		cacheStore, err := store.NewStore(".briefly-cache")
 		if err != nil {
 			fmt.Printf("Error opening cache: %s\n", err)
@@ -1391,7 +1391,7 @@ Example:
 				fmt.Println("Cancelled.")
 				return
 			}
-			
+
 			err = cacheStore.DeleteFeed(targetFeed.ID)
 			if err != nil {
 				fmt.Printf("Error removing feed: %s\n", err)
@@ -1432,7 +1432,7 @@ Example:
 		fmt.Println()
 		fmt.Println("Options:")
 		fmt.Println("  briefly feed manage", feedID, "--enable    # Enable feed")
-		fmt.Println("  briefly feed manage", feedID, "--disable   # Disable feed") 
+		fmt.Println("  briefly feed manage", feedID, "--disable   # Disable feed")
 		fmt.Println("  briefly feed manage", feedID, "--remove    # Remove feed")
 	},
 }
@@ -1490,7 +1490,7 @@ Example:
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		url := args[0]
-		
+
 		if err := runSummarize(url); err != nil {
 			logger.Error("Failed to summarize article", err)
 			os.Exit(1)
@@ -1501,14 +1501,14 @@ Example:
 func runSummarize(url string) error {
 	// Create a link object from the URL
 	link := core.Link{
-		ID:        "",  // Will be set by uuid
+		ID:        "", // Will be set by uuid
 		URL:       url,
 		DateAdded: time.Now().UTC(),
 		Source:    "command-line",
 	}
 
 	fmt.Printf("🔍 Fetching article from: %s\n", url)
-	
+
 	// Fetch the article
 	article, err := fetch.FetchArticle(link)
 	if err != nil {
@@ -1563,7 +1563,7 @@ func generateQuickSummary(llmClient *llm.Client, article core.Article) (core.Sum
 	if err != nil {
 		return core.Summary{}, fmt.Errorf("failed to generate summary with key moments: %w", err)
 	}
-	
+
 	return summary, nil
 }
 
@@ -1573,43 +1573,43 @@ func init() {
 	rootCmd.AddCommand(listFormatsCmd)
 	rootCmd.AddCommand(myTakeCmd)
 	rootCmd.AddCommand(feedCmd)
-	
+
 	// Add v0.4 Insights commands
 	rootCmd.AddCommand(insightsCmd)
 	rootCmd.AddCommand(trendsCmd)
 	rootCmd.AddCommand(sentimentCmd)
 	rootCmd.AddCommand(researchCmd)
-	
+
 	// Insights subcommands
 	insightsCmd.AddCommand(alertsCmd)
 	alertsCmd.AddCommand(listAlertsCmd)
 	alertsCmd.AddCommand(testAlertsCmd)
-	
+
 	cacheCmd.AddCommand(cacheStatsCmd)
 	cacheCmd.AddCommand(cacheClearCmd)
-	
+
 	myTakeCmd.AddCommand(addMyTakeCmd)
 	myTakeCmd.AddCommand(listMyTakeCmd)
 	myTakeCmd.AddCommand(regenerateCmd)
-	
+
 	feedCmd.AddCommand(addFeedCmd)
 	feedCmd.AddCommand(listFeedsCmd)
 	feedCmd.AddCommand(pullFeedsCmd)
 	feedCmd.AddCommand(manageFeedCmd)
 	feedCmd.AddCommand(feedItemsCmd)
-	
+
 	// Feed command flags
 	listFeedsCmd.Flags().Bool("active-only", false, "Show only active feeds")
 	manageFeedCmd.Flags().Bool("disable", false, "Disable the feed")
 	manageFeedCmd.Flags().Bool("enable", false, "Enable the feed")
 	manageFeedCmd.Flags().Bool("remove", false, "Remove the feed")
 	feedItemsCmd.Flags().Int("limit", 50, "Maximum number of items to display")
-	
+
 	// Research command flags
 	researchCmd.Flags().Int("depth", 2, "Number of research iterations")
 	researchCmd.Flags().Int("max-results", 10, "Maximum results per search query")
 	researchCmd.Flags().String("output", "", "Output file for discovered links")
-	
+
 	cacheClearCmd.Flags().Bool("confirm", false, "Confirm cache deletion")
 }
 
@@ -1765,7 +1765,7 @@ func runTrends(period string) error {
 
 func runListAlerts() error {
 	alertManager := alerts.NewAlertManager()
-	
+
 	// Get default conditions (in real implementation, would load from config/database)
 	conditions := alertManager.GetDefaultConditions()
 
@@ -1792,7 +1792,7 @@ func runListAlerts() error {
 		fmt.Printf("%s %s %s\n", status, levelIcon, condition.Name)
 		fmt.Printf("   Type: %s\n", condition.Type)
 		fmt.Printf("   Description: %s\n", condition.Description)
-		
+
 		// Show relevant config
 		if keywords, ok := condition.Config["keywords"].([]interface{}); ok {
 			keywordStrs := make([]string, len(keywords))
@@ -1804,7 +1804,7 @@ func runListAlerts() error {
 		if threshold, ok := condition.Config["threshold"].(float64); ok {
 			fmt.Printf("   Threshold: %.1f%%\n", threshold)
 		}
-		
+
 		fmt.Printf("   ID: %s\n", condition.ID[:8])
 		fmt.Println()
 	}
@@ -1838,7 +1838,7 @@ func runTestAlerts(inputFile string) error {
 	}
 
 	alertManager := alerts.NewAlertManager()
-	
+
 	// Evaluate alerts against articles
 	triggeredAlerts, err := alertManager.EvaluateAlerts(articles)
 	if err != nil {
@@ -2037,5 +2037,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-
-

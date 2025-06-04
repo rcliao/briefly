@@ -34,7 +34,7 @@ type DigestTemplate struct {
 	IncludePromptCorner       bool // For newsletter format to include AI prompts section
 	IncludeIndividualArticles bool // Whether to include the "Individual Articles" section
 	IncludeTopicClustering    bool // Whether to group articles by topic clusters
-	MaxSummaryLength          int // 0 for no limit
+	MaxSummaryLength          int  // 0 for no limit
 	IntroductionText          string
 	ConclusionText            string
 	SectionSeparator          string
@@ -86,7 +86,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludePromptCorner:       false,
 			IncludeIndividualArticles: true, // Enable to showcase topic clustering
 			IncludeTopicClustering:    true, // Enable topic clustering for detailed analysis
-			MaxSummaryLength:          0, // No limit
+			MaxSummaryLength:          0,    // No limit
 			IntroductionText:          "In-depth analysis of today's key articles:",
 			ConclusionText:            "These insights provide a comprehensive view of current developments in the field.",
 			SectionSeparator:          "\n\n---\n\n",
@@ -114,8 +114,8 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 
 // TopicGroup represents a group of articles with the same topic cluster
 type TopicGroup struct {
-	TopicCluster string
-	Articles     []render.DigestData
+	TopicCluster  string
+	Articles      []render.DigestData
 	AvgConfidence float64
 }
 
@@ -134,7 +134,7 @@ func GroupArticlesByTopic(digestItems []render.DigestData) []TopicGroup {
 		if topicCluster == "" {
 			topicCluster = "General" // Default cluster for uncategorized items
 		}
-		
+
 		topicMap[topicCluster] = append(topicMap[topicCluster], item)
 		confidenceMap[topicCluster] = append(confidenceMap[topicCluster], item.TopicConfidence)
 	}
@@ -167,25 +167,25 @@ func GroupArticlesByTopic(digestItems []render.DigestData) []TopicGroup {
 // renderArticlesSection renders the articles section with optional topic clustering
 func renderArticlesSection(digestItems []render.DigestData, template *DigestTemplate) string {
 	var content strings.Builder
-	
+
 	if !template.IncludeIndividualArticles {
 		return content.String()
 	}
-	
+
 	content.WriteString("## Individual Articles\n\n")
-	
+
 	if template.IncludeTopicClustering {
 		// Group articles by topic clusters
 		topicGroups := GroupArticlesByTopic(digestItems)
-		
+
 		for groupIdx, group := range topicGroups {
 			if groupIdx > 0 {
 				content.WriteString("\n\n")
 			}
-			
+
 			// Topic cluster header
 			content.WriteString(fmt.Sprintf("### 📑 %s\n\n", group.TopicCluster))
-			
+
 			// Articles in this topic group
 			for i, item := range group.Articles {
 				if i > 0 {
@@ -197,7 +197,7 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 				if item.SentimentEmoji != "" {
 					title = fmt.Sprintf("%s %s", item.SentimentEmoji, title)
 				}
-				
+
 				if template.IncludeSourceLinks {
 					content.WriteString(fmt.Sprintf("#### %s\n\n", title))
 				} else {
@@ -266,28 +266,28 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 			content.WriteString(fmt.Sprintf("[^%d]: %s\n\n", i+1, item.URL))
 		}
 	}
-	
+
 	return content.String()
 }
 
 // renderInsightsSection renders the insights section with sentiment, alerts, trends, and research
 func renderInsightsSection(digestItems []render.DigestData, template *DigestTemplate, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string) string {
 	var content strings.Builder
-	
+
 	// Only include insights for templates that support them
 	if !template.IncludeKeyInsights && template.Format != FormatDetailed && template.Format != FormatNewsletter {
 		return content.String()
 	}
-	
+
 	content.WriteString("## 🧠 AI-Powered Insights\n\n")
 	content.WriteString("*Leveraging sentiment analysis, alert monitoring, trend analysis, and research suggestions powered by AI.*\n\n")
-	
+
 	// 1. Sentiment Analysis Summary
 	if overallSentiment != "" {
 		content.WriteString("### 📊 Sentiment Analysis\n\n")
 		content.WriteString(overallSentiment)
 		content.WriteString("\n\n")
-		
+
 		// Add individual article sentiment indicators
 		sentimentCount := make(map[string]int)
 		for _, item := range digestItems {
@@ -295,7 +295,7 @@ func renderInsightsSection(digestItems []render.DigestData, template *DigestTemp
 				sentimentCount[item.SentimentLabel]++
 			}
 		}
-		
+
 		if len(sentimentCount) > 0 {
 			content.WriteString("**Article Sentiment Distribution:**\n")
 			for sentiment, count := range sentimentCount {
@@ -305,8 +305,8 @@ func renderInsightsSection(digestItems []render.DigestData, template *DigestTemp
 			content.WriteString("\n")
 		}
 	}
-	
-	// 2. Alert Summary  
+
+	// 2. Alert Summary
 	if alertsSummary != "" {
 		content.WriteString("### 🚨 Alert Monitoring\n\n")
 		content.WriteString(alertsSummary)
@@ -324,19 +324,19 @@ func renderInsightsSection(digestItems []render.DigestData, template *DigestTemp
 			content.WriteString("No alerts triggered for this digest. All articles passed through standard monitoring criteria.\n\n")
 		}
 	}
-	
+
 	// 3. Trend Analysis
 	if trendsSummary != "" {
 		content.WriteString("### 📈 Trend Analysis\n\n")
 		content.WriteString(trendsSummary)
 		content.WriteString("\n\n")
 	}
-	
+
 	// 4. Research Suggestions
 	if len(researchSuggestions) > 0 {
 		content.WriteString("### 🔍 Research Suggestions\n\n")
 		content.WriteString("*AI-generated queries for deeper exploration of these topics:*\n\n")
-		
+
 		// Deduplicate and limit research suggestions
 		uniqueSuggestions := make(map[string]bool)
 		var limitedSuggestions []string
@@ -346,13 +346,13 @@ func renderInsightsSection(digestItems []render.DigestData, template *DigestTemp
 				limitedSuggestions = append(limitedSuggestions, suggestion)
 			}
 		}
-		
+
 		for i, suggestion := range limitedSuggestions {
 			content.WriteString(fmt.Sprintf("%d. %s\n", i+1, suggestion))
 		}
 		content.WriteString("\n")
 	}
-	
+
 	return content.String()
 }
 
@@ -386,7 +386,7 @@ func RenderWithTemplateAndMyTake(digestItems []render.DigestData, outputDir stri
 func RenderWithTemplateAndMyTakeWithTitle(digestItems []render.DigestData, outputDir string, finalDigest string, digestMyTake string, template *DigestTemplate, customTitle string) (string, error) {
 	dateStr := time.Now().UTC().Format("2006-01-02")
 	filename := fmt.Sprintf("digest_%s_%s.md", strings.ToLower(string(template.Format)), dateStr)
-	
+
 	if outputDir == "" {
 		outputDir = "digests"
 	}
@@ -399,7 +399,7 @@ func RenderWithTemplateAndMyTakeWithTitle(digestItems []render.DigestData, outpu
 		title = customTitle
 	}
 	content.WriteString(fmt.Sprintf("# %s - %s\n\n", title, dateStr))
-	
+
 	// Introduction
 	if template.IntroductionText != "" {
 		content.WriteString(fmt.Sprintf("%s\n\n", template.IntroductionText))
@@ -457,7 +457,7 @@ func RenderWithTemplateAndMyTakeReturnContent(digestItems []render.DigestData, o
 func RenderWithTemplateAndMyTakeReturnContentWithTitle(digestItems []render.DigestData, outputDir string, finalDigest string, digestMyTake string, template *DigestTemplate, customTitle string) (string, string, error) {
 	dateStr := time.Now().UTC().Format("2006-01-02")
 	filename := fmt.Sprintf("digest_%s_%s.md", strings.ToLower(string(template.Format)), dateStr)
-	
+
 	if outputDir == "" {
 		outputDir = "digests"
 	}
@@ -470,7 +470,7 @@ func RenderWithTemplateAndMyTakeReturnContentWithTitle(digestItems []render.Dige
 		title = customTitle
 	}
 	content.WriteString(fmt.Sprintf("# %s - %s\n\n", title, dateStr))
-	
+
 	// Introduction
 	if template.IntroductionText != "" {
 		content.WriteString(fmt.Sprintf("%s\n\n", template.IntroductionText))
@@ -522,7 +522,7 @@ func RenderWithTemplateAndMyTakeReturnContentWithTitle(digestItems []render.Dige
 func RenderWithInsights(digestItems []render.DigestData, outputDir string, finalDigest string, digestMyTake string, template *DigestTemplate, customTitle string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string) (string, string, error) {
 	dateStr := time.Now().UTC().Format("2006-01-02")
 	filename := fmt.Sprintf("digest_%s_%s.md", strings.ToLower(string(template.Format)), dateStr)
-	
+
 	if outputDir == "" {
 		outputDir = "digests"
 	}
@@ -535,7 +535,7 @@ func RenderWithInsights(digestItems []render.DigestData, outputDir string, final
 		title = customTitle
 	}
 	content.WriteString(fmt.Sprintf("# %s - %s\n\n", title, dateStr))
-	
+
 	// Introduction
 	if template.IntroductionText != "" {
 		content.WriteString(fmt.Sprintf("%s\n\n", template.IntroductionText))

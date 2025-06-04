@@ -32,39 +32,39 @@ func (al AlertLevel) String() string {
 
 // AlertCondition defines a condition that can trigger an alert
 type AlertCondition struct {
-	ID          string              `json:"id"`          // Unique identifier
-	Name        string              `json:"name"`        // Human-readable name
-	Description string              `json:"description"` // Description of what triggers this alert
-	Type        AlertConditionType  `json:"type"`        // Type of condition
-	Level       AlertLevel          `json:"level"`       // Alert severity level
-	Enabled     bool                `json:"enabled"`     // Whether this condition is active
-	Config      map[string]interface{} `json:"config"`   // Configuration parameters
-	CreatedAt   time.Time           `json:"created_at"`  // When the condition was created
+	ID          string                 `json:"id"`          // Unique identifier
+	Name        string                 `json:"name"`        // Human-readable name
+	Description string                 `json:"description"` // Description of what triggers this alert
+	Type        AlertConditionType     `json:"type"`        // Type of condition
+	Level       AlertLevel             `json:"level"`       // Alert severity level
+	Enabled     bool                   `json:"enabled"`     // Whether this condition is active
+	Config      map[string]interface{} `json:"config"`      // Configuration parameters
+	CreatedAt   time.Time              `json:"created_at"`  // When the condition was created
 }
 
 // AlertConditionType defines different types of alert conditions
 type AlertConditionType string
 
 const (
-	ConditionKeywordMatch     AlertConditionType = "keyword_match"
-	ConditionTopicEmergence   AlertConditionType = "topic_emergence"
-	ConditionVolumeChange     AlertConditionType = "volume_change"
-	ConditionCostThreshold    AlertConditionType = "cost_threshold"
-	ConditionSentimentShift   AlertConditionType = "sentiment_shift"
-	ConditionSourceFailure    AlertConditionType = "source_failure"
+	ConditionKeywordMatch   AlertConditionType = "keyword_match"
+	ConditionTopicEmergence AlertConditionType = "topic_emergence"
+	ConditionVolumeChange   AlertConditionType = "volume_change"
+	ConditionCostThreshold  AlertConditionType = "cost_threshold"
+	ConditionSentimentShift AlertConditionType = "sentiment_shift"
+	ConditionSourceFailure  AlertConditionType = "source_failure"
 )
 
 // Alert represents a triggered alert
 type Alert struct {
-	ID          string         `json:"id"`          // Unique identifier
-	ConditionID string         `json:"condition_id"` // ID of the condition that triggered this
-	Level       AlertLevel     `json:"level"`       // Alert severity
-	Title       string         `json:"title"`       // Alert title
-	Message     string         `json:"message"`     // Detailed alert message
-	Context     map[string]interface{} `json:"context"` // Additional context data
-	TriggeredAt time.Time      `json:"triggered_at"` // When the alert was triggered
-	Acknowledged bool          `json:"acknowledged"` // Whether the alert has been acknowledged
-	AcknowledgedAt time.Time   `json:"acknowledged_at"` // When it was acknowledged
+	ID             string                 `json:"id"`              // Unique identifier
+	ConditionID    string                 `json:"condition_id"`    // ID of the condition that triggered this
+	Level          AlertLevel             `json:"level"`           // Alert severity
+	Title          string                 `json:"title"`           // Alert title
+	Message        string                 `json:"message"`         // Detailed alert message
+	Context        map[string]interface{} `json:"context"`         // Additional context data
+	TriggeredAt    time.Time              `json:"triggered_at"`    // When the alert was triggered
+	Acknowledged   bool                   `json:"acknowledged"`    // Whether the alert has been acknowledged
+	AcknowledgedAt time.Time              `json:"acknowledged_at"` // When it was acknowledged
 }
 
 // AlertManager handles alert conditions and notifications
@@ -79,10 +79,10 @@ func NewAlertManager() *AlertManager {
 		conditions: []AlertCondition{},
 		alerts:     []Alert{},
 	}
-	
+
 	// Add default alert conditions
 	am.addDefaultConditions()
-	
+
 	return am
 }
 
@@ -107,7 +107,7 @@ func (am *AlertManager) addDefaultConditions() {
 		},
 		CreatedAt: time.Now(),
 	})
-	
+
 	// Topic emergence detection
 	am.conditions = append(am.conditions, AlertCondition{
 		ID:          "new-topic-emergence",
@@ -121,7 +121,7 @@ func (am *AlertManager) addDefaultConditions() {
 		},
 		CreatedAt: time.Now(),
 	})
-	
+
 	// Volume change detection
 	am.conditions = append(am.conditions, AlertCondition{
 		ID:          "volume-spike",
@@ -135,7 +135,7 @@ func (am *AlertManager) addDefaultConditions() {
 		},
 		CreatedAt: time.Now(),
 	})
-	
+
 	// Cost threshold
 	am.conditions = append(am.conditions, AlertCondition{
 		ID:          "cost-threshold",
@@ -154,29 +154,29 @@ func (am *AlertManager) addDefaultConditions() {
 // CheckConditions evaluates all enabled alert conditions against the provided context
 func (am *AlertManager) CheckConditions(ctx AlertContext) []Alert {
 	var triggeredAlerts []Alert
-	
+
 	for _, condition := range am.conditions {
 		if !condition.Enabled {
 			continue
 		}
-		
+
 		alert := am.evaluateCondition(condition, ctx)
 		if alert != nil {
 			triggeredAlerts = append(triggeredAlerts, *alert)
 			am.alerts = append(am.alerts, *alert)
 		}
 	}
-	
+
 	return triggeredAlerts
 }
 
 // AlertContext contains data for alert evaluation
 type AlertContext struct {
-	Articles        []core.Article `json:"articles"`
-	Digests         []core.Digest  `json:"digests"`
-	CurrentTopics   []string       `json:"current_topics"`
-	PreviousTopics  []string       `json:"previous_topics"`
-	EstimatedCost   float64        `json:"estimated_cost"`
+	Articles        []core.Article         `json:"articles"`
+	Digests         []core.Digest          `json:"digests"`
+	CurrentTopics   []string               `json:"current_topics"`
+	PreviousTopics  []string               `json:"previous_topics"`
+	EstimatedCost   float64                `json:"estimated_cost"`
 	ProcessingStats map[string]interface{} `json:"processing_stats"`
 }
 
@@ -185,30 +185,30 @@ func (am *AlertManager) EvaluateAlerts(articles []core.Article) ([]Alert, error)
 	if len(articles) == 0 {
 		return []Alert{}, nil
 	}
-	
+
 	// Build alert context from articles
 	ctx := AlertContext{
-		Articles: articles,
-		Digests:  []core.Digest{}, // Empty for now - could be populated if needed
-		CurrentTopics: am.extractTopicsFromArticles(articles),
+		Articles:       articles,
+		Digests:        []core.Digest{}, // Empty for now - could be populated if needed
+		CurrentTopics:  am.extractTopicsFromArticles(articles),
 		PreviousTopics: []string{}, // Would need historical data
-		EstimatedCost: 0.0, // Could calculate based on article count
+		EstimatedCost:  0.0,        // Could calculate based on article count
 		ProcessingStats: map[string]interface{}{
 			"article_count": len(articles),
-			"processed_at": time.Now(),
+			"processed_at":  time.Now(),
 		},
 	}
-	
+
 	// Check all conditions
 	triggeredAlerts := am.CheckConditions(ctx)
-	
+
 	return triggeredAlerts, nil
 }
 
 // extractTopicsFromArticles extracts topic keywords from article titles and content
 func (am *AlertManager) extractTopicsFromArticles(articles []core.Article) []string {
 	topicSet := make(map[string]bool)
-	
+
 	for _, article := range articles {
 		// Extract from title
 		titleWords := strings.Fields(strings.ToLower(article.Title))
@@ -218,7 +218,7 @@ func (am *AlertManager) extractTopicsFromArticles(articles []core.Article) []str
 				topicSet[word] = true
 			}
 		}
-		
+
 		// Extract from cleaned text if available (first few words to avoid overload)
 		if article.CleanedText != "" {
 			// Take first 200 characters to get key terms without overwhelming
@@ -234,13 +234,13 @@ func (am *AlertManager) extractTopicsFromArticles(articles []core.Article) []str
 			}
 		}
 	}
-	
+
 	// Convert to slice
 	var topics []string
 	for topic := range topicSet {
 		topics = append(topics, topic)
 	}
-	
+
 	return topics
 }
 
@@ -258,7 +258,7 @@ func isCommonWord(word string) bool {
 		"have": true, "they": true, "will": true, "about": true, "could": true,
 		"there": true, "other": true, "would": true, "which": true,
 	}
-	
+
 	return commonWords[word]
 }
 
@@ -284,38 +284,38 @@ func (am *AlertManager) checkKeywordMatch(condition AlertCondition, ctx AlertCon
 	if !ok {
 		return nil
 	}
-	
+
 	caseInsensitive, _ := condition.Config["case_insensitive"].(bool)
-	
+
 	var matchedArticles []string
 	var matchedKeywords []string
-	
+
 	for _, article := range ctx.Articles {
 		content := article.CleanedText + " " + article.Title
 		if caseInsensitive {
 			content = strings.ToLower(content)
 		}
-		
+
 		for _, keyword := range keywords {
 			searchKeyword := keyword
 			if caseInsensitive {
 				searchKeyword = strings.ToLower(keyword)
 			}
-			
+
 			if strings.Contains(content, searchKeyword) {
 				matchedArticles = append(matchedArticles, article.Title)
 				matchedKeywords = append(matchedKeywords, keyword)
 			}
 		}
 	}
-	
+
 	if len(matchedArticles) > 0 {
 		alert := &Alert{
 			ID:          fmt.Sprintf("keyword-match-%d", time.Now().Unix()),
 			ConditionID: condition.ID,
 			Level:       condition.Level,
 			Title:       "High Priority Keywords Detected",
-			Message: fmt.Sprintf("Found %d articles containing priority keywords: %s", 
+			Message: fmt.Sprintf("Found %d articles containing priority keywords: %s",
 				len(matchedArticles), strings.Join(uniqueStrings(matchedKeywords), ", ")),
 			Context: map[string]interface{}{
 				"matched_articles": matchedArticles,
@@ -325,7 +325,7 @@ func (am *AlertManager) checkKeywordMatch(condition AlertCondition, ctx AlertCon
 		}
 		return alert
 	}
-	
+
 	return nil
 }
 
@@ -335,7 +335,7 @@ func (am *AlertManager) checkTopicEmergence(condition AlertCondition, ctx AlertC
 	if minArticles == 0 {
 		minArticles = 3
 	}
-	
+
 	// Find topics that are new (present in current but not in previous)
 	var newTopics []string
 	for _, currentTopic := range ctx.CurrentTopics {
@@ -350,14 +350,14 @@ func (am *AlertManager) checkTopicEmergence(condition AlertCondition, ctx AlertC
 			newTopics = append(newTopics, currentTopic)
 		}
 	}
-	
+
 	if len(newTopics) > 0 {
 		alert := &Alert{
 			ID:          fmt.Sprintf("topic-emergence-%d", time.Now().Unix()),
 			ConditionID: condition.ID,
 			Level:       condition.Level,
 			Title:       "New Topics Emerged",
-			Message: fmt.Sprintf("Detected %d new topics: %s", 
+			Message: fmt.Sprintf("Detected %d new topics: %s",
 				len(newTopics), strings.Join(newTopics, ", ")),
 			Context: map[string]interface{}{
 				"new_topics": newTopics,
@@ -366,7 +366,7 @@ func (am *AlertManager) checkTopicEmergence(condition AlertCondition, ctx AlertC
 		}
 		return alert
 	}
-	
+
 	return nil
 }
 
@@ -376,25 +376,25 @@ func (am *AlertManager) checkVolumeChange(condition AlertCondition, ctx AlertCon
 	if threshold == 0 {
 		threshold = 50.0
 	}
-	
+
 	currentCount := len(ctx.Articles)
-	
+
 	// Get previous count from processing stats
 	previousCount := 0
 	if stats, ok := ctx.ProcessingStats["previous_article_count"].(int); ok {
 		previousCount = stats
 	}
-	
+
 	if previousCount > 0 {
 		changePercent := (float64(currentCount-previousCount) / float64(previousCount)) * 100
-		
+
 		if changePercent > threshold {
 			alert := &Alert{
 				ID:          fmt.Sprintf("volume-spike-%d", time.Now().Unix()),
 				ConditionID: condition.ID,
 				Level:       condition.Level,
 				Title:       "Article Volume Spike Detected",
-				Message: fmt.Sprintf("Article volume increased by %.1f%% (%d → %d articles)", 
+				Message: fmt.Sprintf("Article volume increased by %.1f%% (%d → %d articles)",
 					changePercent, previousCount, currentCount),
 				Context: map[string]interface{}{
 					"current_count":  currentCount,
@@ -406,7 +406,7 @@ func (am *AlertManager) checkVolumeChange(condition AlertCondition, ctx AlertCon
 			return alert
 		}
 	}
-	
+
 	return nil
 }
 
@@ -416,14 +416,14 @@ func (am *AlertManager) checkCostThreshold(condition AlertCondition, ctx AlertCo
 	if threshold == 0 {
 		threshold = 5.0
 	}
-	
+
 	if ctx.EstimatedCost > threshold {
 		alert := &Alert{
 			ID:          fmt.Sprintf("cost-threshold-%d", time.Now().Unix()),
 			ConditionID: condition.ID,
 			Level:       condition.Level,
 			Title:       "Cost Threshold Exceeded",
-			Message: fmt.Sprintf("Estimated processing cost $%.2f exceeds threshold $%.2f", 
+			Message: fmt.Sprintf("Estimated processing cost $%.2f exceeds threshold $%.2f",
 				ctx.EstimatedCost, threshold),
 			Context: map[string]interface{}{
 				"estimated_cost": ctx.EstimatedCost,
@@ -433,7 +433,7 @@ func (am *AlertManager) checkCostThreshold(condition AlertCondition, ctx AlertCo
 		}
 		return alert
 	}
-	
+
 	return nil
 }
 
@@ -457,7 +457,7 @@ func (am *AlertManager) GetAlerts(level *AlertLevel) []Alert {
 	if level == nil {
 		return am.alerts
 	}
-	
+
 	var filtered []Alert
 	for _, alert := range am.alerts {
 		if alert.Level == *level {
@@ -486,11 +486,11 @@ func (am *AlertManager) FormatAlert(alert Alert) string {
 		AlertLevelWarning:  "⚠️",
 		AlertLevelCritical: "🚨",
 	}
-	
+
 	emoji := levelEmoji[alert.Level]
 	timestamp := alert.TriggeredAt.Format("2006-01-02 15:04")
-	
-	return fmt.Sprintf("%s **%s** [%s]\n%s\n*Triggered at %s*", 
+
+	return fmt.Sprintf("%s **%s** [%s]\n%s\n*Triggered at %s*",
 		emoji, alert.Title, alert.Level.String(), alert.Message, timestamp)
 }
 
@@ -499,15 +499,15 @@ func (am *AlertManager) FormatAlertsSection(alerts []Alert) string {
 	if len(alerts) == 0 {
 		return ""
 	}
-	
+
 	var builder strings.Builder
 	builder.WriteString("## 🚨 Alerts\n\n")
-	
+
 	for _, alert := range alerts {
 		builder.WriteString(am.FormatAlert(alert))
 		builder.WriteString("\n\n")
 	}
-	
+
 	return builder.String()
 }
 
@@ -517,14 +517,14 @@ func (am *AlertManager) FormatAlertsSection(alerts []Alert) string {
 func uniqueStrings(slice []string) []string {
 	seen := make(map[string]bool)
 	var result []string
-	
+
 	for _, item := range slice {
 		if !seen[item] {
 			seen[item] = true
 			result = append(result, item)
 		}
 	}
-	
+
 	return result
 }
 

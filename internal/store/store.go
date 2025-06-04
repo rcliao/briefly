@@ -149,7 +149,7 @@ func (s *Store) runMigrations() error {
 	if err != nil {
 		return fmt.Errorf("failed to check digests schema: %w", err)
 	}
-	
+
 	if count == 0 {
 		_, err = s.db.Exec("ALTER TABLE digests ADD COLUMN my_take TEXT DEFAULT ''")
 		if err != nil {
@@ -162,7 +162,7 @@ func (s *Store) runMigrations() error {
 	if err != nil {
 		return fmt.Errorf("failed to check digests schema for format: %w", err)
 	}
-	
+
 	if count == 0 {
 		_, err = s.db.Exec("ALTER TABLE digests ADD COLUMN format TEXT DEFAULT 'standard'")
 		if err != nil {
@@ -175,7 +175,7 @@ func (s *Store) runMigrations() error {
 	if err != nil {
 		return fmt.Errorf("failed to check articles schema for embedding: %w", err)
 	}
-	
+
 	if count == 0 {
 		_, err = s.db.Exec("ALTER TABLE articles ADD COLUMN embedding BLOB")
 		if err != nil {
@@ -196,7 +196,7 @@ func (s *Store) runMigrations() error {
 	if err != nil {
 		return fmt.Errorf("failed to check summaries schema for embedding: %w", err)
 	}
-	
+
 	if count == 0 {
 		_, err = s.db.Exec("ALTER TABLE summaries ADD COLUMN embedding BLOB")
 		if err != nil {
@@ -217,7 +217,7 @@ func (s *Store) runMigrations() error {
 	if err != nil {
 		return fmt.Errorf("failed to check articles schema for insights: %w", err)
 	}
-	
+
 	if count == 0 {
 		_, err = s.db.Exec("ALTER TABLE articles ADD COLUMN sentiment_score REAL DEFAULT 0.0")
 		if err != nil {
@@ -250,7 +250,7 @@ func (s *Store) runMigrations() error {
 	if err != nil {
 		return fmt.Errorf("failed to check digests schema for insights: %w", err)
 	}
-	
+
 	if count == 0 {
 		_, err = s.db.Exec("ALTER TABLE digests ADD COLUMN overall_sentiment TEXT DEFAULT 'neutral'")
 		if err != nil {
@@ -520,7 +520,7 @@ func (s *Store) CacheDigest(digestID, title, content, digestSummary string, arti
 		title,
 		content,
 		digestSummary,
-		"", // my_take starts empty
+		"",         // my_take starts empty
 		"standard", // default format
 		string(urlsJSON),
 		time.Now().UTC(),
@@ -789,11 +789,11 @@ func (s *Store) GetFeeds(activeOnly bool) ([]core.Feed, error) {
 	query := `
 	SELECT id, url, title, description, last_fetched, last_modified, etag, active, error_count, last_error, date_added
 	FROM feeds`
-	
+
 	if activeOnly {
 		query += " WHERE active = TRUE"
 	}
-	
+
 	query += " ORDER BY date_added DESC"
 
 	rows, err := s.db.Query(query)
@@ -1042,10 +1042,10 @@ func (s *Store) GetCacheStats() (*CacheStats, error) {
 
 	// Get counts
 	queries := map[string]*int{
-		"SELECT COUNT(*) FROM articles":  &stats.ArticleCount,
-		"SELECT COUNT(*) FROM summaries": &stats.SummaryCount,
-		"SELECT COUNT(*) FROM digests":   &stats.DigestCount,
-		"SELECT COUNT(*) FROM feeds":     &stats.FeedCount,
+		"SELECT COUNT(*) FROM articles":   &stats.ArticleCount,
+		"SELECT COUNT(*) FROM summaries":  &stats.SummaryCount,
+		"SELECT COUNT(*) FROM digests":    &stats.DigestCount,
+		"SELECT COUNT(*) FROM feeds":      &stats.FeedCount,
 		"SELECT COUNT(*) FROM feed_items": &stats.FeedItemCount,
 	}
 
@@ -1104,20 +1104,20 @@ func (s *Store) GetCacheStats() (*CacheStats, error) {
 // ClearCache removes all cached data
 func (s *Store) ClearCache() error {
 	tables := []string{"articles", "summaries", "digests", "feed_items", "feeds"}
-	
+
 	for _, table := range tables {
 		_, err := s.db.Exec(fmt.Sprintf("DELETE FROM %s", table))
 		if err != nil {
 			return fmt.Errorf("failed to clear %s table: %w", table, err)
 		}
 	}
-	
+
 	// Vacuum to reclaim space
 	_, err := s.db.Exec("VACUUM")
 	if err != nil {
 		return fmt.Errorf("failed to vacuum database: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -1154,7 +1154,7 @@ func serializeEmbedding(embedding []float64) ([]byte, error) {
 	if embedding == nil {
 		return nil, nil
 	}
-	
+
 	buf := new(bytes.Buffer)
 	for _, val := range embedding {
 		if err := binary.Write(buf, binary.LittleEndian, val); err != nil {
@@ -1169,10 +1169,10 @@ func deserializeEmbedding(data []byte) ([]float64, error) {
 	if data == nil {
 		return nil, nil
 	}
-	
+
 	buf := bytes.NewReader(data)
 	var embedding []float64
-	
+
 	for buf.Len() > 0 {
 		var val float64
 		if err := binary.Read(buf, binary.LittleEndian, &val); err != nil {
@@ -1180,14 +1180,14 @@ func deserializeEmbedding(data []byte) ([]float64, error) {
 		}
 		embedding = append(embedding, val)
 	}
-	
+
 	return embedding, nil
 }
 
 // GetRecentArticles retrieves articles from the specified number of days ago
 func (s *Store) GetRecentArticles(days int) ([]core.Article, error) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -days)
-	
+
 	query := `
 	SELECT url, title, content, html_content, my_take, date_fetched, metadata, embedding, topic_cluster, topic_confidence,
 	       sentiment_score, sentiment_label, sentiment_emoji, alert_triggered, alert_conditions, research_queries

@@ -40,10 +40,10 @@ Please tailor your summary to match the %s format characteristics.
 // Client represents a client for interacting with an LLM.
 // It can be expanded to include more configuration or methods.
 type Client struct {
-	apiKey      string
-	modelName   string
-	gClient     *genai.Client          // Store the main client
-	genaiModel  *genai.GenerativeModel // Store the model for reuse
+	apiKey     string
+	modelName  string
+	gClient    *genai.Client          // Store the main client
+	genaiModel *genai.GenerativeModel // Store the model for reuse
 }
 
 // NewClient creates a new LLM client.
@@ -73,7 +73,7 @@ func NewClient(modelName string) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
 	}
-	
+
 	model := gClient.GenerativeModel(modelName)
 
 	return &Client{
@@ -152,9 +152,9 @@ func (c *Client) SummarizeArticleTextWithFormat(article core.Article, format str
 
 	// Populate the Summary struct
 	summary := core.Summary{
-		ArticleIDs:  []string{article.ID},
-		SummaryText: string(summaryText),
-		ModelUsed:   c.modelName,
+		ArticleIDs:   []string{article.ID},
+		SummaryText:  string(summaryText),
+		ModelUsed:    c.modelName,
 		Instructions: fmt.Sprintf("Format-aware summarization for %s format", format),
 	}
 
@@ -296,7 +296,7 @@ func RegenerateDigestWithMyTake(digestContent, myTake, format string) (string, e
 	defer client.Close()
 
 	model := client.GenerativeModel(DefaultModel)
-	
+
 	// Create a sophisticated prompt that asks the LLM to rewrite the digest
 	// incorporating the personal perspective throughout
 	prompt := fmt.Sprintf(`You are helping to rewrite a digest to incorporate the author's personal perspective throughout the content. 
@@ -359,7 +359,7 @@ func GeneratePromptCorner(digestContent string) (string, error) {
 	defer client.Close()
 
 	model := client.GenerativeModel(DefaultModel)
-	
+
 	prompt := fmt.Sprintf(`Based on the following digest content, create at most 3 interesting and practical prompts that readers can copy and paste into any LLM (ChatGPT, Gemini, Claude, etc.). 
 
 The prompts should be:
@@ -434,7 +434,7 @@ Generate only the title text, without any markdown formatting or additional text
 	// Clean up the title - remove any unwanted characters or formatting
 	titleStr := strings.TrimSpace(string(title))
 	titleStr = strings.Trim(titleStr, "\"'") // Remove quotes if present
-	
+
 	return titleStr, nil
 }
 
@@ -454,7 +454,7 @@ func GenerateDigestTitle(digestContent string, format string) (string, error) {
 	defer client.Close()
 
 	model := client.GenerativeModel(DefaultModel)
-	
+
 	// Create a prompt that asks for a compelling title based on the digest content
 	prompt := fmt.Sprintf(`Generate a compelling and concise title for the following digest content. The title MUST primarily reflect the core substance, main themes, and key insights of the digest. It should be engaging, informative, and under 80 characters. As a secondary consideration, ensure the tone aligns with a '%s' format style (e.g., Brief: direct; Standard: informative; Detailed: analytical; Newsletter: engaging/shareable).
 
@@ -483,32 +483,32 @@ Generate only the title text, without any markdown formatting or additional text
 	// Clean up the title - remove any unwanted characters or formatting
 	titleStr := strings.TrimSpace(string(title))
 	titleStr = strings.Trim(titleStr, "\"'") // Remove quotes if present
-	
+
 	return titleStr, nil
 }
 
 // GenerateEmbedding generates a vector embedding for the given text using Gemini's embedding model
 func (c *Client) GenerateEmbedding(text string) ([]float64, error) {
 	ctx := context.Background()
-	
+
 	// Use the embedding model specifically for embeddings
 	embeddingModel := c.gClient.EmbeddingModel(DefaultEmbeddingModel)
-	
+
 	resp, err := embeddingModel.EmbedContent(ctx, genai.Text(text))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
-	
+
 	if resp.Embedding == nil || resp.Embedding.Values == nil {
 		return nil, fmt.Errorf("no embedding values returned from API")
 	}
-	
+
 	// Convert float32 to float64
 	embedding := make([]float64, len(resp.Embedding.Values))
 	for i, val := range resp.Embedding.Values {
 		embedding[i] = float64(val)
 	}
-	
+
 	return embedding, nil
 }
 
@@ -516,12 +516,12 @@ func (c *Client) GenerateEmbedding(text string) ([]float64, error) {
 func (c *Client) GenerateEmbeddingForArticle(article core.Article) ([]float64, error) {
 	// Combine title and content for better embedding representation
 	text := article.Title + "\n\n" + article.CleanedText
-	
+
 	// Truncate if text is too long (embedding models have token limits)
 	if len(text) > 8000 { // Conservative limit for text-embedding-004
 		text = text[:8000]
 	}
-	
+
 	return c.GenerateEmbedding(text)
 }
 
@@ -535,18 +535,18 @@ func CosineSimilarity(a, b []float64) float64 {
 	if len(a) != len(b) {
 		return 0
 	}
-	
+
 	var dotProduct, normA, normB float64
 	for i := range a {
 		dotProduct += a[i] * b[i]
 		normA += a[i] * a[i]
 		normB += b[i] * b[i]
 	}
-	
+
 	if normA == 0 || normB == 0 {
 		return 0
 	}
-	
+
 	return dotProduct / (math.Sqrt(normA) * math.Sqrt(normB))
 }
 
@@ -612,7 +612,7 @@ Return the queries as a simple numbered list (1. Query one 2. Query two, etc.) w
 func (c *Client) GenerateTrendAnalysisPrompt(currentTopics []string, previousTopics []string, timeframe string) string {
 	currentTopicsStr := strings.Join(currentTopics, ", ")
 	previousTopicsStr := strings.Join(previousTopics, ", ")
-	
+
 	return fmt.Sprintf(`Analyze the trends and changes in topics between two time periods:
 
 CURRENT PERIOD (%s):
@@ -627,8 +627,8 @@ Please provide a trend analysis that includes:
 3. **Consistent Themes**: Topics that remain important across both periods
 4. **Notable Shifts**: Any significant changes in focus or emphasis
 
-Format your response as a brief, insightful analysis (150-200 words) suitable for inclusion in a digest.`, 
-	timeframe, currentTopicsStr, previousTopicsStr)
+Format your response as a brief, insightful analysis (150-200 words) suitable for inclusion in a digest.`,
+		timeframe, currentTopicsStr, previousTopicsStr)
 }
 
 // AnalyzeSentimentWithEmoji analyzes the sentiment of text and returns score, label, and emoji

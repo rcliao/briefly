@@ -18,12 +18,12 @@ type DigestData struct {
 	TopicCluster    string  // Assigned topic cluster label
 	TopicConfidence float64 // Confidence score for topic assignment
 	// v0.4 Insights fields
-	SentimentScore   float64  // Sentiment analysis score (-1.0 to 1.0)
-	SentimentLabel   string   // Sentiment label (positive, negative, neutral) 
-	SentimentEmoji   string   // Emoji representation of sentiment
-	AlertTriggered   bool     // Whether this article triggered any alerts
-	AlertConditions  []string // List of alert conditions that matched
-	ResearchQueries  []string // Generated research queries for this article
+	SentimentScore  float64  // Sentiment analysis score (-1.0 to 1.0)
+	SentimentLabel  string   // Sentiment label (positive, negative, neutral)
+	SentimentEmoji  string   // Emoji representation of sentiment
+	AlertTriggered  bool     // Whether this article triggered any alerts
+	AlertConditions []string // List of alert conditions that matched
+	ResearchQueries []string // Generated research queries for this article
 }
 
 // RenderMarkdownDigest creates a markdown file with the given summaries.
@@ -60,7 +60,7 @@ func RenderMarkdownDigest(digestItems []DigestData, outputDir string, finalDiges
 			markdownContent.WriteString("## Individual Article Summaries\n\n")
 			markdownContent.WriteString("*For reference, here are the individual summaries that were used to create the digest above.*\n\n")
 		}
-		
+
 		// Add individual summaries (either as main content or as appendix)
 		for i, item := range digestItems {
 			markdownContent.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, item.Title))
