@@ -2,12 +2,15 @@ package research
 
 import (
 	"briefly/internal/llm"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/google/generative-ai-go/genai"
 )
 
 // SearchProvider defines the interface for search API providers
@@ -136,8 +139,127 @@ func (dr *DeepResearcher) ExecuteResearch(session *ResearchSession) error {
 
 // generateSearchQueries uses the LLM to generate relevant search queries
 func (dr *DeepResearcher) generateSearchQueries(topic string, depth int, previousResults []SearchResult) ([]string, error) {
-	// TODO: Implement proper LLM-based query generation
-	// For now, return some default queries based on topic and depth
+	// Check if LLM client is available
+	if dr.llmClient == nil {
+		fmt.Printf("  📝 Using template-based queries (no LLM available)\n")
+		return dr.generateFallbackQueries(topic, depth), nil
+	}
+
+	// Use LLM to generate intelligent search queries based on topic and previous results
+	prompt := dr.buildQueryGenerationPrompt(topic, depth, previousResults)
+
+	fmt.Printf("  🤖 Generating search queries using LLM...\n")
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	resp, err := dr.llmClient.GetGenaiModel().GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		fmt.Printf("  ⚠️ LLM query generation failed: %s\n", err)
+		fmt.Printf("  🔄 Falling back to template-based queries\n")
+		return dr.generateFallbackQueries(topic, depth), nil
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		fmt.Printf("  ⚠️ LLM returned no queries\n")
+		fmt.Printf("  🔄 Falling back to template-based queries\n")
+		return dr.generateFallbackQueries(topic, depth), nil
+	}
+
+	queriesPart := resp.Candidates[0].Content.Parts[0]
+	queriesText, ok := queriesPart.(genai.Text)
+	if !ok {
+		fmt.Printf("  ⚠️ LLM returned unexpected format\n")
+		fmt.Printf("  🔄 Falling back to template-based queries\n")
+		return dr.generateFallbackQueries(topic, depth), nil
+	}
+
+	// Parse the numbered list of queries
+	queries := dr.parseQueriesFromText(string(queriesText))
+
+	// Ensure we have at least some fallback queries if LLM fails
+	if len(queries) == 0 {
+		fmt.Printf("  ⚠️ Could not parse LLM-generated queries\n")
+		fmt.Printf("  🔄 Falling back to template-based queries\n")
+		return dr.generateFallbackQueries(topic, depth), nil
+	}
+
+	fmt.Printf("  ✅ Generated %d LLM-based queries\n", len(queries))
+	return queries, nil
+}
+
+// buildQueryGenerationPrompt creates a prompt for LLM to generate search queries
+func (dr *DeepResearcher) buildQueryGenerationPrompt(topic string, depth int, previousResults []SearchResult) string {
+	var builder strings.Builder
+
+	builder.WriteString(fmt.Sprintf(`Generate %d specific search queries for the topic: "%s"
+
+Requirements:
+- Each query should be focused and specific
+- Suitable for Google search
+- Different perspectives (technical, business, practical)
+- Return as a numbered list (1. First query 2. Second query etc.)
+
+`, 3+depth, topic))
+
+	if depth > 0 {
+		builder.WriteString("Focus on advanced/specialized aspects since this is a deeper research iteration.\n\n")
+	}
+
+	if len(previousResults) > 0 && len(previousResults) <= 3 {
+		builder.WriteString("Previous sources found:\n")
+		for _, result := range previousResults {
+			builder.WriteString(fmt.Sprintf("- %s\n", result.Source))
+		}
+		builder.WriteString("Generate queries that would find DIFFERENT sources.\n\n")
+	}
+
+	builder.WriteString("Queries:")
+
+	return builder.String()
+}
+
+// parseQueriesFromText extracts search queries from LLM-generated text
+func (dr *DeepResearcher) parseQueriesFromText(text string) []string {
+	lines := strings.Split(text, "\n")
+	var queries []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Skip intro text, headers, and markdown
+		if strings.HasPrefix(line, "Here are") ||
+			strings.HasPrefix(line, "Queries:") ||
+			strings.HasPrefix(line, "**") ||
+			strings.HasPrefix(line, "#") ||
+			strings.Contains(line, "perspective") && len(line) > 50 {
+			continue
+		}
+
+		// Remove numbering like "1. " or "- "
+		line = strings.TrimPrefix(line, "- ")
+		if len(line) > 2 && line[1] == '.' && line[0] >= '1' && line[0] <= '9' {
+			line = strings.TrimSpace(line[2:])
+		}
+
+		// Clean up markdown and backticks
+		line = strings.Trim(line, "`")
+		line = strings.TrimPrefix(line, "**Technical:** ")
+		line = strings.TrimPrefix(line, "**Business:** ")
+		line = strings.TrimPrefix(line, "**Practical:** ")
+
+		if line != "" && len(line) > 5 { // Ensure meaningful query length
+			queries = append(queries, line)
+		}
+	}
+	return queries
+}
+
+// generateFallbackQueries creates fallback queries when LLM fails
+func (dr *DeepResearcher) generateFallbackQueries(topic string, depth int) []string {
 	queries := []string{
 		fmt.Sprintf("%s overview", topic),
 		fmt.Sprintf("%s trends 2025", topic),
@@ -152,7 +274,7 @@ func (dr *DeepResearcher) generateSearchQueries(topic string, depth int, previou
 		)
 	}
 
-	return queries, nil
+	return queries
 }
 
 // filterAndRankResults removes duplicates and adds ranking information
@@ -332,9 +454,6 @@ func NewSerpAPISearchProvider(apiKey string) *SerpAPISearchProvider {
 
 // Search implements the SearchProvider interface using SerpAPI
 func (sap *SerpAPISearchProvider) Search(query string, maxResults int) ([]SearchResult, error) {
-	// This is a skeleton implementation
-	// In a real implementation, you'd make HTTP requests to SerpAPI
-
 	baseURL := "https://serpapi.com/search"
 	params := url.Values{}
 	params.Add("q", query)
@@ -344,7 +463,16 @@ func (sap *SerpAPISearchProvider) Search(query string, maxResults int) ([]Search
 
 	requestURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
 
-	resp, err := sap.client.Get(requestURL)
+	// Create request with context timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create search request: %w", err)
+	}
+
+	resp, err := sap.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make search request: %w", err)
 	}
@@ -361,10 +489,16 @@ func (sap *SerpAPISearchProvider) Search(query string, maxResults int) ([]Search
 			Link    string `json:"link"`
 			Snippet string `json:"snippet"`
 		} `json:"organic_results"`
+		Error string `json:"error,omitempty"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse search response: %w", err)
+	}
+
+	// Check for API errors
+	if apiResponse.Error != "" {
+		return nil, fmt.Errorf("search API error: %s", apiResponse.Error)
 	}
 
 	// Convert to our SearchResult format
@@ -395,4 +529,101 @@ func extractDomainFromURL(rawURL string) string {
 		return "unknown"
 	}
 	return parsedURL.Host
+}
+
+// GoogleCustomSearchProvider implements SearchProvider using Google Custom Search API
+type GoogleCustomSearchProvider struct {
+	apiKey   string
+	searchID string
+	client   *http.Client
+}
+
+// NewGoogleCustomSearchProvider creates a new Google Custom Search provider
+func NewGoogleCustomSearchProvider(apiKey, searchID string) *GoogleCustomSearchProvider {
+	return &GoogleCustomSearchProvider{
+		apiKey:   apiKey,
+		searchID: searchID,
+		client:   &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+// Search implements the SearchProvider interface using Google Custom Search API
+func (gcsp *GoogleCustomSearchProvider) Search(query string, maxResults int) ([]SearchResult, error) {
+	baseURL := "https://www.googleapis.com/customsearch/v1"
+	params := url.Values{}
+	params.Add("key", gcsp.apiKey)
+	params.Add("cx", gcsp.searchID)
+	params.Add("q", query)
+	params.Add("num", fmt.Sprintf("%d", min(maxResults, 10))) // Google CSE allows max 10 results per request
+
+	requestURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
+
+	// Create request with context timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create search request: %w", err)
+	}
+
+	resp, err := gcsp.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make search request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("search API returned status %d", resp.StatusCode)
+	}
+
+	// Parse response (Google Custom Search API format)
+	var apiResponse struct {
+		Items []struct {
+			Title   string `json:"title"`
+			Link    string `json:"link"`
+			Snippet string `json:"snippet"`
+		} `json:"items"`
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error,omitempty"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse search response: %w", err)
+	}
+
+	// Check for API errors
+	if apiResponse.Error.Code != 0 {
+		return nil, fmt.Errorf("search API error (%d): %s", apiResponse.Error.Code, apiResponse.Error.Message)
+	}
+
+	// Convert to our SearchResult format
+	var results []SearchResult
+	for i, item := range apiResponse.Items {
+		result := SearchResult{
+			Title:   item.Title,
+			URL:     item.Link,
+			Snippet: item.Snippet,
+			Source:  extractDomainFromURL(item.Link),
+			Rank:    i + 1,
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// GetName returns the name of the search provider
+func (gcsp *GoogleCustomSearchProvider) GetName() string {
+	return "Google Custom Search"
+}
+
+// Helper function to get minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

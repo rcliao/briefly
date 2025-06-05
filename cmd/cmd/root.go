@@ -1609,6 +1609,7 @@ func init() {
 	researchCmd.Flags().Int("depth", 2, "Number of research iterations")
 	researchCmd.Flags().Int("max-results", 10, "Maximum results per search query")
 	researchCmd.Flags().String("output", "", "Output file for discovered links")
+	researchCmd.Flags().String("provider", "auto", "Search provider: auto, google, serpapi, mock")
 
 	cacheClearCmd.Flags().Bool("confirm", false, "Confirm cache deletion")
 }
@@ -1702,15 +1703,17 @@ var researchCmd = &cobra.Command{
 
 Examples:
   briefly research "artificial intelligence trends" --depth 2
-  briefly research "sustainable energy" --max-results 10`,
+  briefly research "sustainable energy" --max-results 10 --provider google
+  briefly research "cloud computing" --provider serpapi`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		topic := args[0]
 		depth, _ := cmd.Flags().GetInt("depth")
 		maxResults, _ := cmd.Flags().GetInt("max-results")
 		outputFile, _ := cmd.Flags().GetString("output")
+		provider, _ := cmd.Flags().GetString("provider")
 
-		if err := runResearch(topic, depth, maxResults, outputFile); err != nil {
+		if err := runResearch(topic, depth, maxResults, outputFile, provider); err != nil {
 			logger.Error("Failed to perform research", err)
 			os.Exit(1)
 		}
@@ -1952,21 +1955,67 @@ func runSentiment(inputFile string) error {
 	return nil
 }
 
-func runResearch(topic string, depth, maxResults int, outputFile string) error {
+func runResearch(topic string, depth, maxResults int, outputFile, provider string) error {
 	fmt.Printf("🔍 Starting deep research on: %s\n", topic)
 	fmt.Printf("📊 Depth: %d iterations, Max results per query: %d\n", depth, maxResults)
 	fmt.Println()
 
-	// Create LLM client for query generation
+	// Create LLM client for query generation (optional)
 	llmClient, err := llm.NewClient("")
 	if err != nil {
-		return fmt.Errorf("failed to create LLM client: %w", err)
+		fmt.Printf("⚠️  LLM client unavailable: %s\n", err)
+		fmt.Printf("🔄 Research will use template-based queries instead of LLM-generated ones\n")
+		llmClient = nil // Set to nil so research can handle fallback
 	}
-	defer llmClient.Close()
+	if llmClient != nil {
+		defer llmClient.Close()
+	}
 
-	// Initialize deep researcher with mock provider for now
-	mockProvider := research.NewMockSearchProvider()
-	researcher := research.NewDeepResearcher(llmClient, mockProvider)
+	// Initialize search provider based on user preference or auto-detection
+	var searchProvider research.SearchProvider
+
+	googleAPIKey := os.Getenv("GOOGLE_CSE_API_KEY")
+	googleSearchID := os.Getenv("GOOGLE_CSE_ID")
+	serpAPIKey := os.Getenv("SERPAPI_KEY")
+
+	switch provider {
+	case "google":
+		if googleAPIKey != "" && googleSearchID != "" {
+			searchProvider = research.NewGoogleCustomSearchProvider(googleAPIKey, googleSearchID)
+			fmt.Printf("🔌 Using Google Custom Search (forced)\n")
+		} else {
+			return fmt.Errorf("google Custom Search requires both GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID environment variables")
+		}
+	case "serpapi":
+		if serpAPIKey != "" {
+			searchProvider = research.NewSerpAPISearchProvider(serpAPIKey)
+			fmt.Printf("🔌 Using SerpAPI (forced)\n")
+		} else {
+			return fmt.Errorf("serpAPI requires SERPAPI_KEY environment variable")
+		}
+	case "mock":
+		searchProvider = research.NewMockSearchProvider()
+		fmt.Printf("🔌 Using mock search provider (forced)\n")
+	case "auto":
+		fallthrough
+	default:
+		// Auto-detect based on available environment variables (priority: Google > SerpAPI > Mock)
+		if googleAPIKey != "" && googleSearchID != "" {
+			searchProvider = research.NewGoogleCustomSearchProvider(googleAPIKey, googleSearchID)
+			fmt.Printf("🔌 Using Google Custom Search for real search results\n")
+		} else if serpAPIKey != "" {
+			searchProvider = research.NewSerpAPISearchProvider(serpAPIKey)
+			fmt.Printf("🔌 Using SerpAPI for real search results\n")
+		} else {
+			searchProvider = research.NewMockSearchProvider()
+			fmt.Printf("⚠️  Using mock search provider\n")
+			fmt.Printf("💡 For real results, set either:\n")
+			fmt.Printf("   • GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID for Google Custom Search\n")
+			fmt.Printf("   • SERPAPI_KEY for SerpAPI\n")
+		}
+	}
+
+	researcher := research.NewDeepResearcher(llmClient, searchProvider)
 
 	// Start research session
 	session, err := researcher.StartResearch(topic, depth)

@@ -243,6 +243,11 @@ func (c *Client) Close() {
 	}
 }
 
+// GetGenaiModel returns the underlying genai model for direct use by other packages
+func (c *Client) GetGenaiModel() *genai.GenerativeModel {
+	return c.genaiModel
+}
+
 // GenerateSummary is a simpler function, more aligned with the original request,
 // that takes text and returns a summary string.
 // It uses the GEMINI_API_KEY environment variable and the default model.
