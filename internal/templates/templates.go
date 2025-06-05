@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"briefly/internal/email"
 	"briefly/internal/llm"
 	"briefly/internal/render"
 	"fmt"
@@ -21,6 +22,8 @@ const (
 	FormatDetailed DigestFormat = "detailed"
 	// FormatNewsletter creates a newsletter-style digest optimized for sharing
 	FormatNewsletter DigestFormat = "newsletter"
+	// FormatEmail creates HTML email format
+	FormatEmail DigestFormat = "email"
 )
 
 // DigestTemplate holds template configuration for different formats
@@ -106,6 +109,22 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IntroductionText:          "Welcome to this week's curated selection of insights! Here's what caught our attention:",
 			ConclusionText:            "Thank you for reading! Forward this to colleagues who might find it valuable.",
 			SectionSeparator:          "\n\n💡 **Key Insight**\n\n",
+		}
+	case FormatEmail:
+		return &DigestTemplate{
+			Format:                    FormatEmail,
+			Title:                     "Email Digest",
+			IncludeSummaries:          true,
+			IncludeKeyInsights:        true,
+			IncludeActionItems:        true,
+			IncludeSourceLinks:        true,
+			IncludePromptCorner:       false,
+			IncludeIndividualArticles: true,
+			IncludeTopicClustering:    true, // Enable topic clustering for email organization
+			MaxSummaryLength:          300,
+			IntroductionText:          "Here's your personalized digest with today's most important insights:",
+			ConclusionText:            "Stay informed and keep exploring!",
+			SectionSeparator:          "\n\n---\n\n",
 		}
 	default:
 		return GetTemplate(FormatStandard)
@@ -300,7 +319,9 @@ func renderInsightsSection(digestItems []render.DigestData, template *DigestTemp
 			content.WriteString("**Article Sentiment Distribution:**\n")
 			for sentiment, count := range sentimentCount {
 				emoji := getSentimentEmoji(sentiment)
-				content.WriteString(fmt.Sprintf("- %s %s: %d articles\n", emoji, strings.Title(sentiment), count))
+				// Capitalize first letter manually to avoid deprecated strings.Title
+				capitalized := strings.ToUpper(sentiment[:1]) + sentiment[1:]
+				content.WriteString(fmt.Sprintf("- %s %s: %d articles\n", emoji, capitalized, count))
 			}
 			content.WriteString("\n")
 		}
@@ -590,6 +611,61 @@ func RenderWithInsights(digestItems []render.DigestData, outputDir string, final
 	return content.String(), filePath, err
 }
 
+// RenderHTMLEmail renders a digest as HTML email
+func RenderHTMLEmail(digestItems []render.DigestData, outputDir string, finalDigest string, customTitle string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string, emailStyle string) (string, string, error) {
+	template := GetTemplate(FormatEmail)
+	
+	// Choose email template style
+	var emailTemplate *email.EmailTemplate
+	switch emailStyle {
+	case "newsletter":
+		emailTemplate = email.GetNewsletterEmailTemplate()
+	case "minimal":
+		emailTemplate = email.GetMinimalEmailTemplate()
+	default:
+		emailTemplate = email.GetDefaultEmailTemplate()
+	}
+
+	// Convert digest data to email format
+	title := customTitle
+	if title == "" {
+		title = template.Title
+	}
+
+	emailData := email.ConvertDigestToEmail(
+		digestItems,
+		title,
+		template.IntroductionText,
+		finalDigest,
+		template.ConclusionText,
+		overallSentiment,
+		alertsSummary,
+		trendsSummary,
+		researchSuggestions,
+	)
+
+	// Render HTML email
+	htmlContent, err := email.RenderHTMLEmail(emailData, emailTemplate)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to render HTML email: %w", err)
+	}
+
+	// Write HTML file
+	dateStr := time.Now().UTC().Format("2006-01-02")
+	filename := fmt.Sprintf("digest_email_%s.html", dateStr)
+	
+	if outputDir == "" {
+		outputDir = "digests"
+	}
+
+	filePath, err := email.WriteHTMLEmail(htmlContent, outputDir, filename)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to write HTML email: %w", err)
+	}
+
+	return htmlContent, filePath, nil
+}
+
 // GetAvailableFormats returns a list of all available format names
 func GetAvailableFormats() []string {
 	return []string{
@@ -597,5 +673,6 @@ func GetAvailableFormats() []string {
 		string(FormatStandard),
 		string(FormatDetailed),
 		string(FormatNewsletter),
+		string(FormatEmail),
 	}
 }

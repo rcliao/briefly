@@ -24,12 +24,14 @@ import (
 	"briefly/internal/fetch"
 	"briefly/internal/llm"
 	"briefly/internal/logger"
+	"briefly/internal/messaging"
 	"briefly/internal/render"
 	"briefly/internal/research"
 	"briefly/internal/sentiment"
 	"briefly/internal/store"
 	"briefly/internal/templates"
 	"briefly/internal/trends"
+	"briefly/internal/tts"
 	"briefly/internal/tui"
 	"briefly/llmclient"
 	"bufio"
@@ -151,7 +153,7 @@ var digestCmd = &cobra.Command{
 	Long: `Process URLs from a markdown file, fetch articles, summarize them using Gemini,
 and generate a markdown digest file.
 
-Available formats: brief, standard, detailed, newsletter
+Available formats: brief, standard, detailed, newsletter, email
 
 Example:
   briefly digest input/2025-05-30.md
@@ -602,6 +604,8 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			digestFormat = templates.FormatDetailed
 		case "newsletter":
 			digestFormat = templates.FormatNewsletter
+		case "email":
+			digestFormat = templates.FormatEmail
 		case "standard", "":
 			digestFormat = templates.FormatStandard
 		default:
@@ -709,7 +713,17 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				}
 			}
 
-			renderedContent, digestPath, renderErr := templates.RenderWithInsights(digestItems, outputDir, "", "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions)
+			var renderedContent, digestPath string
+			var renderErr error
+			
+			if format == "email" {
+				// Handle email format specially
+				renderedContent, digestPath, renderErr = templates.RenderHTMLEmail(digestItems, outputDir, "", generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions, "default")
+			} else {
+				// Handle other formats with standard markdown rendering
+				renderedContent, digestPath, renderErr = templates.RenderWithInsights(digestItems, outputDir, "", "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions)
+			}
+			
 			if renderErr != nil {
 				return fmt.Errorf("failed to render digest with template: %w", renderErr)
 			}
@@ -766,7 +780,17 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				}
 			}
 
-			renderedContent, digestPath, renderErr := templates.RenderWithInsights(digestItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions)
+			var renderedContent, digestPath string
+			var renderErr error
+			
+			if format == "email" {
+				// Handle email format specially
+				renderedContent, digestPath, renderErr = templates.RenderHTMLEmail(digestItems, outputDir, finalDigest, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions, "default")
+			} else {
+				// Handle other formats with standard markdown rendering
+				renderedContent, digestPath, renderErr = templates.RenderWithInsights(digestItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions)
+			}
+			
 			if renderErr != nil {
 				return fmt.Errorf("failed to render digest with template: %w", renderErr)
 			}
@@ -824,6 +848,7 @@ var listFormatsCmd = &cobra.Command{
 			"standard":   "Balanced digest with summaries and key points",
 			"detailed":   "Comprehensive digest with full summaries and analysis",
 			"newsletter": "Newsletter-style digest optimized for sharing",
+			"email":      "HTML email format with responsive design",
 		}
 
 		for format, description := range formats {
@@ -1580,6 +1605,11 @@ func init() {
 	rootCmd.AddCommand(sentimentCmd)
 	rootCmd.AddCommand(researchCmd)
 
+	// Add v1.0 Multi-Channel commands
+	rootCmd.AddCommand(sendSlackCmd)
+	rootCmd.AddCommand(sendDiscordCmd)
+	rootCmd.AddCommand(generateTTSCmd)
+
 	// Insights subcommands
 	insightsCmd.AddCommand(alertsCmd)
 	alertsCmd.AddCommand(listAlertsCmd)
@@ -1610,6 +1640,24 @@ func init() {
 	researchCmd.Flags().Int("max-results", 10, "Maximum results per search query")
 	researchCmd.Flags().String("output", "", "Output file for discovered links")
 	researchCmd.Flags().String("provider", "auto", "Search provider: auto, google, serpapi, mock")
+
+	// Messaging command flags
+	sendSlackCmd.Flags().String("webhook", "", "Slack webhook URL (or set SLACK_WEBHOOK_URL)")
+	sendSlackCmd.Flags().String("message-format", "bullets", "Message format: bullets, summary, highlights")
+	sendSlackCmd.Flags().Bool("include-sentiment", true, "Include sentiment emojis")
+	
+	sendDiscordCmd.Flags().String("webhook", "", "Discord webhook URL (or set DISCORD_WEBHOOK_URL)")
+	sendDiscordCmd.Flags().String("message-format", "bullets", "Message format: bullets, summary, highlights")
+	sendDiscordCmd.Flags().Bool("include-sentiment", true, "Include sentiment emojis")
+
+	// TTS command flags
+	generateTTSCmd.Flags().String("provider", "mock", "TTS provider: openai, elevenlabs, mock")
+	generateTTSCmd.Flags().String("voice", "", "Voice ID (provider-specific)")
+	generateTTSCmd.Flags().String("api-key", "", "API key for TTS provider (or set OPENAI_API_KEY/ELEVENLABS_API_KEY)")
+	generateTTSCmd.Flags().Float64("speed", 1.0, "Speech speed (0.5-2.0)")
+	generateTTSCmd.Flags().Int("max-articles", 10, "Maximum articles to include in audio (0 for all)")
+	generateTTSCmd.Flags().Bool("include-summaries", true, "Include article summaries in audio")
+	generateTTSCmd.Flags().String("output", "audio", "Output directory for audio files")
 
 	cacheClearCmd.Flags().Bool("confirm", false, "Confirm cache deletion")
 }
@@ -1715,6 +1763,80 @@ Examples:
 
 		if err := runResearch(topic, depth, maxResults, outputFile, provider); err != nil {
 			logger.Error("Failed to perform research", err)
+			os.Exit(1)
+		}
+	},
+}
+
+// Messaging commands for v1.0
+var sendSlackCmd = &cobra.Command{
+	Use:   "send-slack [input-file]",
+	Short: "Send digest to Slack webhook",
+	Long: `Send a formatted digest to Slack using webhook integration.
+
+Examples:
+  briefly send-slack input/2025-06-03.md --webhook https://hooks.slack.com/...
+  briefly send-slack input/2025-06-03.md --message-format highlights
+  SLACK_WEBHOOK_URL=https://hooks.slack.com/... briefly send-slack input/2025-06-03.md`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		inputFile := args[0]
+		webhookURL, _ := cmd.Flags().GetString("webhook")
+		messageFormat, _ := cmd.Flags().GetString("message-format")
+		includeSentiment, _ := cmd.Flags().GetBool("include-sentiment")
+
+		if err := runSendMessage(messaging.PlatformSlack, inputFile, webhookURL, messageFormat, includeSentiment); err != nil {
+			logger.Error("Failed to send Slack message", err)
+			os.Exit(1)
+		}
+	},
+}
+
+var sendDiscordCmd = &cobra.Command{
+	Use:   "send-discord [input-file]",
+	Short: "Send digest to Discord webhook",
+	Long: `Send a formatted digest to Discord using webhook integration.
+
+Examples:
+  briefly send-discord input/2025-06-03.md --webhook https://discord.com/api/webhooks/...
+  briefly send-discord input/2025-06-03.md --message-format summary
+  DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... briefly send-discord input/2025-06-03.md`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		inputFile := args[0]
+		webhookURL, _ := cmd.Flags().GetString("webhook")
+		messageFormat, _ := cmd.Flags().GetString("message-format")
+		includeSentiment, _ := cmd.Flags().GetBool("include-sentiment")
+
+		if err := runSendMessage(messaging.PlatformDiscord, inputFile, webhookURL, messageFormat, includeSentiment); err != nil {
+			logger.Error("Failed to send Discord message", err)
+			os.Exit(1)
+		}
+	},
+}
+
+var generateTTSCmd = &cobra.Command{
+	Use:   "generate-tts [input-file]",
+	Short: "Generate TTS audio from digest",
+	Long: `Generate Text-to-Speech audio file from digest content.
+
+Examples:
+  briefly generate-tts input/2025-06-03.md --provider openai --voice alloy
+  briefly generate-tts input/2025-06-03.md --provider elevenlabs --voice Rachel
+  OPENAI_API_KEY=sk-... briefly generate-tts input/2025-06-03.md`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		inputFile := args[0]
+		provider, _ := cmd.Flags().GetString("provider")
+		voiceID, _ := cmd.Flags().GetString("voice")
+		apiKey, _ := cmd.Flags().GetString("api-key")
+		speed, _ := cmd.Flags().GetFloat64("speed")
+		maxArticles, _ := cmd.Flags().GetInt("max-articles")
+		includeSummaries, _ := cmd.Flags().GetBool("include-summaries")
+		outputDir, _ := cmd.Flags().GetString("output")
+
+		if err := runGenerateTTS(inputFile, provider, voiceID, apiKey, speed, maxArticles, includeSummaries, outputDir); err != nil {
+			logger.Error("Failed to generate TTS audio", err)
 			os.Exit(1)
 		}
 	},
@@ -2078,6 +2200,326 @@ func readLinksFromFile(inputFile string) ([]core.Link, error) {
 	// This would be implemented similar to existing link reading logic
 	// For now, return empty slice as placeholder
 	return []core.Link{}, fmt.Errorf("link reading not implemented in this example")
+}
+
+func runSendMessage(platform messaging.MessagePlatform, inputFile string, webhookURL string, messageFormat string, includeSentiment bool) error {
+	// Get webhook URL from environment if not provided
+	if webhookURL == "" {
+		switch platform {
+		case messaging.PlatformSlack:
+			webhookURL = os.Getenv("SLACK_WEBHOOK_URL")
+		case messaging.PlatformDiscord:
+			webhookURL = os.Getenv("DISCORD_WEBHOOK_URL")
+		}
+	}
+
+	// Validate webhook URL
+	if err := messaging.ValidateWebhookURL(platform, webhookURL); err != nil {
+		return fmt.Errorf("invalid webhook URL: %w", err)
+	}
+
+	// Validate message format
+	validFormats := messaging.GetAvailableFormats()
+	formatValid := false
+	for _, format := range validFormats {
+		if format == messageFormat {
+			formatValid = true
+			break
+		}
+	}
+	if !formatValid {
+		return fmt.Errorf("invalid message format: %s (available: %s)", messageFormat, strings.Join(validFormats, ", "))
+	}
+
+	// Read links from input file
+	links, err := fetch.ReadLinksFromFile(inputFile)
+	if err != nil {
+		return fmt.Errorf("failed to read links: %w", err)
+	}
+
+	if len(links) == 0 {
+		return fmt.Errorf("no valid links found in input file")
+	}
+
+	// Initialize cache store
+	cacheStore, err := store.NewStore(".briefly-cache")
+	if err != nil {
+		fmt.Printf("⚠️  Cache disabled due to error: %s\n", err)
+		cacheStore = nil
+	} else {
+		defer cacheStore.Close()
+	}
+
+	// Fetch articles from cache or generate quick summaries
+	var digestItems []render.DigestData
+	fmt.Printf("Processing %d articles for %s message...\n", len(links), platform)
+
+	for i, link := range links {
+		fmt.Printf("Processing %d/%d: %s\n", i+1, len(links), link.URL)
+
+		var article core.Article
+		var summary string
+
+		// Try to get from cache first
+		if cacheStore != nil {
+			cachedArticle, err := cacheStore.GetCachedArticle(link.URL, 24*time.Hour)
+			if err == nil && cachedArticle != nil {
+				article = *cachedArticle
+				
+				// Try to get cached summary
+				contentHash := fmt.Sprintf("%d-%s-messaging", len(article.CleanedText), link.URL)
+				cachedSummary, err := cacheStore.GetCachedSummary(link.URL, contentHash, 7*24*time.Hour)
+				if err == nil && cachedSummary != nil {
+					summary = cachedSummary.SummaryText
+				}
+			}
+		}
+
+		// If not in cache, fetch and summarize
+		if article.Title == "" {
+			fetchedArticle, err := fetch.FetchArticle(link)
+			if err != nil {
+				fmt.Printf("❌ Failed to fetch: %s\n", link.URL)
+				continue
+			}
+			article = fetchedArticle
+
+			if err := fetch.CleanArticleHTML(&article); err != nil {
+				fmt.Printf("❌ Failed to parse: %s\n", link.URL)
+				continue
+			}
+		}
+
+		// Generate summary if not cached
+		if summary == "" {
+			// Create a quick summary for messaging (shorter than full digest)
+			if len(article.CleanedText) > 500 {
+				summary = article.CleanedText[:497] + "..."
+			} else {
+				summary = article.CleanedText
+			}
+
+			// Try to improve with LLM if available
+			llmClient, err := llm.NewClient("")
+			if err == nil {
+				defer llmClient.Close()
+				quickSummary, err := llmClient.SummarizeArticleTextWithFormat(article, "brief")
+				if err == nil {
+					summary = quickSummary.SummaryText
+				}
+			}
+		}
+
+		digestItem := render.DigestData{
+			Title:           article.Title,
+			URL:             link.URL,
+			SummaryText:     summary,
+			SentimentEmoji:  article.SentimentEmoji,
+			SentimentLabel:  article.SentimentLabel,
+			SentimentScore:  article.SentimentScore,
+		}
+
+		digestItems = append(digestItems, digestItem)
+		fmt.Printf("✅ %s\n", article.Title)
+	}
+
+	if len(digestItems) == 0 {
+		return fmt.Errorf("no articles were successfully processed")
+	}
+
+	// Create messaging client
+	slackURL := ""
+	discordURL := ""
+	if platform == messaging.PlatformSlack {
+		slackURL = webhookURL
+	} else {
+		discordURL = webhookURL
+	}
+
+	client := messaging.NewMessagingClient(slackURL, discordURL)
+
+	// Generate title
+	title := fmt.Sprintf("Briefly Digest - %s", time.Now().Format("Jan 2, 2006"))
+
+	// Convert message format
+	msgFormat := messaging.MessageFormat(messageFormat)
+
+	// Send message
+	fmt.Printf("Sending %s message to %s...\n", messageFormat, platform)
+	err = client.SendMessage(platform, digestItems, title, msgFormat, includeSentiment)
+	if err != nil {
+		return fmt.Errorf("failed to send %s message: %w", platform, err)
+	}
+
+	fmt.Printf("✅ Successfully sent %s message with %d articles\n", platform, len(digestItems))
+	return nil
+}
+
+func runGenerateTTS(inputFile string, provider string, voiceID string, apiKey string, speed float64, maxArticles int, includeSummaries bool, outputDir string) error {
+	// Get API key from environment if not provided
+	if apiKey == "" {
+		switch provider {
+		case "openai":
+			apiKey = os.Getenv("OPENAI_API_KEY")
+		case "elevenlabs":
+			apiKey = os.Getenv("ELEVENLABS_API_KEY")
+		}
+	}
+
+	// Create TTS configuration
+	config := &tts.TTSConfig{
+		Provider:  tts.TTSProvider(provider),
+		APIKey:    apiKey,
+		Speed:     speed,
+		OutputDir: outputDir,
+	}
+
+	// Set voice if provided
+	if voiceID != "" {
+		config.Voice = tts.TTSVoice{
+			ID:   voiceID,
+			Name: voiceID,
+		}
+	} else {
+		// Use default voice for provider
+		defaultVoices := tts.GetDefaultVoices()
+		if voices, ok := defaultVoices[config.Provider]; ok && len(voices) > 0 {
+			config.Voice = voices[0] // Use first default voice
+		}
+	}
+
+	// Validate configuration
+	if err := tts.ValidateConfig(config); err != nil {
+		return fmt.Errorf("invalid TTS configuration: %w", err)
+	}
+
+	// Read links from input file
+	links, err := fetch.ReadLinksFromFile(inputFile)
+	if err != nil {
+		return fmt.Errorf("failed to read links: %w", err)
+	}
+
+	if len(links) == 0 {
+		return fmt.Errorf("no valid links found in input file")
+	}
+
+	// Initialize cache store
+	cacheStore, err := store.NewStore(".briefly-cache")
+	if err != nil {
+		fmt.Printf("⚠️  Cache disabled due to error: %s\n", err)
+		cacheStore = nil
+	} else {
+		defer cacheStore.Close()
+	}
+
+	// Fetch articles from cache or generate summaries
+	var digestItems []render.DigestData
+	fmt.Printf("Processing %d articles for TTS generation...\n", len(links))
+
+	for i, link := range links {
+		fmt.Printf("Processing %d/%d: %s\n", i+1, len(links), link.URL)
+
+		var article core.Article
+		var summary string
+
+		// Try to get from cache first
+		if cacheStore != nil {
+			cachedArticle, err := cacheStore.GetCachedArticle(link.URL, 24*time.Hour)
+			if err == nil && cachedArticle != nil {
+				article = *cachedArticle
+				
+				// Try to get cached summary
+				contentHash := fmt.Sprintf("%d-%s-tts", len(article.CleanedText), link.URL)
+				cachedSummary, err := cacheStore.GetCachedSummary(link.URL, contentHash, 7*24*time.Hour)
+				if err == nil && cachedSummary != nil {
+					summary = cachedSummary.SummaryText
+				}
+			}
+		}
+
+		// If not in cache, fetch and summarize
+		if article.Title == "" {
+			fetchedArticle, err := fetch.FetchArticle(link)
+			if err != nil {
+				fmt.Printf("❌ Failed to fetch: %s\n", link.URL)
+				continue
+			}
+			article = fetchedArticle
+
+			if err := fetch.CleanArticleHTML(&article); err != nil {
+				fmt.Printf("❌ Failed to parse: %s\n", link.URL)
+				continue
+			}
+		}
+
+		// Generate summary if not cached
+		if summary == "" {
+			// Create a brief summary for TTS
+			if len(article.CleanedText) > 300 {
+				summary = article.CleanedText[:297] + "..."
+			} else {
+				summary = article.CleanedText
+			}
+
+			// Try to improve with LLM if available
+			llmClient, err := llm.NewClient("")
+			if err == nil {
+				defer llmClient.Close()
+				briefSummary, err := llmClient.SummarizeArticleTextWithFormat(article, "brief")
+				if err == nil {
+					summary = briefSummary.SummaryText
+				}
+			}
+		}
+
+		digestItem := render.DigestData{
+			Title:       article.Title,
+			URL:         link.URL,
+			SummaryText: summary,
+		}
+
+		digestItems = append(digestItems, digestItem)
+		fmt.Printf("✅ %s\n", article.Title)
+	}
+
+	if len(digestItems) == 0 {
+		return fmt.Errorf("no articles were successfully processed")
+	}
+
+	// Create TTS client
+	client := tts.NewTTSClient(config)
+
+	// Generate title
+	title := fmt.Sprintf("Briefly Digest for %s", time.Now().Format("January 2, 2006"))
+
+	// Prepare text for TTS
+	ttsText := tts.PrepareTTSText(digestItems, title, includeSummaries, maxArticles)
+
+	// Estimate audio length
+	estimatedMinutes := tts.EstimateAudioLength(ttsText, speed)
+	fmt.Printf("📝 Prepared %d characters of text\n", len(ttsText))
+	fmt.Printf("⏱️  Estimated audio length: %.1f minutes\n", estimatedMinutes)
+
+	// Generate filename
+	dateStr := time.Now().Format("2006-01-02")
+	filename := fmt.Sprintf("briefly_digest_%s.mp3", dateStr)
+
+	// Generate audio
+	fmt.Printf("🎵 Generating audio with %s using voice %s...\n", provider, config.Voice.Name)
+	outputPath, err := client.GenerateAudio(ttsText, filename)
+	if err != nil {
+		return fmt.Errorf("failed to generate TTS audio: %w", err)
+	}
+
+	fmt.Printf("✅ TTS audio generated successfully!\n")
+	fmt.Printf("📁 Output file: %s\n", outputPath)
+	fmt.Printf("🎧 Articles included: %d\n", len(digestItems))
+	
+	if maxArticles > 0 && len(digestItems) > maxArticles {
+		fmt.Printf("📝 Note: Limited to first %d articles (total available: %d)\n", maxArticles, len(digestItems))
+	}
+
+	return nil
 }
 
 func min(a, b int) int {

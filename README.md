@@ -6,7 +6,7 @@ Briefly is a modern command-line application written in Go that takes a Markdown
 
 - **Smart Content Processing**: Reads URLs from Markdown files and intelligently extracts main article content
 - **AI-Powered Summarization**: Uses Gemini API to generate concise, meaningful summaries
-- **Multiple Digest Formats**: Choose from brief, standard, detailed, or newsletter formats
+- **Multiple Output Formats**: Choose from brief, standard, detailed, newsletter, or HTML email formats
 - **AI-Powered Insights**: Comprehensive insights automatically integrated into every digest:
   - **Sentiment Analysis**: Emotional tone analysis with emoji indicators (😊 positive, 😞 negative, 🤔 neutral)
   - **Alert Monitoring**: Configurable alert conditions with automatic evaluation and notifications
@@ -21,11 +21,20 @@ Briefly is a modern command-line application written in Go that takes a Markdown
 - **Modern CLI**: Built with Cobra for intuitive command-line experience
 - **Structured Logging**: Comprehensive logging with multiple output formats
 - **Configuration Management**: Flexible configuration via files, environment variables, or flags
+- **Multi-Channel Output** (v1.0): Rich output options for different platforms:
+  - **HTML Email**: Responsive email templates with inline CSS for maximum compatibility
+  - **Slack/Discord**: Platform-optimized messages with webhooks, sentiment emojis, and rich formatting
+  - **Text-to-Speech**: Generate MP3 audio files using OpenAI TTS, ElevenLabs, or other providers
 
 ## Prerequisites
 
 - Go (version 1.23 or higher recommended)
-- A Gemini API Key
+- A Gemini API Key (required for core functionality)
+
+### Optional for v1.0 Multi-Channel Features:
+- OpenAI API Key (for TTS audio generation)
+- ElevenLabs API Key (for premium TTS voices)
+- Slack/Discord webhook URLs (for messaging integration)
 
 ## Installation
 
@@ -83,9 +92,29 @@ You can provide your Gemini API key in several ways:
      model: "gemini-1.5-flash-latest"
    output:
      directory: "digests"
+   
+   # v1.0 Multi-Channel Configuration (optional)
+   tts:
+     provider: "openai"
+     voice: "alloy"
+     speed: 1.0
+   messaging:
+     slack_webhook: "https://hooks.slack.com/services/..."
+     discord_webhook: "https://discord.com/api/webhooks/..."
    ```
 
-4. **Command-line Flag:**
+4. **Environment Variables for v1.0 Features:**
+   ```bash
+   # TTS providers
+   export OPENAI_API_KEY="sk-your-openai-key"
+   export ELEVENLABS_API_KEY="your-elevenlabs-key"
+   
+   # Messaging webhooks
+   export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+   export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+   ```
+
+5. **Command-line Flag:**
    Use the `--config` flag to specify an API key in a config file.
 
 ### Configuration Precedence
@@ -124,6 +153,7 @@ Use the `--format` flag to specify the output style:
 - `standard`: Balanced digest with summaries and key points (default)
 - `detailed`: Comprehensive digest with full summaries and analysis
 - `newsletter`: Newsletter-style digest optimized for sharing, includes "Prompt Corner" with AI-generated prompts readers can copy and use
+- `email`: HTML email format with responsive design and rich formatting
 
 ```bash
 # List all available formats
@@ -212,6 +242,60 @@ Quick highlights from today's reading – I find this brief format really conven
 
 ## Executive Summary
 This week's highlight is a bit meta, but honestly, a real time-saver: I discovered that the domain example.com is available for illustrative purposes...
+```
+
+### Multi-Channel Output (v1.0)
+
+Transform your digests into different formats optimized for various platforms:
+
+#### HTML Email
+```bash
+# Generate responsive HTML email
+briefly digest --format email input/links.md
+
+# Creates digest_email_2025-06-04.html with:
+# - Responsive design for all email clients
+# - Inline CSS for maximum compatibility  
+# - Article cards with sentiment indicators
+# - Topic clustering and insights sections
+```
+
+#### Slack/Discord Integration
+```bash
+# Send to Slack
+briefly send-slack input/links.md --webhook https://hooks.slack.com/services/...
+briefly send-slack input/links.md --message-format highlights --include-sentiment
+
+# Send to Discord  
+briefly send-discord input/links.md --webhook https://discord.com/api/webhooks/...
+briefly send-discord input/links.md --message-format bullets
+
+# Available message formats:
+# - bullets: Short bullet points (default)
+# - summary: Brief summary with fields
+# - highlights: Top 5 key highlights only
+```
+
+#### Text-to-Speech Audio
+```bash
+# Generate MP3 using OpenAI TTS
+briefly generate-tts input/links.md --provider openai --voice alloy
+
+# Generate using ElevenLabs
+briefly generate-tts input/links.md --provider elevenlabs --voice Rachel
+
+# Customize audio generation
+briefly generate-tts input/links.md \
+  --provider openai \
+  --voice nova \
+  --speed 1.2 \
+  --max-articles 5 \
+  --output audio/
+
+# Available providers:
+# - openai: High-quality voices (alloy, echo, fable, onyx, nova, shimmer)
+# - elevenlabs: Premium natural voices (Rachel, Domi, Bella, Antoni, Arnold)
+# - mock: For testing (creates text file instead of audio)
 ```
 
 ### Terminal User Interface
