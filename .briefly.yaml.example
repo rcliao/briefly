@@ -1,24 +1,123 @@
-# Briefly Configuration
-# Copy this file to .briefly.yaml in your home directory or current directory
+# Briefly Configuration Example
+# Copy this file to ~/.briefly.yaml or .briefly.yaml in your project directory
 
 # Gemini AI Configuration
 gemini:
-  # API key for Gemini (alternatively use GEMINI_API_KEY environment variable)
-  api_key: ""
-  # Model to use for summarization
-  model: "gemini-1.5-flash-latest"
+  # Your Google Gemini API key (can also be set via GEMINI_API_KEY environment variable)
+  api_key: "your-gemini-api-key-here"
+  
+  # Default Gemini model to use for text generation
+  # Available models: gemini-1.5-pro, gemini-1.5-flash, gemini-2.5-flash-preview-05-20
+  model: "gemini-2.5-flash-preview-05-20"
 
-# Output Configuration
+# Output Configuration  
 output:
-  # Directory to save digest files
+  # Default directory for generated digests and research briefs
   directory: "digests"
 
-# Future configuration options can be added here
-# For example:
-# cache:
-#   enabled: true
-#   ttl: "24h"
-# 
-# feeds:
-#   - url: "https://example.com/feed.xml"
-#     name: "Example Feed"
+# Search Provider Configuration (Optional - can use environment variables instead)
+search:
+  # Google Custom Search Configuration
+  google:
+    # Google Custom Search API key (can also be set via GOOGLE_CSE_API_KEY)
+    api_key: "your-google-cse-api-key-here"
+    
+    # Google Custom Search Engine ID (can also be set via GOOGLE_CSE_ID)
+    search_id: "your-custom-search-engine-id"
+  
+  # SerpAPI Configuration  
+  serpapi:
+    # SerpAPI key (can also be set via SERPAPI_KEY)
+    api_key: "your-serpapi-key-here"
+
+# Multi-Channel Output Configuration
+channels:
+  # Slack Integration
+  slack:
+    # Slack webhook URL (can also be set via SLACK_WEBHOOK_URL)
+    webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+  
+  # Discord Integration
+  discord:
+    # Discord webhook URL (can also be set via DISCORD_WEBHOOK_URL)  
+    webhook_url: "https://discord.com/api/webhooks/YOUR/DISCORD/WEBHOOK"
+
+# Text-to-Speech Configuration
+tts:
+  # OpenAI TTS Configuration
+  openai:
+    # OpenAI API key (can also be set via OPENAI_API_KEY)
+    api_key: "your-openai-api-key-here"
+    
+    # Default voice for OpenAI TTS
+    # Available voices: alloy, echo, fable, onyx, nova, shimmer
+    voice: "alloy"
+    
+    # Speech speed (0.25 to 4.0)
+    speed: 1.0
+  
+  # ElevenLabs Configuration
+  elevenlabs:
+    # ElevenLabs API key (can also be set via ELEVENLABS_API_KEY)
+    api_key: "your-elevenlabs-api-key-here"
+    
+    # Voice ID from ElevenLabs
+    voice_id: "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
+
+# Research Configuration
+research:
+  # Default search provider for research commands
+  # Options: duckduckgo, google, serpapi, mock
+  default_provider: "duckduckgo"
+  
+  # Default maximum results per search query
+  max_results_per_query: 10
+  
+  # Default research depth for iterative research
+  default_depth: 2
+
+# Deep Research Configuration  
+deep_research:
+  # Default search provider for deep research
+  # Options: duckduckgo, google, serpapi, mock
+  default_provider: "duckduckgo"
+  
+  # Default maximum sources to include in research brief
+  max_sources: 25
+  
+  # Default time filter for search results
+  # Format: 1d, 7d, 30d (days), 1h, 24h (hours)
+  since: "21d"
+  
+  # Default LLM model for synthesis
+  model: "gemini-2.5-flash-preview-05-20"
+
+# Cache Configuration
+cache:
+  # Cache directory (relative to current working directory)
+  directory: ".briefly-cache"
+  
+  # Article cache duration (how long to keep fetched articles)
+  article_ttl: "24h"
+  
+  # Summary cache duration (how long to keep generated summaries)  
+  summary_ttl: "168h"  # 7 days
+
+# Logging Configuration
+logging:
+  # Log level: debug, info, warn, error
+  level: "info"
+  
+  # Log format: text, json
+  format: "text"
+
+# Feature Flags
+features:
+  # Enable JavaScript execution for content fetching (requires headless browser)
+  javascript_rendering: false
+  
+  # Enable experimental features
+  experimental: false
+  
+  # Enable cost estimation for API calls
+  cost_tracking: true

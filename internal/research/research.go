@@ -2,10 +2,9 @@ package research
 
 import (
 	"briefly/internal/llm"
+	"briefly/internal/search"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -13,21 +12,11 @@ import (
 	"github.com/google/generative-ai-go/genai"
 )
 
-// SearchProvider defines the interface for search API providers
-type SearchProvider interface {
-	Search(query string, maxResults int) ([]SearchResult, error)
-	GetName() string
-}
+// SearchProvider is an alias for the legacy search provider interface in the shared module
+type SearchProvider = search.LegacySearchProvider
 
-// SearchResult represents a search result from a search provider
-type SearchResult struct {
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Snippet     string `json:"snippet"`
-	Source      string `json:"source"`       // Domain name
-	PublishedAt string `json:"published_at"` // Publication date if available
-	Rank        int    `json:"rank"`         // Position in search results
-}
+// SearchResult is an alias for the legacy search result in the shared module
+type SearchResult = search.LegacySearchResult
 
 // ResearchSession represents a deep research session
 type ResearchSession struct {
@@ -382,51 +371,10 @@ func (dr *DeepResearcher) CreateLinksForDigest(session *ResearchSession, outputP
 	return writeToFile(outputPath, builder.String())
 }
 
-// MockSearchProvider implements a mock search provider for testing
-type MockSearchProvider struct {
-	name string
-}
-
-// NewMockSearchProvider creates a new mock search provider
-func NewMockSearchProvider() *MockSearchProvider {
-	return &MockSearchProvider{name: "Mock Search"}
-}
-
-// Search implements the SearchProvider interface with mock data
-func (msp *MockSearchProvider) Search(query string, maxResults int) ([]SearchResult, error) {
-	// Generate mock results based on the query
-	results := []SearchResult{
-		{
-			Title:   fmt.Sprintf("Understanding %s: A Comprehensive Guide", query),
-			URL:     fmt.Sprintf("https://example.com/guide-%s", strings.ReplaceAll(query, " ", "-")),
-			Snippet: fmt.Sprintf("This comprehensive guide covers everything you need to know about %s, including best practices and latest trends.", query),
-			Source:  "example.com",
-		},
-		{
-			Title:   fmt.Sprintf("Latest Trends in %s for 2025", query),
-			URL:     fmt.Sprintf("https://techblog.com/trends-%s-2025", strings.ReplaceAll(query, " ", "-")),
-			Snippet: fmt.Sprintf("Explore the cutting-edge developments and emerging trends in %s that are shaping the industry.", query),
-			Source:  "techblog.com",
-		},
-		{
-			Title:   fmt.Sprintf("Case Study: Implementing %s at Scale", query),
-			URL:     fmt.Sprintf("https://research.org/case-study-%s", strings.ReplaceAll(query, " ", "-")),
-			Snippet: fmt.Sprintf("Real-world case study demonstrating how organizations successfully implement %s solutions.", query),
-			Source:  "research.org",
-		},
-	}
-
-	// Limit results to maxResults
-	if len(results) > maxResults {
-		results = results[:maxResults]
-	}
-
-	return results, nil
-}
-
-// GetName returns the name of the search provider
-func (msp *MockSearchProvider) GetName() string {
-	return msp.name
+// NewMockSearchProvider creates a new mock search provider using the shared search module
+func NewMockSearchProvider() SearchProvider {
+	mockProvider := search.NewMockProvider()
+	return search.NewLegacyProviderAdapter(mockProvider)
 }
 
 // Helper function to write content to file
@@ -437,89 +385,10 @@ func writeToFile(path, content string) error {
 	return nil
 }
 
-// SerpAPISearchProvider implements SearchProvider using SerpAPI
-// This is a skeleton implementation - you'd need to add actual SerpAPI integration
-type SerpAPISearchProvider struct {
-	apiKey string
-	client *http.Client
-}
-
-// NewSerpAPISearchProvider creates a new SerpAPI search provider
-func NewSerpAPISearchProvider(apiKey string) *SerpAPISearchProvider {
-	return &SerpAPISearchProvider{
-		apiKey: apiKey,
-		client: &http.Client{Timeout: 30 * time.Second},
-	}
-}
-
-// Search implements the SearchProvider interface using SerpAPI
-func (sap *SerpAPISearchProvider) Search(query string, maxResults int) ([]SearchResult, error) {
-	baseURL := "https://serpapi.com/search"
-	params := url.Values{}
-	params.Add("q", query)
-	params.Add("api_key", sap.apiKey)
-	params.Add("num", fmt.Sprintf("%d", maxResults))
-	params.Add("engine", "google")
-
-	requestURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
-
-	// Create request with context timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", requestURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create search request: %w", err)
-	}
-
-	resp, err := sap.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make search request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("search API returned status %d", resp.StatusCode)
-	}
-
-	// Parse response (this would need to match SerpAPI's actual response format)
-	var apiResponse struct {
-		OrganicResults []struct {
-			Title   string `json:"title"`
-			Link    string `json:"link"`
-			Snippet string `json:"snippet"`
-		} `json:"organic_results"`
-		Error string `json:"error,omitempty"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse search response: %w", err)
-	}
-
-	// Check for API errors
-	if apiResponse.Error != "" {
-		return nil, fmt.Errorf("search API error: %s", apiResponse.Error)
-	}
-
-	// Convert to our SearchResult format
-	var results []SearchResult
-	for i, organic := range apiResponse.OrganicResults {
-		result := SearchResult{
-			Title:   organic.Title,
-			URL:     organic.Link,
-			Snippet: organic.Snippet,
-			Source:  extractDomainFromURL(organic.Link),
-			Rank:    i + 1,
-		}
-		results = append(results, result)
-	}
-
-	return results, nil
-}
-
-// GetName returns the name of the search provider
-func (sap *SerpAPISearchProvider) GetName() string {
-	return "SerpAPI"
+// NewSerpAPISearchProvider creates a new SerpAPI search provider using the shared search module
+func NewSerpAPISearchProvider(apiKey string) SearchProvider {
+	serpProvider := search.NewSerpAPIProvider(apiKey)
+	return search.NewLegacyProviderAdapter(serpProvider)
 }
 
 // Helper function to extract domain from URL
@@ -531,99 +400,8 @@ func extractDomainFromURL(rawURL string) string {
 	return parsedURL.Host
 }
 
-// GoogleCustomSearchProvider implements SearchProvider using Google Custom Search API
-type GoogleCustomSearchProvider struct {
-	apiKey   string
-	searchID string
-	client   *http.Client
-}
-
-// NewGoogleCustomSearchProvider creates a new Google Custom Search provider
-func NewGoogleCustomSearchProvider(apiKey, searchID string) *GoogleCustomSearchProvider {
-	return &GoogleCustomSearchProvider{
-		apiKey:   apiKey,
-		searchID: searchID,
-		client:   &http.Client{Timeout: 10 * time.Second},
-	}
-}
-
-// Search implements the SearchProvider interface using Google Custom Search API
-func (gcsp *GoogleCustomSearchProvider) Search(query string, maxResults int) ([]SearchResult, error) {
-	baseURL := "https://www.googleapis.com/customsearch/v1"
-	params := url.Values{}
-	params.Add("key", gcsp.apiKey)
-	params.Add("cx", gcsp.searchID)
-	params.Add("q", query)
-	params.Add("num", fmt.Sprintf("%d", min(maxResults, 10))) // Google CSE allows max 10 results per request
-
-	requestURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
-
-	// Create request with context timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", requestURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create search request: %w", err)
-	}
-
-	resp, err := gcsp.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make search request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("search API returned status %d", resp.StatusCode)
-	}
-
-	// Parse response (Google Custom Search API format)
-	var apiResponse struct {
-		Items []struct {
-			Title   string `json:"title"`
-			Link    string `json:"link"`
-			Snippet string `json:"snippet"`
-		} `json:"items"`
-		Error struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error,omitempty"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse search response: %w", err)
-	}
-
-	// Check for API errors
-	if apiResponse.Error.Code != 0 {
-		return nil, fmt.Errorf("search API error (%d): %s", apiResponse.Error.Code, apiResponse.Error.Message)
-	}
-
-	// Convert to our SearchResult format
-	var results []SearchResult
-	for i, item := range apiResponse.Items {
-		result := SearchResult{
-			Title:   item.Title,
-			URL:     item.Link,
-			Snippet: item.Snippet,
-			Source:  extractDomainFromURL(item.Link),
-			Rank:    i + 1,
-		}
-		results = append(results, result)
-	}
-
-	return results, nil
-}
-
-// GetName returns the name of the search provider
-func (gcsp *GoogleCustomSearchProvider) GetName() string {
-	return "Google Custom Search"
-}
-
-// Helper function to get minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+// NewGoogleCustomSearchProvider creates a new Google Custom Search provider using the shared search module
+func NewGoogleCustomSearchProvider(apiKey, searchID string) SearchProvider {
+	googleProvider := search.NewGoogleProvider(apiKey, searchID)
+	return search.NewLegacyProviderAdapter(googleProvider)
 }

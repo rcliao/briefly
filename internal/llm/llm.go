@@ -16,7 +16,7 @@ import (
 
 const (
 	// DefaultModel is the default Gemini model to use for summarization.
-	DefaultModel = "gemini-1.5-flash-latest" // As requested
+	DefaultModel = "gemini-2.5-flash-preview-05-20" // Latest Gemini 2.5 Flash Preview
 	// DefaultEmbeddingModel is the default model for generating embeddings
 	DefaultEmbeddingModel = "text-embedding-004"
 	// SummarizeTextPromptTemplate is the template for the summarization prompt.
@@ -468,7 +468,7 @@ DIGEST CONTENT:
 %s
 ---
 
-Generate only the title text, without any markdown formatting or additional text:`, digestContent)
+Generate only the title text, without any markdown formatting or additional text:`, format, digestContent)
 
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {

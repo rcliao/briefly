@@ -20,6 +20,8 @@ import (
 	"briefly/internal/clustering"
 	"briefly/internal/core"
 	"briefly/internal/cost"
+	"briefly/internal/deepresearch"
+	"briefly/internal/search"
 	"briefly/internal/feeds"
 	"briefly/internal/fetch"
 	"briefly/internal/llm"
@@ -35,8 +37,12 @@ import (
 	"briefly/internal/tui"
 	"briefly/llmclient"
 	"bufio"
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,7 +121,7 @@ func initConfig() {
 
 	// Set defaults for configuration
 	viper.SetDefault("gemini.api_key", "")
-	viper.SetDefault("gemini.model", "gemini-1.5-flash-latest")
+	viper.SetDefault("gemini.model", "gemini-2.5-flash-preview-05-20")
 	viper.SetDefault("output.directory", "digests")
 
 	// If a config file is found, read it in.
@@ -204,7 +210,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 		// Get model from config
 		model := viper.GetString("gemini.model")
 		if model == "" {
-			model = "gemini-1.5-flash-latest"
+			model = "gemini-2.5-flash-preview-05-20"
 		}
 
 		// Generate detailed cost estimate
@@ -634,7 +640,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 		}
 		model := viper.GetString("gemini.model")
 		if model == "" {
-			model = "gemini-1.5-flash-latest"
+			model = "gemini-2.5-flash-preview-05-20"
 		}
 
 		// Generate final digest using llmclient with template information
@@ -1609,6 +1615,9 @@ func init() {
 	rootCmd.AddCommand(sendSlackCmd)
 	rootCmd.AddCommand(sendDiscordCmd)
 	rootCmd.AddCommand(generateTTSCmd)
+	
+	// Add deep-research command
+	rootCmd.AddCommand(deepResearchCmd)
 
 	// Insights subcommands
 	insightsCmd.AddCommand(alertsCmd)
@@ -1658,6 +1667,15 @@ func init() {
 	generateTTSCmd.Flags().Int("max-articles", 10, "Maximum articles to include in audio (0 for all)")
 	generateTTSCmd.Flags().Bool("include-summaries", true, "Include article summaries in audio")
 	generateTTSCmd.Flags().String("output", "audio", "Output directory for audio files")
+
+	// Deep research command flags
+	deepResearchCmd.Flags().String("since", "21d", "Time filter for search results (e.g., 1d, 7d, 30d)")
+	deepResearchCmd.Flags().Int("max-sources", 25, "Maximum number of sources to include")
+	deepResearchCmd.Flags().Bool("html", false, "Generate HTML output in addition to Markdown")
+	deepResearchCmd.Flags().String("model", "gemini-2.5-flash-preview-05-20", "LLM model to use for synthesis")
+	deepResearchCmd.Flags().Bool("refresh", false, "Force refresh cache, bypass existing content")
+	deepResearchCmd.Flags().Bool("javascript", false, "Use headless browser for JavaScript-heavy pages")
+	deepResearchCmd.Flags().String("search-provider", "duckduckgo", "Search provider: duckduckgo, serpapi, google, mock")
 
 	cacheClearCmd.Flags().Bool("confirm", false, "Confirm cache deletion")
 }
@@ -1842,7 +1860,197 @@ Examples:
 	},
 }
 
+// Deep Research command
+var deepResearchCmd = &cobra.Command{
+	Use:   "deep-research [topic]",
+	Short: "Perform comprehensive deep research on a topic",
+	Long: `Generate a comprehensive research brief by automatically decomposing a topic into sub-questions,
+searching for relevant sources across the web, and synthesizing findings into a well-cited research brief.
+
+Examples:
+  briefly deep-research "open-source agent frameworks"
+  briefly deep-research "sustainable energy trends" --since 7d --max-sources 30
+  briefly deep-research "AI safety research" --html --model gemini-2.5-flash-preview-05-20
+  briefly deep-research "cryptocurrency regulation" --search-provider google --refresh
+  briefly deep-research "machine learning papers" --search-provider serpapi`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		topic := args[0]
+		since, _ := cmd.Flags().GetString("since")
+		maxSources, _ := cmd.Flags().GetInt("max-sources")
+		outputHTML, _ := cmd.Flags().GetBool("html")
+		model, _ := cmd.Flags().GetString("model")
+		refresh, _ := cmd.Flags().GetBool("refresh")
+		useJS, _ := cmd.Flags().GetBool("javascript")
+		searchProvider, _ := cmd.Flags().GetString("search-provider")
+
+		if err := runDeepResearch(topic, since, maxSources, outputHTML, model, refresh, useJS, searchProvider); err != nil {
+			logger.Error("Failed to perform deep research", err)
+			os.Exit(1)
+		}
+	},
+}
+
 // Implementation functions for the new commands
+
+func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model string, refresh, useJS bool, searchProvider string) error {
+	fmt.Printf("🔍 Starting deep research on: %s\n", topic)
+	fmt.Printf("📊 Max sources: %d, Time filter: %s, Search provider: %s\n", maxSources, since, searchProvider)
+	if useJS {
+		fmt.Printf("🌐 JavaScript execution enabled for content fetching\n")
+	}
+	fmt.Println()
+
+	// Parse time filter
+	sinceTime, err := parseDuration(since)
+	if err != nil {
+		return fmt.Errorf("invalid time filter '%s': %w", since, err)
+	}
+
+	// Initialize LLM client
+	llmClient, err := llm.NewClient(model)
+	if err != nil {
+		return fmt.Errorf("failed to initialize LLM client: %w", err)
+	}
+	defer llmClient.Close()
+
+	// Initialize cache store
+	cacheStore, err := store.NewStore(".briefly-cache")
+	if err != nil {
+		fmt.Printf("⚠️  Cache disabled due to error: %s\n", err)
+		cacheStore = nil
+	} else {
+		defer cacheStore.Close()
+		fmt.Printf("📦 Cache store initialized\n")
+	}
+
+	// Initialize search provider using shared search module
+	factory := search.NewProviderFactory()
+	var searcher search.Provider
+	
+	switch searchProvider {
+	case "duckduckgo":
+		searcher, err = factory.CreateProvider(search.ProviderTypeDuckDuckGo, nil)
+		fmt.Printf("🔌 Using DuckDuckGo search\n")
+	case "serpapi":
+		apiKey := os.Getenv("SERPAPI_KEY")
+		if apiKey == "" {
+			return fmt.Errorf("SERPAPI_KEY environment variable required for SerpAPI")
+		}
+		searcher, err = factory.CreateProvider(search.ProviderTypeSerpAPI, map[string]string{"api_key": apiKey})
+		fmt.Printf("🔌 Using SerpAPI search\n")
+	case "google":
+		apiKey := os.Getenv("GOOGLE_CSE_API_KEY")
+		searchID := os.Getenv("GOOGLE_CSE_ID")
+		if apiKey == "" || searchID == "" {
+			return fmt.Errorf("GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID environment variables required for Google Custom Search")
+		}
+		searcher, err = factory.CreateProvider(search.ProviderTypeGoogle, map[string]string{
+			"api_key": apiKey,
+			"search_id": searchID,
+		})
+		fmt.Printf("🔌 Using Google Custom Search\n")
+	case "mock":
+		searcher, err = factory.CreateProvider(search.ProviderTypeMock, nil)
+		fmt.Printf("🔌 Using Mock search (testing)\n")
+	default:
+		return fmt.Errorf("unsupported search provider: %s", searchProvider)
+	}
+	
+	if err != nil {
+		return fmt.Errorf("failed to create search provider: %w", err)
+	}
+
+	// Initialize components
+	planner := deepresearch.NewLLMPlanner(llmClient)
+	fetcher := deepresearch.NewResearchContentFetcher(deepresearch.NewFetcher(), cacheStore)
+	ranker := deepresearch.NewEmbeddingRanker()
+	synthesizer := deepresearch.NewLLMSynthesizer(llmClient)
+
+	// Create research engine
+	engine := deepresearch.NewResearchEngine(planner, searcher, fetcher, ranker, synthesizer)
+
+	// Configure research
+	config := deepresearch.ResearchConfig{
+		MaxSources:    maxSources,
+		SinceTime:     sinceTime,
+		Model:         model,
+		SearchProvider: searchProvider,
+		UseJavaScript:  useJS,
+		RefreshCache:   refresh,
+		OutputHTML:     outputHTML,
+	}
+
+	// Perform research
+	ctx := context.Background()
+	fmt.Printf("🚀 Starting research process...\n")
+	brief, err := engine.Research(ctx, topic, config)
+	if err != nil {
+		return fmt.Errorf("research failed: %w", err)
+	}
+
+	// Generate outputs
+	fmt.Printf("\n📝 Generating outputs...\n")
+	
+	// Create research directory if it doesn't exist
+	if err := os.MkdirAll("research", 0755); err != nil {
+		return fmt.Errorf("failed to create research directory: %w", err)
+	}
+
+	// Generate slug for filenames
+	slug := generateSlug(topic)
+	
+	// Output Markdown
+	markdownPath := fmt.Sprintf("research/%s.md", slug)
+	markdownContent := formatBriefAsMarkdown(brief)
+	if err := os.WriteFile(markdownPath, []byte(markdownContent), 0644); err != nil {
+		return fmt.Errorf("failed to write markdown file: %w", err)
+	}
+	fmt.Printf("📄 Markdown brief: %s\n", markdownPath)
+
+	// Output JSON artifact
+	jsonPath := fmt.Sprintf("research/%s.json", slug)
+	jsonData, err := json.MarshalIndent(brief, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+	if err := os.WriteFile(jsonPath, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write JSON file: %w", err)
+	}
+	fmt.Printf("📊 Raw data: %s\n", jsonPath)
+
+	// Output HTML if requested
+	if outputHTML {
+		htmlPath := fmt.Sprintf("research/%s.html", slug)
+		htmlContent := formatBriefAsHTML(brief)
+		if err := os.WriteFile(htmlPath, []byte(htmlContent), 0644); err != nil {
+			return fmt.Errorf("failed to write HTML file: %w", err)
+		}
+		fmt.Printf("🌐 HTML brief: %s\n", htmlPath)
+	}
+
+	// Display results summary
+	fmt.Printf("\n✅ Research completed successfully!\n")
+	fmt.Printf("📖 Topic: %s\n", brief.Topic)
+	fmt.Printf("📝 Sub-queries generated: %d\n", len(brief.SubQueries))
+	fmt.Printf("📚 Sources found: %d\n", len(brief.Sources))
+	fmt.Printf("📊 Detailed findings: %d sections\n", len(brief.DetailedFindings))
+	fmt.Printf("❓ Open questions: %d\n", len(brief.OpenQuestions))
+	fmt.Printf("⏱️  Generated at: %s\n", brief.GeneratedAt.Format("2006-01-02 15:04:05"))
+
+	// Output to stdout for immediate viewing
+	fmt.Printf("\n" + strings.Repeat("=", 80) + "\n")
+	fmt.Print(markdownContent)
+	fmt.Printf(strings.Repeat("=", 80) + "\n")
+
+	// Suggest next steps
+	fmt.Printf("\n💡 Next steps:\n")
+	fmt.Printf("   • Review the research brief above\n")
+	fmt.Printf("   • Use 'briefly chat %s' to ask follow-up questions\n", slug)
+	fmt.Printf("   • Add to digest: briefly digest research/%s.md\n", slug)
+
+	return nil
+}
 
 func runTrends(period string) error {
 	cacheStore, err := store.NewStore(".briefly-cache")
@@ -2527,4 +2735,170 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Helper functions for deep research
+
+func parseDuration(s string) (time.Duration, error) {
+	// Parse duration strings like "7d", "24h", "30m"
+	if len(s) < 2 {
+		return 0, fmt.Errorf("invalid duration format")
+	}
+	
+	numStr := s[:len(s)-1]
+	unit := s[len(s)-1:]
+	
+	num, err := strconv.Atoi(numStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number in duration: %w", err)
+	}
+	
+	switch unit {
+	case "d":
+		return time.Duration(num) * 24 * time.Hour, nil
+	case "h":
+		return time.Duration(num) * time.Hour, nil
+	case "m":
+		return time.Duration(num) * time.Minute, nil
+	default:
+		return 0, fmt.Errorf("unsupported time unit: %s", unit)
+	}
+}
+
+func generateSlug(topic string) string {
+	// Convert topic to filesystem-safe slug
+	slug := strings.ToLower(topic)
+	slug = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(slug, "-")
+	slug = regexp.MustCompile(`-+`).ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	if len(slug) > 50 {
+		slug = slug[:50]
+	}
+	return slug
+}
+
+func formatBriefAsMarkdown(brief *deepresearch.ResearchBrief) string {
+	var md strings.Builder
+	
+	// Title and metadata
+	md.WriteString(fmt.Sprintf("# Research Brief: %s\n\n", brief.Topic))
+	md.WriteString(fmt.Sprintf("**Generated:** %s  \n", brief.GeneratedAt.Format("January 2, 2006 at 3:04 PM")))
+	md.WriteString(fmt.Sprintf("**Model:** %s  \n", brief.Config.Model))
+	md.WriteString(fmt.Sprintf("**Sources:** %d  \n", len(brief.Sources)))
+	md.WriteString(fmt.Sprintf("**Sub-queries:** %d  \n\n", len(brief.SubQueries)))
+	
+	// Executive Summary
+	md.WriteString("## Executive Summary\n\n")
+	md.WriteString(brief.ExecutiveSummary)
+	md.WriteString("\n\n")
+	
+	// Detailed Findings
+	if len(brief.DetailedFindings) > 0 {
+		md.WriteString("## Detailed Findings\n\n")
+		for _, finding := range brief.DetailedFindings {
+			md.WriteString(fmt.Sprintf("### %s\n\n", finding.Topic))
+			md.WriteString(finding.Content)
+			md.WriteString("\n\n")
+		}
+	}
+	
+	// Open Questions
+	if len(brief.OpenQuestions) > 0 {
+		md.WriteString("## Open Questions\n\n")
+		for _, question := range brief.OpenQuestions {
+			md.WriteString(fmt.Sprintf("- %s\n", question))
+		}
+		md.WriteString("\n")
+	}
+	
+	// Sources
+	md.WriteString("## Sources\n\n")
+	for i, source := range brief.Sources {
+		md.WriteString(fmt.Sprintf("[%d] **%s** - %s  \n", i+1, source.Title, source.Domain))
+		md.WriteString(fmt.Sprintf("    %s  \n", source.URL))
+		if source.Type != "" {
+			md.WriteString(fmt.Sprintf("    *Type:* %s  \n", source.Type))
+		}
+		md.WriteString("\n")
+	}
+	
+	// Sub-queries
+	if len(brief.SubQueries) > 0 {
+		md.WriteString("## Research Queries Used\n\n")
+		for i, query := range brief.SubQueries {
+			md.WriteString(fmt.Sprintf("%d. %s\n", i+1, query))
+		}
+		md.WriteString("\n")
+	}
+	
+	return md.String()
+}
+
+func formatBriefAsHTML(brief *deepresearch.ResearchBrief) string {
+	var html strings.Builder
+	
+	html.WriteString("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n")
+	html.WriteString("    <meta charset=\"UTF-8\">\n")
+	html.WriteString("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n")
+	html.WriteString(fmt.Sprintf("    <title>Research Brief: %s</title>\n", brief.Topic))
+	html.WriteString("    <style>\n")
+	html.WriteString("        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }\n")
+	html.WriteString("        .container { max-width: 800px; margin: 0 auto; padding: 20px; }\n")
+	html.WriteString("        .metadata { background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }\n")
+	html.WriteString("        .source { margin-bottom: 10px; padding: 10px; border-left: 3px solid #007acc; }\n")
+	html.WriteString("        h1 { color: #333; border-bottom: 2px solid #007acc; padding-bottom: 10px; }\n")
+	html.WriteString("        h2 { color: #555; margin-top: 30px; }\n")
+	html.WriteString("        h3 { color: #666; }\n")
+	html.WriteString("    </style>\n")
+	html.WriteString("</head>\n<body>\n")
+	html.WriteString("    <div class=\"container\">\n")
+	
+	// Title and metadata
+	html.WriteString(fmt.Sprintf("        <h1>Research Brief: %s</h1>\n", brief.Topic))
+	html.WriteString("        <div class=\"metadata\">\n")
+	html.WriteString(fmt.Sprintf("            <strong>Generated:</strong> %s<br>\n", brief.GeneratedAt.Format("January 2, 2006 at 3:04 PM")))
+	html.WriteString(fmt.Sprintf("            <strong>Model:</strong> %s<br>\n", brief.Config.Model))
+	html.WriteString(fmt.Sprintf("            <strong>Sources:</strong> %d<br>\n", len(brief.Sources)))
+	html.WriteString(fmt.Sprintf("            <strong>Sub-queries:</strong> %d\n", len(brief.SubQueries)))
+	html.WriteString("        </div>\n")
+	
+	// Executive Summary
+	html.WriteString("        <h2>Executive Summary</h2>\n")
+	html.WriteString(fmt.Sprintf("        <p>%s</p>\n", strings.ReplaceAll(brief.ExecutiveSummary, "\n", "<br>")))
+	
+	// Detailed Findings
+	if len(brief.DetailedFindings) > 0 {
+		html.WriteString("        <h2>Detailed Findings</h2>\n")
+		for _, finding := range brief.DetailedFindings {
+			html.WriteString(fmt.Sprintf("        <h3>%s</h3>\n", finding.Topic))
+			html.WriteString(fmt.Sprintf("        <p>%s</p>\n", strings.ReplaceAll(finding.Content, "\n", "<br>")))
+		}
+	}
+	
+	// Open Questions
+	if len(brief.OpenQuestions) > 0 {
+		html.WriteString("        <h2>Open Questions</h2>\n")
+		html.WriteString("        <ul>\n")
+		for _, question := range brief.OpenQuestions {
+			html.WriteString(fmt.Sprintf("            <li>%s</li>\n", question))
+		}
+		html.WriteString("        </ul>\n")
+	}
+	
+	// Sources
+	html.WriteString("        <h2>Sources</h2>\n")
+	for i, source := range brief.Sources {
+		html.WriteString("        <div class=\"source\">\n")
+		html.WriteString(fmt.Sprintf("            <strong>[%d] %s</strong> - %s<br>\n", i+1, source.Title, source.Domain))
+		html.WriteString(fmt.Sprintf("            <a href=\"%s\" target=\"_blank\">%s</a><br>\n", source.URL, source.URL))
+		if source.Type != "" {
+			html.WriteString(fmt.Sprintf("            <em>Type: %s</em>\n", source.Type))
+		}
+		html.WriteString("        </div>\n")
+	}
+	
+	html.WriteString("    </div>\n")
+	html.WriteString("</body>\n</html>\n")
+	
+	return html.String()
 }

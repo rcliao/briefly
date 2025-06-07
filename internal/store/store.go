@@ -1281,6 +1281,100 @@ func (s *Store) GetRecentArticles(days int) ([]core.Article, error) {
 	return articles, nil
 }
 
+// GetArticleByURL retrieves an article by its URL
+func (s *Store) GetArticleByURL(url string) (*core.Article, error) {
+	query := `
+	SELECT url, title, content, html_content, my_take, date_fetched, metadata, embedding, topic_cluster, topic_confidence,
+	       sentiment_score, sentiment_label, sentiment_emoji, alert_triggered, alert_conditions, research_queries
+	FROM articles 
+	WHERE url = ?`
+
+	row := s.db.QueryRow(query, url)
+
+	var article core.Article
+	var dateFetched time.Time
+	var metadata string
+	var embeddingData []byte
+	var topicCluster sql.NullString
+	var topicConfidence sql.NullFloat64
+	var sentimentScore sql.NullFloat64
+	var sentimentLabel sql.NullString
+	var sentimentEmoji sql.NullString
+	var alertTriggered sql.NullBool
+	var alertConditionsJSON sql.NullString
+	var researchQueriesJSON sql.NullString
+
+	err := row.Scan(
+		&article.LinkID, // Use LinkID as URL identifier
+		&article.Title,
+		&article.CleanedText,
+		&article.FetchedHTML,
+		&article.MyTake,
+		&dateFetched,
+		&metadata,
+		&embeddingData,
+		&topicCluster,
+		&topicConfidence,
+		&sentimentScore,
+		&sentimentLabel,
+		&sentimentEmoji,
+		&alertTriggered,
+		&alertConditionsJSON,
+		&researchQueriesJSON,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // Article not found
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan article: %w", err)
+	}
+
+	// Deserialize embedding
+	if embeddingData != nil {
+		article.Embedding, err = deserializeEmbedding(embeddingData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to deserialize embedding: %w", err)
+		}
+	}
+
+	// Handle nullable fields
+	if topicCluster.Valid {
+		article.TopicCluster = topicCluster.String
+	}
+	if topicConfidence.Valid {
+		article.TopicConfidence = topicConfidence.Float64
+	}
+
+	// Handle insights fields
+	if sentimentScore.Valid {
+		article.SentimentScore = sentimentScore.Float64
+	}
+	if sentimentLabel.Valid {
+		article.SentimentLabel = sentimentLabel.String
+	}
+	if sentimentEmoji.Valid {
+		article.SentimentEmoji = sentimentEmoji.String
+	}
+	if alertTriggered.Valid {
+		article.AlertTriggered = alertTriggered.Bool
+	}
+	if alertConditionsJSON.Valid && alertConditionsJSON.String != "" {
+		json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
+	}
+	if researchQueriesJSON.Valid && researchQueriesJSON.String != "" {
+		json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
+	}
+
+	article.DateFetched = dateFetched
+	return &article, nil
+}
+
+// SaveArticle saves an article to the database
+func (s *Store) SaveArticle(article *core.Article) error {
+	return s.CacheArticle(*article)
+}
+
 // GetArticlesByDateRange retrieves articles within a specific date range
 func (s *Store) GetArticlesByDateRange(startDate, endDate time.Time) ([]core.Article, error) {
 	query := `

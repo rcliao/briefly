@@ -69,53 +69,71 @@ Check the [Releases](https://github.com/rcliao/briefly/releases) page for pre-bu
 
 ## Configuration
 
-### API Key Setup
+### Quick Start
 
-You can provide your Gemini API key in several ways:
+Copy the example configuration files and customize them:
 
-1. **Environment Variable (Recommended):**
-   ```bash
-   export GEMINI_API_KEY="your_api_key_here"
-   ```
+```bash
+# Copy configuration templates
+cp .env.example .env
+cp .briefly.yaml.example .briefly.yaml
 
-2. **`.env` File:**
-   Create a `.env` file in the project root:
-   ```
-   GEMINI_API_KEY=your_api_key_here
-   ```
+# Edit with your API keys
+nano .env
+```
 
-3. **Configuration File:**
-   Create a `.briefly.yaml` file in your home directory or current directory:
-   ```yaml
-   gemini:
-     api_key: "your_api_key_here"
-     model: "gemini-1.5-flash-latest"
-   output:
-     directory: "digests"
-   
-   # v1.0 Multi-Channel Configuration (optional)
-   tts:
-     provider: "openai"
-     voice: "alloy"
-     speed: 1.0
-   messaging:
-     slack_webhook: "https://hooks.slack.com/services/..."
-     discord_webhook: "https://discord.com/api/webhooks/..."
-   ```
+**📖 For detailed configuration guide, see [CONFIGURATION.md](CONFIGURATION.md)**
 
-4. **Environment Variables for v1.0 Features:**
-   ```bash
-   # TTS providers
-   export OPENAI_API_KEY="sk-your-openai-key"
-   export ELEVENLABS_API_KEY="your-elevenlabs-key"
-   
-   # Messaging webhooks
-   export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
-   export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
-   ```
+### Required: Gemini API Key
 
-5. **Command-line Flag:**
-   Use the `--config` flag to specify an API key in a config file.
+Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey) and set it:
+
+```bash
+# In .env file (recommended)
+GEMINI_API_KEY=your-gemini-api-key-here
+```
+
+### Optional: Search Providers
+
+For research features, configure a search provider:
+
+```bash
+# Google Custom Search (recommended)
+GOOGLE_CSE_API_KEY=your-google-api-key
+GOOGLE_CSE_ID=your-search-engine-id
+
+# Or SerpAPI (premium)
+SERPAPI_KEY=your-serpapi-key
+```
+
+### Configuration Methods
+
+1. **Environment Variables (`.env` file)**
+2. **YAML Configuration (`.briefly.yaml`)**
+3. **Command-line flags**
+
+**Examples:**
+
+**`.env` file:**
+```env
+GEMINI_API_KEY=your-gemini-key
+GOOGLE_CSE_API_KEY=your-google-key
+GOOGLE_CSE_ID=your-search-engine-id
+SLACK_WEBHOOK_URL=https://hooks.slack.com/...
+OPENAI_API_KEY=your-openai-key
+```
+
+**`.briefly.yaml` file:**
+```yaml
+gemini:
+  model: "gemini-1.5-pro"
+output:
+  directory: "my-digests"
+research:
+  default_provider: "google"
+deep_research:
+  max_sources: 30
+```
 
 ### Configuration Precedence
 
@@ -537,7 +555,7 @@ Create a `.briefly.yaml` configuration file for persistent settings:
 # Gemini AI Configuration
 gemini:
   api_key: ""  # Or use GEMINI_API_KEY environment variable
-  model: "gemini-1.5-flash-latest"
+  model: "gemini-2.5-flash-preview-05-20"
 
 # Output Configuration
 output:
