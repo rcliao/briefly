@@ -83,10 +83,10 @@ Recent developments in AI show promise [^1]. New tools are emerging [^2] that en
 // It now requires the apiKey and modelName to be passed directly.
 func SummarizeText(apiKey string, modelName string, textContent string) (string, error) {
 	if apiKey == "" {
-		return "", fmt.Errorf("Gemini API key is not provided")
+		return "", fmt.Errorf("gemini API key is not provided")
 	}
 	if modelName == "" {
-		return "", fmt.Errorf("Gemini model name is not provided")
+		return "", fmt.Errorf("gemini model name is not provided")
 	}
 
 	ctx := context.Background()
@@ -94,7 +94,7 @@ func SummarizeText(apiKey string, modelName string, textContent string) (string,
 	if err != nil {
 		return "", fmt.Errorf("failed to create Gemini client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := client.GenerativeModel(modelName)
 	prompt := fmt.Sprintf(summarizeTextPromptTemplate, textContent)
@@ -125,10 +125,10 @@ func SummarizeText(apiKey string, modelName string, textContent string) (string,
 // with format-specific guidance to tailor the summary appropriately for the target digest format.
 func SummarizeTextWithFormat(apiKey string, modelName string, textContent string, format string) (string, error) {
 	if apiKey == "" {
-		return "", fmt.Errorf("Gemini API key is not provided")
+		return "", fmt.Errorf("gemini API key is not provided")
 	}
 	if modelName == "" {
-		return "", fmt.Errorf("Gemini model name is not provided")
+		return "", fmt.Errorf("gemini model name is not provided")
 	}
 
 	ctx := context.Background()
@@ -136,7 +136,7 @@ func SummarizeTextWithFormat(apiKey string, modelName string, textContent string
 	if err != nil {
 		return "", fmt.Errorf("failed to create Gemini client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := client.GenerativeModel(modelName)
 	prompt := fmt.Sprintf(summarizeTextWithFormatPromptTemplate, format, format, textContent)
@@ -173,10 +173,10 @@ func GenerateFinalDigest(apiKey string, modelName string, combinedSummariesAndSo
 func GenerateFinalDigestWithTemplate(apiKey string, modelName string, combinedSummariesAndSources string, 
 	format string, targetStyle string, maxSummaryLength string, keyFeatures string) (string, error) {
 	if apiKey == "" {
-		return "", fmt.Errorf("Gemini API key is not provided")
+		return "", fmt.Errorf("gemini API key is not provided")
 	}
 	if modelName == "" {
-		return "", fmt.Errorf("Gemini model name is not provided")
+		return "", fmt.Errorf("gemini model name is not provided")
 	}
 
 	ctx := context.Background()
@@ -184,7 +184,7 @@ func GenerateFinalDigestWithTemplate(apiKey string, modelName string, combinedSu
 	if err != nil {
 		return "", fmt.Errorf("failed to create Gemini client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := client.GenerativeModel(modelName)
 	prompt := fmt.Sprintf(finalDigestPromptTemplate, format, targetStyle, maxSummaryLength, keyFeatures, combinedSummariesAndSources)

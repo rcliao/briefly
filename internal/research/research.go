@@ -391,14 +391,6 @@ func NewSerpAPISearchProvider(apiKey string) SearchProvider {
 	return search.NewLegacyProviderAdapter(serpProvider)
 }
 
-// Helper function to extract domain from URL
-func extractDomainFromURL(rawURL string) string {
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return "unknown"
-	}
-	return parsedURL.Host
-}
 
 // NewGoogleCustomSearchProvider creates a new Google Custom Search provider using the shared search module
 func NewGoogleCustomSearchProvider(apiKey, searchID string) SearchProvider {

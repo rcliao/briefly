@@ -81,10 +81,10 @@ func (g *GoogleProvider) Search(ctx context.Context, query string, config Config
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute Google CSE request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Google CSE request failed with status: %d", resp.StatusCode)
+		return nil, fmt.Errorf("google CSE request failed with status: %d", resp.StatusCode)
 	}
 
 	// Parse JSON response
@@ -106,7 +106,7 @@ func (g *GoogleProvider) Search(ctx context.Context, query string, config Config
 
 	// Check for API errors
 	if apiResponse.Error.Code != 0 {
-		return nil, fmt.Errorf("Google CSE API error (%d): %s", apiResponse.Error.Code, apiResponse.Error.Message)
+		return nil, fmt.Errorf("google CSE API error (%d): %s", apiResponse.Error.Code, apiResponse.Error.Message)
 	}
 
 	// Convert to Result format
@@ -137,9 +137,7 @@ func (g *GoogleProvider) extractDomain(urlStr string) string {
 
 	domain := parsed.Hostname()
 	// Remove www. prefix
-	if strings.HasPrefix(domain, "www.") {
-		domain = domain[4:]
-	}
+	domain = strings.TrimPrefix(domain, "www.")
 
 	return domain
 }

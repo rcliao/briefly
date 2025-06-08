@@ -131,11 +131,11 @@ func (k *KMeansClusterer) Cluster(articles []core.Article, numClusters int) ([]c
 // initializeCentroids randomly initializes cluster centroids
 func (k *KMeansClusterer) initializeCentroids(articles []core.Article, numClusters, embeddingDim int) [][]float64 {
 	centroids := make([][]float64, numClusters)
-	rand.Seed(time.Now().UnixNano())
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	
 	// Use random articles as initial centroids
 	for i := 0; i < numClusters; i++ {
-		randomIndex := rand.Intn(len(articles))
+		randomIndex := rng.Intn(len(articles))
 		centroids[i] = make([]float64, embeddingDim)
 		copy(centroids[i], articles[randomIndex].Embedding)
 	}

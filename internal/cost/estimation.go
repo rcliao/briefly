@@ -214,7 +214,7 @@ func (e *DigestCostEstimate) FormatEstimate() string {
 	sb.WriteString(strings.Repeat("=", 50) + "\n\n")
 	
 	// Summary
-	sb.WriteString(fmt.Sprintf("📊 Summary:\n"))
+	sb.WriteString("📊 Summary:\n")
 	sb.WriteString(fmt.Sprintf("   Articles to process: %d\n", len(e.Articles)))
 	sb.WriteString(fmt.Sprintf("   Total estimated cost: $%.6f\n", e.TotalCost))
 	sb.WriteString(fmt.Sprintf("   Estimated processing time: %.1f minutes\n", e.ProcessingTimeMinutes))
@@ -225,7 +225,7 @@ func (e *DigestCostEstimate) FormatEstimate() string {
 	sb.WriteString("\n")
 	
 	// Breakdown
-	sb.WriteString(fmt.Sprintf("💰 Cost Breakdown:\n"))
+	sb.WriteString("💰 Cost Breakdown:\n")
 	sb.WriteString(fmt.Sprintf("   Input tokens: %d (~$%.6f)\n", 
 		e.TotalInputTokens, float64(e.TotalInputTokens)*PricingTable[e.Model].InputCostPer1MTokens/1000000))
 	sb.WriteString(fmt.Sprintf("   Output tokens: %d (~$%.6f)\n", 
@@ -235,7 +235,7 @@ func (e *DigestCostEstimate) FormatEstimate() string {
 	
 	// Per-article breakdown (show first 5)
 	if len(e.Articles) > 0 {
-		sb.WriteString(fmt.Sprintf("📝 Per-Article Estimates (showing first 5):\n"))
+		sb.WriteString("📝 Per-Article Estimates (showing first 5):\n")
 		for i, article := range e.Articles {
 			if i >= 5 {
 				sb.WriteString(fmt.Sprintf("   ... and %d more articles\n", len(e.Articles)-5))

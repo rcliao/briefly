@@ -439,7 +439,11 @@ func (c *MessagingClient) SendSlackMessage(message *SlackMessage) error {
 	if err != nil {
 		return fmt.Errorf("failed to send Slack message: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Warning: failed to close response body: %s\n", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -464,7 +468,7 @@ func (c *MessagingClient) SendDiscordMessage(message *DiscordMessage) error {
 	if err != nil {
 		return fmt.Errorf("failed to send Discord message: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

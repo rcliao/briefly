@@ -81,7 +81,7 @@ func (s *SerpAPIProvider) Search(ctx context.Context, query string, config Confi
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute SerpAPI request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("SerpAPI request failed with status: %d", resp.StatusCode)
@@ -138,9 +138,7 @@ func (s *SerpAPIProvider) extractDomain(urlStr string) string {
 	
 	domain := parsed.Hostname()
 	// Remove www. prefix
-	if strings.HasPrefix(domain, "www.") {
-		domain = domain[4:]
-	}
+	domain = strings.TrimPrefix(domain, "www.")
 	
 	return domain
 }

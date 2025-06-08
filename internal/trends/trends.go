@@ -358,7 +358,7 @@ func (ta *TrendAnalyzer) generateKeyFindings(metrics []TrendMetric, topicTrends 
 func (ta *TrendAnalyzer) FormatReport(report *TrendReport) string {
 	var builder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("# Trend Analysis Report\n"))
+	builder.WriteString("# Trend Analysis Report\n")
 	builder.WriteString(fmt.Sprintf("**Period:** %s\n", report.Period))
 	builder.WriteString(fmt.Sprintf("**Analysis Window:** %s to %s\n",
 		report.StartDate.Format("2006-01-02"), report.EndDate.Format("2006-01-02")))
@@ -382,7 +382,7 @@ func (ta *TrendAnalyzer) FormatReport(report *TrendReport) string {
 		}
 
 		builder.WriteString(fmt.Sprintf("- **%s**: %.0f %s %.0f (%.1f%%)\n",
-			strings.Title(strings.ReplaceAll(metric.Name, "_", " ")),
+			strings.ToTitle(strings.ReplaceAll(metric.Name, "_", " ")),
 			metric.PreviousValue, changeIndicator, metric.Value, metric.ChangePercent))
 	}
 	builder.WriteString("\n")
@@ -409,7 +409,7 @@ func (ta *TrendAnalyzer) FormatReport(report *TrendReport) string {
 		}
 
 		builder.WriteString(fmt.Sprintf("- **%s**%s: %d %s %d articles",
-			strings.Title(trend.Topic), status, trend.PreviousCount, changeIndicator, trend.CurrentCount))
+			strings.ToTitle(trend.Topic), status, trend.PreviousCount, changeIndicator, trend.CurrentCount))
 
 		if trend.ChangePercent != 0 {
 			builder.WriteString(fmt.Sprintf(" (%.1f%%)", trend.ChangePercent))

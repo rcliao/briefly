@@ -209,14 +209,8 @@ func (p *LLMPlanner) extractQueriesFromText(text string) []string {
 func (p *LLMPlanner) cleanJSONResponse(response string) string {
 	// Remove markdown code fences
 	response = strings.TrimSpace(response)
-	if strings.HasPrefix(response, "```json") {
-		response = strings.TrimPrefix(response, "```json")
-	}
-	if strings.HasPrefix(response, "```") {
-		response = strings.TrimPrefix(response, "```")
-	}
-	if strings.HasSuffix(response, "```") {
-		response = strings.TrimSuffix(response, "```")
-	}
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
 	return strings.TrimSpace(response)
 }

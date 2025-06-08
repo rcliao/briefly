@@ -64,7 +64,7 @@ func (d *DuckDuckGoProvider) Search(ctx context.Context, query string, config Co
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute search request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("search request failed with status: %d", resp.StatusCode)
@@ -207,9 +207,7 @@ func (d *DuckDuckGoProvider) extractDomain(urlStr string) string {
 	
 	domain := parsed.Hostname()
 	// Remove www. prefix
-	if strings.HasPrefix(domain, "www.") {
-		domain = domain[4:]
-	}
+	domain = strings.TrimPrefix(domain, "www.")
 	
 	return domain
 }

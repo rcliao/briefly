@@ -3,7 +3,6 @@ package alerts
 import (
 	"briefly/internal/core"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -331,10 +330,7 @@ func (am *AlertManager) checkKeywordMatch(condition AlertCondition, ctx AlertCon
 
 // checkTopicEmergence evaluates topic emergence conditions
 func (am *AlertManager) checkTopicEmergence(condition AlertCondition, ctx AlertContext) *Alert {
-	minArticles, _ := condition.Config["min_articles"].(int)
-	if minArticles == 0 {
-		minArticles = 3
-	}
+	// Note: min_articles configuration is available but not currently used in this implementation
 
 	// Find topics that are new (present in current but not in previous)
 	var newTopics []string
@@ -528,8 +524,3 @@ func uniqueStrings(slice []string) []string {
 	return result
 }
 
-// validateKeyword checks if a keyword is properly formatted for regex
-func validateKeyword(keyword string) bool {
-	_, err := regexp.Compile(keyword)
-	return err == nil
-}
