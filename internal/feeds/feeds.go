@@ -95,7 +95,7 @@ func (fm *FeedManager) FetchFeed(feedURL string, lastModified, etag string) (*Pa
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch feed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Handle not modified response
 	if resp.StatusCode == http.StatusNotModified {
@@ -140,12 +140,12 @@ func (fm *FeedManager) parseResponse(resp *http.Response, feedURL string) (*Pars
 	}
 
 	// Reset and try Atom
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	resp, err := fm.client.Get(feedURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to re-fetch for Atom parsing: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	decoder = xml.NewDecoder(resp.Body)
 	var atom Atom
@@ -298,7 +298,7 @@ func (fm *FeedManager) DiscoverFeedURL(websiteURL string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch website: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// This is a simplified implementation
 	// In a full implementation, you would parse HTML and look for:

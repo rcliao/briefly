@@ -275,7 +275,7 @@ func (c *TTSClient) generateElevenLabsAudio(text string, outputPath string) (str
 	if err != nil {
 		return "", fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -287,7 +287,7 @@ func (c *TTSClient) generateElevenLabsAudio(text string, outputPath string) (str
 	if err != nil {
 		return "", fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	
 	_, err = io.Copy(file, resp.Body)
 	if err != nil {
@@ -335,7 +335,7 @@ func (c *TTSClient) generateOpenAIAudio(text string, outputPath string) (string,
 	if err != nil {
 		return "", fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -347,7 +347,7 @@ func (c *TTSClient) generateOpenAIAudio(text string, outputPath string) (string,
 	if err != nil {
 		return "", fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	
 	_, err = io.Copy(file, resp.Body)
 	if err != nil {
@@ -361,7 +361,7 @@ func (c *TTSClient) generateOpenAIAudio(text string, outputPath string) (string,
 func (c *TTSClient) generateGoogleAudio(text string, outputPath string) (string, error) {
 	// Google Cloud TTS implementation would go here
 	// For now, return an error indicating it's not implemented
-	return "", fmt.Errorf("Google Cloud TTS not implemented in this version")
+	return "", fmt.Errorf("google Cloud TTS not implemented in this version")
 }
 
 // generateMockAudio creates a mock audio file for testing

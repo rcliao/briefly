@@ -334,7 +334,7 @@ func (sa *SentimentAnalyzer) extractKeyPhrases(text string, classification Senti
 // getDominantTone determines the most common sentiment classification
 func (sa *SentimentAnalyzer) getDominantTone(distribution map[SentimentClassification]int) SentimentClassification {
 	maxCount := 0
-	var dominantTone SentimentClassification = SentimentNeutral
+	var dominantTone = SentimentNeutral
 
 	for classification, count := range distribution {
 		if count > maxCount {
@@ -353,7 +353,7 @@ func (sa *SentimentAnalyzer) FormatSentimentSummary(digestSentiment *DigestSenti
 	builder.WriteString("## 📊 Sentiment Analysis\n\n")
 	builder.WriteString(fmt.Sprintf("**Overall Sentiment:** %s %s (Score: %.2f)\n\n",
 		digestSentiment.OverallEmoji,
-		strings.Title(strings.ReplaceAll(string(digestSentiment.SentimentSummary.DominantTone), "_", " ")),
+		strings.ToTitle(strings.ReplaceAll(string(digestSentiment.SentimentSummary.DominantTone), "_", " ")),
 		digestSentiment.OverallScore.Overall))
 
 	summary := digestSentiment.SentimentSummary

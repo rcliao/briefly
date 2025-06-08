@@ -27,7 +27,11 @@ func ReadLinksFromFile(filePath string) ([]core.Link, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open link file %s: %w", filePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Printf("Warning: failed to close file: %s\n", err)
+		}
+	}()
 
 	var links []core.Link
 	scanner := bufio.NewScanner(file)
@@ -93,7 +97,7 @@ func FetchArticle(link core.Link) (core.Article, error) {
 	if err != nil {
 		return core.Article{}, fmt.Errorf("failed to fetch URL %s: %w", link.URL, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return core.Article{}, fmt.Errorf("failed to fetch URL %s: status code %d", link.URL, resp.StatusCode)

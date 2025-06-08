@@ -67,7 +67,7 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do Stuff Here
 	},
-}
+			}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
@@ -76,7 +76,7 @@ func Execute() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-}
+			}
 
 func init() {
 	cobra.OnInitialize(initConfig)
@@ -89,7 +89,7 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-}
+			}
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
@@ -128,7 +128,7 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
-}
+			}
 
 var tuiCmd = &cobra.Command{
 	Use:   "tui",
@@ -138,7 +138,7 @@ var tuiCmd = &cobra.Command{
 		fmt.Println("Launching TUI...")
 		tui.StartTUI()
 	},
-}
+			}
 
 func init() {
 	rootCmd.AddCommand(tuiCmd)
@@ -151,7 +151,7 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// tuiCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-}
+			}
 
 var digestCmd = &cobra.Command{
 	Use:   "digest [input-file]",
@@ -186,7 +186,7 @@ Example:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 	logger.Info("Starting digest generation", "input_file", inputFile, "format", format, "dry_run", dryRun)
@@ -232,7 +232,11 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 		fmt.Printf("⚠️  Cache disabled due to error: %s\n", err)
 		cacheStore = nil
 	} else {
-		defer cacheStore.Close()
+				defer func() {
+			if err := cacheStore.Close(); err != nil {
+				logger.Error("Failed to close cache store", err)
+			}
+		}()
 		logger.Info("Cache store initialized")
 	}
 
@@ -823,7 +827,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 	}
 
 	return nil
-}
+			}
 
 func init() {
 	rootCmd.AddCommand(digestCmd)
@@ -831,14 +835,14 @@ func init() {
 	digestCmd.Flags().StringP("output", "o", "digests", "Output directory for digest file")
 	digestCmd.Flags().Bool("dry-run", false, "Estimate costs without making API calls")
 	digestCmd.Flags().StringP("format", "f", "standard", "Digest format: brief, standard, detailed, newsletter")
-}
+			}
 
 // Add cache management commands
 var cacheCmd = &cobra.Command{
 	Use:   "cache",
 	Short: "Manage the article and summary cache",
 	Long:  `Inspect, clean, and manage the SQLite cache for articles and summaries.`,
-}
+			}
 
 var listFormatsCmd = &cobra.Command{
 	Use:   "formats",
@@ -864,7 +868,7 @@ var listFormatsCmd = &cobra.Command{
 		fmt.Println()
 		fmt.Printf("Usage: briefly digest --format <format> input.md\n")
 	},
-}
+			}
 
 var cacheStatsCmd = &cobra.Command{
 	Use:   "stats",
@@ -876,7 +880,11 @@ var cacheStatsCmd = &cobra.Command{
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+				defer func() {
+		if err := cacheStore.Close(); err != nil {
+			logger.Error("Failed to close cache store", err)
+		}
+	}()
 
 		stats, err := cacheStore.GetCacheStats()
 		if err != nil {
@@ -916,7 +924,7 @@ var cacheStatsCmd = &cobra.Command{
 			fmt.Printf("\nTotal clustered items: %d\n", totalClustered)
 		}
 	},
-}
+			}
 
 var cacheClearCmd = &cobra.Command{
 	Use:   "clear",
@@ -934,7 +942,7 @@ var cacheClearCmd = &cobra.Command{
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 
 		if err := cacheStore.ClearCache(); err != nil {
 			fmt.Printf("Error clearing cache: %s\n", err)
@@ -943,13 +951,13 @@ var cacheClearCmd = &cobra.Command{
 
 		fmt.Println("✅ Cache cleared successfully")
 	},
-}
+			}
 
 var myTakeCmd = &cobra.Command{
 	Use:   "my-take",
 	Short: "Manage my-take for digests",
 	Long:  `Add or edit your personal take on generated digests.`,
-}
+			}
 
 var addMyTakeCmd = &cobra.Command{
 	Use:   "add [digest-id] [my-take-text]",
@@ -967,7 +975,7 @@ Example:
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 
 		if len(args) == 0 {
 			// Show recent digests
@@ -1050,7 +1058,7 @@ Example:
 		fmt.Println("✅ My-take added successfully!")
 		fmt.Printf("Your take: %s\n", myTake)
 	},
-}
+			}
 
 var listMyTakeCmd = &cobra.Command{
 	Use:   "list",
@@ -1062,7 +1070,7 @@ var listMyTakeCmd = &cobra.Command{
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 
 		digests, err := cacheStore.GetLatestDigests(20)
 		if err != nil {
@@ -1095,7 +1103,7 @@ var listMyTakeCmd = &cobra.Command{
 			fmt.Println()
 		}
 	},
-}
+			}
 
 var regenerateCmd = &cobra.Command{
 	Use:   "regenerate [digest-id]",
@@ -1113,7 +1121,7 @@ Example:
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 
 		digest, err := cacheStore.FindDigestByPartialID(digestID)
 		if err != nil {
@@ -1143,7 +1151,10 @@ Example:
 		// Create output file with timestamp to avoid overwriting
 		outputDir := "digests"
 		if _, err := os.Stat(outputDir); os.IsNotExist(err) {
-			os.MkdirAll(outputDir, 0755)
+			if err := os.MkdirAll(outputDir, 0755); err != nil {
+				logger.Error("Failed to create output directory", err)
+				fmt.Printf("❌ Failed to create directory %s: %s\n", outputDir, err)
+			}
 		}
 
 		timestamp := time.Now().Format("2006-01-02_15-04-05")
@@ -1165,14 +1176,14 @@ Example:
 		}
 		fmt.Printf("Preview: %s...\n", regeneratedContent[:previewLength])
 	},
-}
+			}
 
 // Feed management commands
 var feedCmd = &cobra.Command{
 	Use:   "feed",
 	Short: "Manage RSS/Atom feeds",
 	Long:  `Add, list, and manage RSS/Atom feeds for automatic content discovery.`,
-}
+			}
 
 var addFeedCmd = &cobra.Command{
 	Use:   "add [feed-url]",
@@ -1191,7 +1202,7 @@ Example:
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 
 		feedManager := feeds.NewFeedManager()
 
@@ -1239,7 +1250,7 @@ Example:
 		fmt.Printf("Description: %s\n", parsedFeed.Feed.Description)
 		fmt.Printf("Items discovered: %d\n", itemCount)
 	},
-}
+			}
 
 var listFeedsCmd = &cobra.Command{
 	Use:   "list",
@@ -1251,7 +1262,7 @@ var listFeedsCmd = &cobra.Command{
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 
 		activeOnly, _ := cmd.Flags().GetBool("active-only")
 		feeds, err := cacheStore.GetFeeds(activeOnly)
@@ -1294,7 +1305,7 @@ var listFeedsCmd = &cobra.Command{
 			fmt.Println()
 		}
 	},
-}
+			}
 
 var pullFeedsCmd = &cobra.Command{
 	Use:   "pull",
@@ -1306,7 +1317,7 @@ var pullFeedsCmd = &cobra.Command{
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 
 		feedManager := feeds.NewFeedManager()
 
@@ -1333,7 +1344,9 @@ var pullFeedsCmd = &cobra.Command{
 			parsedFeed, err := feedManager.FetchFeed(feed.URL, feed.LastModified, feed.ETag)
 			if err != nil {
 				fmt.Printf("  ❌ Error: %s\n", err)
-				cacheStore.UpdateFeedError(feed.ID, err.Error())
+				if updateErr := cacheStore.UpdateFeedError(feed.ID, err.Error()); updateErr != nil {
+					logger.Error("Failed to update feed error", updateErr)
+				}
 				continue
 			}
 
@@ -1369,7 +1382,7 @@ var pullFeedsCmd = &cobra.Command{
 			fmt.Println("Use 'briefly feed items' to see unprocessed items")
 		}
 	},
-}
+			}
 
 var manageFeedCmd = &cobra.Command{
 	Use:   "manage [feed-id]",
@@ -1392,7 +1405,7 @@ Example:
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 
 		// Get all feeds to find matching ID
 		allFeeds, err := cacheStore.GetFeeds(false)
@@ -1466,7 +1479,7 @@ Example:
 		fmt.Println("  briefly feed manage", feedID, "--disable   # Disable feed")
 		fmt.Println("  briefly feed manage", feedID, "--remove    # Remove feed")
 	},
-}
+			}
 
 var feedItemsCmd = &cobra.Command{
 	Use:   "items",
@@ -1478,7 +1491,7 @@ var feedItemsCmd = &cobra.Command{
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 
 		limit, _ := cmd.Flags().GetInt("limit")
 		items, err := cacheStore.GetUnprocessedFeedItems(limit)
@@ -1507,7 +1520,7 @@ var feedItemsCmd = &cobra.Command{
 
 		fmt.Printf("Use these links in your digest input files or mark them as processed.\n")
 	},
-}
+			}
 
 var summarizeCmd = &cobra.Command{
 	Use:   "summarize [url]",
@@ -1527,7 +1540,7 @@ Example:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 func runSummarize(url string) error {
 	// Create a link object from the URL
@@ -1586,7 +1599,7 @@ func runSummarize(url string) error {
 	fmt.Printf("✨ Summary generated in %.1f seconds\n", time.Since(time.Now()).Seconds())
 
 	return nil
-}
+			}
 
 func generateQuickSummary(llmClient *llm.Client, article core.Article) (core.Summary, error) {
 	// Use the new method that generates summaries with key moments
@@ -1596,7 +1609,7 @@ func generateQuickSummary(llmClient *llm.Client, article core.Article) (core.Sum
 	}
 
 	return summary, nil
-}
+			}
 
 func init() {
 	// Add cache commands
@@ -1678,14 +1691,14 @@ func init() {
 	deepResearchCmd.Flags().String("search-provider", "duckduckgo", "Search provider: duckduckgo, serpapi, google, mock")
 
 	cacheClearCmd.Flags().Bool("confirm", false, "Confirm cache deletion")
-}
+			}
 
 // Insights commands for v0.4
 var insightsCmd = &cobra.Command{
 	Use:   "insights",
 	Short: "Access insights features (trends, alerts, sentiment)",
 	Long:  `Access advanced insights features including trend analysis, alert monitoring, and sentiment analysis.`,
-}
+			}
 
 var trendsCmd = &cobra.Command{
 	Use:   "trends [period]",
@@ -1708,13 +1721,13 @@ Examples:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 var alertsCmd = &cobra.Command{
 	Use:   "alerts",
 	Short: "Manage alert conditions and triggers",
 	Long:  `Configure and manage alert conditions that trigger notifications during digest processing.`,
-}
+			}
 
 var listAlertsCmd = &cobra.Command{
 	Use:   "list",
@@ -1726,7 +1739,7 @@ var listAlertsCmd = &cobra.Command{
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 var testAlertsCmd = &cobra.Command{
 	Use:   "test [input-file]",
@@ -1743,7 +1756,7 @@ Example:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 var sentimentCmd = &cobra.Command{
 	Use:   "sentiment [input-file]",
@@ -1760,7 +1773,7 @@ Example:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 var researchCmd = &cobra.Command{
 	Use:   "research [topic]",
@@ -1784,7 +1797,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 // Messaging commands for v1.0
 var sendSlackCmd = &cobra.Command{
@@ -1808,7 +1821,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 var sendDiscordCmd = &cobra.Command{
 	Use:   "send-discord [input-file]",
@@ -1831,7 +1844,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 var generateTTSCmd = &cobra.Command{
 	Use:   "generate-tts [input-file]",
@@ -1858,7 +1871,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 // Deep Research command
 var deepResearchCmd = &cobra.Command{
@@ -1889,7 +1902,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-}
+			}
 
 // Implementation functions for the new commands
 
@@ -1920,7 +1933,7 @@ func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model
 		fmt.Printf("⚠️  Cache disabled due to error: %s\n", err)
 		cacheStore = nil
 	} else {
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 		fmt.Printf("📦 Cache store initialized\n")
 	}
 
@@ -2050,14 +2063,14 @@ func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model
 	fmt.Printf("   • Add to digest: briefly digest research/%s.md\n", slug)
 
 	return nil
-}
+			}
 
 func runTrends(period string) error {
 	cacheStore, err := store.NewStore(".briefly-cache")
 	if err != nil {
 		return fmt.Errorf("failed to open cache: %w", err)
 	}
-	defer cacheStore.Close()
+	defer func() { _ = cacheStore.Close() }()
 
 	analyzer := trends.NewTrendAnalyzer()
 
@@ -2069,12 +2082,13 @@ func runTrends(period string) error {
 
 	// Get articles for previous period
 	var previousArticles []core.Article
-	if period == "weekly" {
+	switch period {
+	case "weekly":
 		previousArticles, err = cacheStore.GetArticlesByDateRange(
 			time.Now().AddDate(0, 0, -14), // Two weeks ago
 			time.Now().AddDate(0, 0, -7),  // One week ago
 		)
-	} else if period == "monthly" {
+	case "monthly":
 		previousArticles, err = cacheStore.GetArticlesByDateRange(
 			time.Now().AddDate(0, -2, 0), // Two months ago
 			time.Now().AddDate(0, -1, 0), // One month ago
@@ -2094,7 +2108,7 @@ func runTrends(period string) error {
 	fmt.Println(analyzer.FormatReport(report))
 
 	return nil
-}
+			}
 
 func runListAlerts() error {
 	alertManager := alerts.NewAlertManager()
@@ -2143,7 +2157,7 @@ func runListAlerts() error {
 	}
 
 	return nil
-}
+			}
 
 func runTestAlerts(inputFile string) error {
 	// Read links from input file
@@ -2156,7 +2170,7 @@ func runTestAlerts(inputFile string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open cache: %w", err)
 	}
-	defer cacheStore.Close()
+	defer func() { _ = cacheStore.Close() }()
 
 	// Fetch articles
 	var articles []core.Article
@@ -2213,7 +2227,7 @@ func runTestAlerts(inputFile string) error {
 	}
 
 	return nil
-}
+			}
 
 func runSentiment(inputFile string) error {
 	// Read links from input file
@@ -2226,7 +2240,7 @@ func runSentiment(inputFile string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open cache: %w", err)
 	}
-	defer cacheStore.Close()
+	defer func() { _ = cacheStore.Close() }()
 
 	// Fetch articles
 	var articles []core.Article
@@ -2283,7 +2297,7 @@ func runSentiment(inputFile string) error {
 	}
 
 	return nil
-}
+			}
 
 func runResearch(topic string, depth, maxResults int, outputFile, provider string) error {
 	fmt.Printf("🔍 Starting deep research on: %s\n", topic)
@@ -2401,14 +2415,14 @@ func runResearch(topic string, depth, maxResults int, outputFile, provider strin
 	}
 
 	return nil
-}
+			}
 
 // Helper function to read links from markdown file (reused from existing code)
 func readLinksFromFile(inputFile string) ([]core.Link, error) {
 	// This would be implemented similar to existing link reading logic
 	// For now, return empty slice as placeholder
 	return []core.Link{}, fmt.Errorf("link reading not implemented in this example")
-}
+			}
 
 func runSendMessage(platform messaging.MessagePlatform, inputFile string, webhookURL string, messageFormat string, includeSentiment bool) error {
 	// Get webhook URL from environment if not provided
@@ -2455,7 +2469,7 @@ func runSendMessage(platform messaging.MessagePlatform, inputFile string, webhoo
 		fmt.Printf("⚠️  Cache disabled due to error: %s\n", err)
 		cacheStore = nil
 	} else {
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 	}
 
 	// Fetch articles from cache or generate quick summaries
@@ -2561,7 +2575,7 @@ func runSendMessage(platform messaging.MessagePlatform, inputFile string, webhoo
 
 	fmt.Printf("✅ Successfully sent %s message with %d articles\n", platform, len(digestItems))
 	return nil
-}
+			}
 
 func runGenerateTTS(inputFile string, provider string, voiceID string, apiKey string, speed float64, maxArticles int, includeSummaries bool, outputDir string) error {
 	// Get API key from environment if not provided
@@ -2617,7 +2631,7 @@ func runGenerateTTS(inputFile string, provider string, voiceID string, apiKey st
 		fmt.Printf("⚠️  Cache disabled due to error: %s\n", err)
 		cacheStore = nil
 	} else {
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 	}
 
 	// Fetch articles from cache or generate summaries
@@ -2728,14 +2742,14 @@ func runGenerateTTS(inputFile string, provider string, voiceID string, apiKey st
 	}
 
 	return nil
-}
+			}
 
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
-}
+			}
 
 // Helper functions for deep research
 
@@ -2763,7 +2777,7 @@ func parseDuration(s string) (time.Duration, error) {
 	default:
 		return 0, fmt.Errorf("unsupported time unit: %s", unit)
 	}
-}
+			}
 
 func generateSlug(topic string) string {
 	// Convert topic to filesystem-safe slug
@@ -2775,7 +2789,7 @@ func generateSlug(topic string) string {
 		slug = slug[:50]
 	}
 	return slug
-}
+			}
 
 func formatBriefAsMarkdown(brief *deepresearch.ResearchBrief) string {
 	var md strings.Builder
@@ -2832,7 +2846,7 @@ func formatBriefAsMarkdown(brief *deepresearch.ResearchBrief) string {
 	}
 	
 	return md.String()
-}
+			}
 
 func formatBriefAsHTML(brief *deepresearch.ResearchBrief) string {
 	var html strings.Builder
@@ -2901,4 +2915,4 @@ func formatBriefAsHTML(brief *deepresearch.ResearchBrief) string {
 	html.WriteString("</body>\n</html>\n")
 	
 	return html.String()
-}
+			}

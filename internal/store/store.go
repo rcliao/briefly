@@ -39,7 +39,7 @@ func NewStore(dataDir string) (*Store, error) {
 	}
 
 	if err := store.initialize(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
@@ -403,10 +403,10 @@ func (s *Store) GetCachedArticle(url string, maxAge time.Duration) (*core.Articl
 		article.AlertTriggered = alertTriggered.Bool
 	}
 	if alertConditionsJSON.Valid && alertConditionsJSON.String != "" {
-		json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
+		_ = json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
 	}
 	if researchQueriesJSON.Valid && researchQueriesJSON.String != "" {
-		json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
+		_ = json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
 	}
 
 	article.DateFetched = dateFetched
@@ -500,7 +500,7 @@ func (s *Store) GetCachedSummary(articleURL string, contentHash string, maxAge t
 	}
 
 	// Unmarshal JSON fields
-	json.Unmarshal([]byte(articleIDsJSON), &summary.ArticleIDs)
+	_ = json.Unmarshal([]byte(articleIDsJSON), &summary.ArticleIDs)
 	summary.Instructions = instructions
 
 	return &summary, nil
@@ -598,7 +598,7 @@ func (s *Store) GetCachedDigest(digestID string) (*core.Digest, error) {
 	}
 
 	// Parse article URLs
-	json.Unmarshal([]byte(urlsJSON), &digest.ArticleURLs)
+	_ = json.Unmarshal([]byte(urlsJSON), &digest.ArticleURLs)
 
 	// Handle insights fields
 	if overallSentiment.Valid {
@@ -611,7 +611,7 @@ func (s *Store) GetCachedDigest(digestID string) (*core.Digest, error) {
 		digest.TrendsSummary = trendsSummary.String
 	}
 	if researchSuggestionsJSON.Valid && researchSuggestionsJSON.String != "" {
-		json.Unmarshal([]byte(researchSuggestionsJSON.String), &digest.ResearchSuggestions)
+		_ = json.Unmarshal([]byte(researchSuggestionsJSON.String), &digest.ResearchSuggestions)
 	}
 
 	return &digest, nil
@@ -637,7 +637,7 @@ func (s *Store) GetLatestDigests(limit int) ([]core.Digest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query digests: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var digests []core.Digest
 	for rows.Next() {
@@ -668,7 +668,7 @@ func (s *Store) GetLatestDigests(limit int) ([]core.Digest, error) {
 		}
 
 		// Parse article URLs
-		json.Unmarshal([]byte(urlsJSON), &digest.ArticleURLs)
+		_ = json.Unmarshal([]byte(urlsJSON), &digest.ArticleURLs)
 
 		// Handle insights fields
 		if overallSentiment.Valid {
@@ -681,7 +681,7 @@ func (s *Store) GetLatestDigests(limit int) ([]core.Digest, error) {
 			digest.TrendsSummary = trendsSummary.String
 		}
 		if researchSuggestionsJSON.Valid && researchSuggestionsJSON.String != "" {
-			json.Unmarshal([]byte(researchSuggestionsJSON.String), &digest.ResearchSuggestions)
+			_ = json.Unmarshal([]byte(researchSuggestionsJSON.String), &digest.ResearchSuggestions)
 		}
 
 		digests = append(digests, digest)
@@ -741,7 +741,7 @@ func (s *Store) FindDigestByPartialID(partialID string) (*core.Digest, error) {
 	}
 
 	// Parse article URLs
-	json.Unmarshal([]byte(urlsJSON), &foundDigest.ArticleURLs)
+	_ = json.Unmarshal([]byte(urlsJSON), &foundDigest.ArticleURLs)
 
 	// Handle insights fields
 	if overallSentiment.Valid {
@@ -754,7 +754,7 @@ func (s *Store) FindDigestByPartialID(partialID string) (*core.Digest, error) {
 		foundDigest.TrendsSummary = trendsSummary.String
 	}
 	if researchSuggestionsJSON.Valid && researchSuggestionsJSON.String != "" {
-		json.Unmarshal([]byte(researchSuggestionsJSON.String), &foundDigest.ResearchSuggestions)
+		_ = json.Unmarshal([]byte(researchSuggestionsJSON.String), &foundDigest.ResearchSuggestions)
 	}
 
 	return &foundDigest, nil
@@ -800,7 +800,7 @@ func (s *Store) GetFeeds(activeOnly bool) ([]core.Feed, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query feeds: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var feeds []core.Feed
 	for rows.Next() {
@@ -935,7 +935,7 @@ func (s *Store) GetUnprocessedFeedItems(limit int) ([]core.FeedItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query feed items: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []core.FeedItem
 	for rows.Next() {
@@ -1081,7 +1081,7 @@ func (s *Store) GetCacheStats() (*CacheStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get topic clusters: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var cluster string
@@ -1199,7 +1199,7 @@ func (s *Store) GetRecentArticles(days int) ([]core.Article, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query recent articles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var articles []core.Article
 	for rows.Next() {
@@ -1268,10 +1268,10 @@ func (s *Store) GetRecentArticles(days int) ([]core.Article, error) {
 			article.AlertTriggered = alertTriggered.Bool
 		}
 		if alertConditionsJSON.Valid && alertConditionsJSON.String != "" {
-			json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
+			_ = json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
 		}
 		if researchQueriesJSON.Valid && researchQueriesJSON.String != "" {
-			json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
+			_ = json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
 		}
 
 		article.DateFetched = dateFetched
@@ -1360,10 +1360,10 @@ func (s *Store) GetArticleByURL(url string) (*core.Article, error) {
 		article.AlertTriggered = alertTriggered.Bool
 	}
 	if alertConditionsJSON.Valid && alertConditionsJSON.String != "" {
-		json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
+		_ = json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
 	}
 	if researchQueriesJSON.Valid && researchQueriesJSON.String != "" {
-		json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
+		_ = json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
 	}
 
 	article.DateFetched = dateFetched
@@ -1388,7 +1388,7 @@ func (s *Store) GetArticlesByDateRange(startDate, endDate time.Time) ([]core.Art
 	if err != nil {
 		return nil, fmt.Errorf("failed to query articles by date range: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var articles []core.Article
 	for rows.Next() {
@@ -1457,10 +1457,10 @@ func (s *Store) GetArticlesByDateRange(startDate, endDate time.Time) ([]core.Art
 			article.AlertTriggered = alertTriggered.Bool
 		}
 		if alertConditionsJSON.Valid && alertConditionsJSON.String != "" {
-			json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
+			_ = json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
 		}
 		if researchQueriesJSON.Valid && researchQueriesJSON.String != "" {
-			json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
+			_ = json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
 		}
 
 		article.DateFetched = dateFetched

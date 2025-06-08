@@ -57,7 +57,7 @@ func NewClient(modelName string) (*Client, error) {
 		apiKey = viper.GetString("gemini.api_key")
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("Gemini API key not found. Set GEMINI_API_KEY environment variable or configure gemini.api_key in config file")
+		return nil, fmt.Errorf("gemini API key not found. Set GEMINI_API_KEY environment variable or configure gemini.api_key in config file")
 	}
 
 	// Get model name from parameter, viper config, or default
@@ -239,7 +239,10 @@ Article Content:
 // Close cleans up resources used by the client
 func (c *Client) Close() {
 	if c.gClient != nil {
-		c.gClient.Close()
+		if err := c.gClient.Close(); err != nil {
+			// Log error but don't return it since Close() should be idempotent
+			fmt.Printf("Warning: failed to close LLM client: %s\n", err)
+		}
 	}
 }
 
@@ -262,7 +265,7 @@ func GenerateSummary(textContent string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create Gemini client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := client.GenerativeModel(DefaultModel)
 	prompt := fmt.Sprintf(SummarizeTextPromptTemplate, textContent)
@@ -298,7 +301,7 @@ func RegenerateDigestWithMyTake(digestContent, myTake, format string) (string, e
 	if err != nil {
 		return "", fmt.Errorf("failed to create Gemini client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := client.GenerativeModel(DefaultModel)
 
@@ -361,7 +364,7 @@ func GeneratePromptCorner(digestContent string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create Gemini client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := client.GenerativeModel(DefaultModel)
 
@@ -456,7 +459,7 @@ func GenerateDigestTitle(digestContent string, format string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create Gemini client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := client.GenerativeModel(DefaultModel)
 
@@ -667,9 +670,9 @@ Remember: Respond with EXACTLY the format above, nothing else.`, text)
 
 	// Parse the response
 	lines := strings.Split(string(resultText), "\n")
-	var score float64 = 0.0
-	var label string = "neutral"
-	var emoji string = "😐"
+	var score = 0.0
+	var label = "neutral"
+	var emoji = "😐"
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
