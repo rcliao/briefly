@@ -740,7 +740,7 @@ func (am *AlertManager) checkSentimentExtreme(condition AlertCondition, ctx Aler
 				if strings.Contains(title, word) || strings.Contains(content, word) {
 					extremeArticles = append(extremeArticles, article.Title)
 					sentimentType = "extremely positive"
-					averageScore += 0.9 // Simulated score
+					averageScore += positiveThreshold
 					count++
 					break
 				}
@@ -750,7 +750,7 @@ func (am *AlertManager) checkSentimentExtreme(condition AlertCondition, ctx Aler
 				if strings.Contains(title, word) || strings.Contains(content, word) {
 					extremeArticles = append(extremeArticles, article.Title)
 					sentimentType = "extremely negative"
-					averageScore += -0.9 // Simulated score
+					averageScore += negativeThreshold
 					count++
 					break
 				}
