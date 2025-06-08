@@ -33,15 +33,15 @@ func (k *KMeansClusterer) Cluster(articles []core.Article, numClusters int) ([]c
 	if len(articles) == 0 {
 		return nil, fmt.Errorf("no articles to cluster")
 	}
-	
+
 	if numClusters <= 0 {
 		return nil, fmt.Errorf("number of clusters must be positive")
 	}
-	
+
 	if numClusters > len(articles) {
 		numClusters = len(articles)
 	}
-	
+
 	// Filter articles that have embeddings
 	var articlesWithEmbeddings []core.Article
 	for _, article := range articles {
@@ -49,31 +49,31 @@ func (k *KMeansClusterer) Cluster(articles []core.Article, numClusters int) ([]c
 			articlesWithEmbeddings = append(articlesWithEmbeddings, article)
 		}
 	}
-	
+
 	if len(articlesWithEmbeddings) == 0 {
 		return nil, fmt.Errorf("no articles have embeddings")
 	}
-	
+
 	// If we have fewer articles with embeddings than clusters, reduce cluster count
 	if numClusters > len(articlesWithEmbeddings) {
 		numClusters = len(articlesWithEmbeddings)
 	}
-	
+
 	embeddingDim := len(articlesWithEmbeddings[0].Embedding)
-	
+
 	// Initialize centroids randomly
 	centroids := k.initializeCentroids(articlesWithEmbeddings, numClusters, embeddingDim)
-	
+
 	var assignments []int
 	converged := false
-	
+
 	for iteration := 0; iteration < k.MaxIterations && !converged; iteration++ {
 		// Assign each article to the nearest centroid
 		newAssignments := make([]int, len(articlesWithEmbeddings))
 		for i, article := range articlesWithEmbeddings {
 			newAssignments[i] = k.findNearestCentroid(article.Embedding, centroids)
 		}
-		
+
 		// Check for convergence
 		if iteration > 0 {
 			converged = true
@@ -84,15 +84,15 @@ func (k *KMeansClusterer) Cluster(articles []core.Article, numClusters int) ([]c
 				}
 			}
 		}
-		
+
 		assignments = newAssignments
-		
+
 		if !converged {
 			// Update centroids
 			centroids = k.updateCentroids(articlesWithEmbeddings, assignments, numClusters, embeddingDim)
 		}
 	}
-	
+
 	// Create topic clusters
 	clusters := make([]core.TopicCluster, numClusters)
 	for i := range clusters {
@@ -104,27 +104,27 @@ func (k *KMeansClusterer) Cluster(articles []core.Article, numClusters int) ([]c
 			CreatedAt:  time.Now().UTC(),
 		}
 	}
-	
+
 	// Assign articles to clusters and calculate confidence scores
 	for i, article := range articlesWithEmbeddings {
 		clusterID := assignments[i]
 		clusters[clusterID].ArticleIDs = append(clusters[clusterID].ArticleIDs, article.ID)
-		
+
 		// Calculate confidence as inverse distance to centroid
 		distance := euclideanDistance(article.Embedding, centroids[clusterID])
 		confidence := 1.0 / (1.0 + distance) // Normalize to 0-1 range
-		
+
 		// Update the article with cluster assignment (this would need to be persisted)
 		article.TopicCluster = clusters[clusterID].ID
 		article.TopicConfidence = confidence
 	}
-	
+
 	// Generate topic labels based on article titles
 	for i := range clusters {
 		clusters[i].Label = k.generateTopicLabel(articlesWithEmbeddings, assignments, i)
 		clusters[i].Keywords = k.extractKeywords(articlesWithEmbeddings, assignments, i)
 	}
-	
+
 	return clusters, nil
 }
 
@@ -132,14 +132,14 @@ func (k *KMeansClusterer) Cluster(articles []core.Article, numClusters int) ([]c
 func (k *KMeansClusterer) initializeCentroids(articles []core.Article, numClusters, embeddingDim int) [][]float64 {
 	centroids := make([][]float64, numClusters)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	
+
 	// Use random articles as initial centroids
 	for i := 0; i < numClusters; i++ {
 		randomIndex := rng.Intn(len(articles))
 		centroids[i] = make([]float64, embeddingDim)
 		copy(centroids[i], articles[randomIndex].Embedding)
 	}
-	
+
 	return centroids
 }
 
@@ -147,7 +147,7 @@ func (k *KMeansClusterer) initializeCentroids(articles []core.Article, numCluste
 func (k *KMeansClusterer) findNearestCentroid(embedding []float64, centroids [][]float64) int {
 	minDistance := math.Inf(1)
 	nearestIndex := 0
-	
+
 	for i, centroid := range centroids {
 		distance := euclideanDistance(embedding, centroid)
 		if distance < minDistance {
@@ -155,7 +155,7 @@ func (k *KMeansClusterer) findNearestCentroid(embedding []float64, centroids [][
 			nearestIndex = i
 		}
 	}
-	
+
 	return nearestIndex
 }
 
@@ -163,12 +163,12 @@ func (k *KMeansClusterer) findNearestCentroid(embedding []float64, centroids [][
 func (k *KMeansClusterer) updateCentroids(articles []core.Article, assignments []int, numClusters, embeddingDim int) [][]float64 {
 	centroids := make([][]float64, numClusters)
 	counts := make([]int, numClusters)
-	
+
 	// Initialize centroids
 	for i := range centroids {
 		centroids[i] = make([]float64, embeddingDim)
 	}
-	
+
 	// Sum embeddings for each cluster
 	for i, article := range articles {
 		clusterID := assignments[i]
@@ -177,7 +177,7 @@ func (k *KMeansClusterer) updateCentroids(articles []core.Article, assignments [
 			centroids[clusterID][j] += article.Embedding[j]
 		}
 	}
-	
+
 	// Average the sums
 	for i := range centroids {
 		if counts[i] > 0 {
@@ -186,7 +186,7 @@ func (k *KMeansClusterer) updateCentroids(articles []core.Article, assignments [
 			}
 		}
 	}
-	
+
 	return centroids
 }
 
@@ -198,11 +198,11 @@ func (k *KMeansClusterer) generateTopicLabel(articles []core.Article, assignment
 			clusterArticles = append(clusterArticles, articles[i])
 		}
 	}
-	
+
 	if len(clusterArticles) == 0 {
 		return fmt.Sprintf("Empty Cluster %d", clusterID+1)
 	}
-	
+
 	// Simple approach: find common words in titles
 	wordCounts := make(map[string]int)
 	for _, article := range clusterArticles {
@@ -213,7 +213,7 @@ func (k *KMeansClusterer) generateTopicLabel(articles []core.Article, assignment
 			}
 		}
 	}
-	
+
 	// Find most common word
 	var mostCommonWord string
 	maxCount := 0
@@ -223,18 +223,18 @@ func (k *KMeansClusterer) generateTopicLabel(articles []core.Article, assignment
 			mostCommonWord = word
 		}
 	}
-	
+
 	if mostCommonWord != "" {
 		return fmt.Sprintf("%s & Related", mostCommonWord)
 	}
-	
+
 	return fmt.Sprintf("Topic %d", clusterID+1)
 }
 
 // extractKeywords extracts key terms from articles in a cluster
 func (k *KMeansClusterer) extractKeywords(articles []core.Article, assignments []int, clusterID int) []string {
 	wordCounts := make(map[string]int)
-	
+
 	for i, assignment := range assignments {
 		if assignment == clusterID {
 			// Extract words from title and first part of content
@@ -244,7 +244,7 @@ func (k *KMeansClusterer) extractKeywords(articles []core.Article, assignments [
 			} else {
 				words = append(words, extractWords(articles[i].CleanedText)...)
 			}
-			
+
 			for _, word := range words {
 				if len(word) > 3 {
 					wordCounts[word]++
@@ -252,7 +252,7 @@ func (k *KMeansClusterer) extractKeywords(articles []core.Article, assignments [
 			}
 		}
 	}
-	
+
 	// Sort words by frequency
 	type wordFreq struct {
 		word  string
@@ -262,11 +262,11 @@ func (k *KMeansClusterer) extractKeywords(articles []core.Article, assignments [
 	for word, count := range wordCounts {
 		sortedWords = append(sortedWords, wordFreq{word, count})
 	}
-	
+
 	sort.Slice(sortedWords, func(i, j int) bool {
 		return sortedWords[i].count > sortedWords[j].count
 	})
-	
+
 	// Return top 5 keywords
 	var keywords []string
 	for i, wf := range sortedWords {
@@ -275,7 +275,7 @@ func (k *KMeansClusterer) extractKeywords(articles []core.Article, assignments [
 		}
 		keywords = append(keywords, wf.word)
 	}
-	
+
 	return keywords
 }
 
@@ -284,13 +284,13 @@ func euclideanDistance(a, b []float64) float64 {
 	if len(a) != len(b) {
 		return math.Inf(1)
 	}
-	
+
 	var sum float64
 	for i := range a {
 		diff := a[i] - b[i]
 		sum += diff * diff
 	}
-	
+
 	return math.Sqrt(sum)
 }
 
@@ -300,7 +300,7 @@ func extractWords(text string) []string {
 	// to use a proper tokenizer and remove stop words
 	words := []string{}
 	word := ""
-	
+
 	for _, char := range text {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') {
 			word += string(char)
@@ -311,11 +311,11 @@ func extractWords(text string) []string {
 			}
 		}
 	}
-	
+
 	if len(word) > 0 {
 		words = append(words, word)
 	}
-	
+
 	return words
 }
 
@@ -324,20 +324,20 @@ func AutoDetectOptimalClusters(articles []core.Article, maxClusters int) (int, e
 	if len(articles) < 2 {
 		return 1, nil
 	}
-	
+
 	if maxClusters > len(articles) {
 		maxClusters = len(articles)
 	}
-	
+
 	clusterer := NewKMeansClusterer()
 	var wcss []float64 // Within-cluster sum of squares
-	
+
 	for k := 1; k <= maxClusters; k++ {
 		clusters, err := clusterer.Cluster(articles, k)
 		if err != nil {
 			continue
 		}
-		
+
 		// Calculate WCSS for this k
 		totalWCSS := 0.0
 		for _, cluster := range clusters {
@@ -352,28 +352,28 @@ func AutoDetectOptimalClusters(articles []core.Article, maxClusters int) (int, e
 				}
 			}
 		}
-		
+
 		wcss = append(wcss, totalWCSS)
 	}
-	
+
 	// Find elbow using simple heuristic
 	if len(wcss) < 3 {
 		return len(wcss), nil
 	}
-	
+
 	// Calculate rate of change
 	optimalK := 1
 	maxImprovement := 0.0
-	
+
 	for i := 1; i < len(wcss)-1; i++ {
 		improvement := wcss[i-1] - wcss[i]
 		diminishingReturn := wcss[i] - wcss[i+1]
-		
+
 		if improvement > maxImprovement && improvement > 2*diminishingReturn {
 			maxImprovement = improvement
 			optimalK = i + 1
 		}
 	}
-	
+
 	return optimalK, nil
 }

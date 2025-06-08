@@ -45,12 +45,22 @@ type AlertCondition struct {
 type AlertConditionType string
 
 const (
-	ConditionKeywordMatch   AlertConditionType = "keyword_match"
-	ConditionTopicEmergence AlertConditionType = "topic_emergence"
-	ConditionVolumeChange   AlertConditionType = "volume_change"
-	ConditionCostThreshold  AlertConditionType = "cost_threshold"
-	ConditionSentimentShift AlertConditionType = "sentiment_shift"
-	ConditionSourceFailure  AlertConditionType = "source_failure"
+	ConditionKeywordMatch         AlertConditionType = "keyword_match"
+	ConditionTopicEmergence       AlertConditionType = "topic_emergence"
+	ConditionVolumeChange         AlertConditionType = "volume_change"
+	ConditionCostThreshold        AlertConditionType = "cost_threshold"
+	ConditionSentimentShift       AlertConditionType = "sentiment_shift"
+	ConditionSourceFailure        AlertConditionType = "source_failure"
+	ConditionMarketImpact         AlertConditionType = "market_impact"
+	ConditionRegulatoryPolicy     AlertConditionType = "regulatory_policy"
+	ConditionLeadershipPersonnel  AlertConditionType = "leadership_personnel"
+	ConditionTechnologyDisruption AlertConditionType = "technology_disruption"
+	ConditionCompetitiveIntel     AlertConditionType = "competitive_intelligence"
+	ConditionGeographicImpact     AlertConditionType = "geographic_impact"
+	ConditionMultipleSource       AlertConditionType = "multiple_source"
+	ConditionSentimentExtreme     AlertConditionType = "sentiment_extreme"
+	ConditionTimeSensitive        AlertConditionType = "time_sensitive"
+	ConditionIndustryDisruption   AlertConditionType = "industry_disruption"
 )
 
 // Alert represents a triggered alert
@@ -135,16 +145,206 @@ func (am *AlertManager) addDefaultConditions() {
 		CreatedAt: time.Now(),
 	})
 
-	// Cost threshold
+	// Cost threshold (disabled for reader-focused digests)
 	am.conditions = append(am.conditions, AlertCondition{
 		ID:          "cost-threshold",
 		Name:        "Cost Threshold",
 		Description: "Alert when estimated processing costs exceed threshold",
 		Type:        ConditionCostThreshold,
 		Level:       AlertLevelWarning,
-		Enabled:     true,
+		Enabled:     false, // Disabled for readers
 		Config: map[string]interface{}{
 			"threshold_usd": 5.0, // $5 threshold
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Market Impact Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "market-impact",
+		Name:        "Market Impact",
+		Description: "Alert when articles mention significant market movements or financial disruptions",
+		Type:        ConditionMarketImpact,
+		Level:       AlertLevelWarning,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"keywords": []string{
+				"market crash", "stock plunge", "market volatility", "trading halt",
+				"sector decline", "bubble burst", "market correction", "bear market",
+				"recession", "economic downturn", "financial crisis", "currency collapse",
+				"interest rate hike", "fed raises rates", "inflation surge", "gdp decline",
+			},
+			"case_insensitive": true,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Regulatory & Policy Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "regulatory-policy",
+		Name:        "Regulatory & Policy Changes",
+		Description: "Alert when government policy changes or new regulations are announced",
+		Type:        ConditionRegulatoryPolicy,
+		Level:       AlertLevelWarning,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"keywords": []string{
+				"new regulation", "policy change", "compliance deadline", "government announcement",
+				"regulatory approval", "sanctions", "new law", "legal requirement",
+				"antitrust", "privacy regulation", "data protection", "tax reform",
+				"trade policy", "import ban", "export restriction", "regulatory framework",
+			},
+			"case_insensitive": true,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Leadership & Personnel Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "leadership-personnel",
+		Name:        "Leadership & Personnel Changes",
+		Description: "Alert when significant leadership changes or key appointments occur",
+		Type:        ConditionLeadershipPersonnel,
+		Level:       AlertLevelInfo,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"keywords": []string{
+				"ceo resigns", "ceo steps down", "new ceo", "chief executive",
+				"cto appointed", "cfo leaves", "founder departs", "president resigns",
+				"board member", "executive team", "leadership change", "succession",
+				"interim ceo", "acting ceo", "new chief", "executive appointment",
+			},
+			"case_insensitive": true,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Technology Disruption Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "technology-disruption",
+		Name:        "Technology Disruption",
+		Description: "Alert when breakthrough technologies or major tech changes are announced",
+		Type:        ConditionTechnologyDisruption,
+		Level:       AlertLevelInfo,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"keywords": []string{
+				"breakthrough", "game changer", "revolutionary technology", "paradigm shift",
+				"obsolete", "deprecated", "major update", "next generation",
+				"artificial intelligence", "quantum computing", "blockchain revolution",
+				"autonomous vehicles", "gene editing", "renewable energy breakthrough",
+			},
+			"case_insensitive": true,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Competitive Intelligence Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "competitive-intelligence",
+		Name:        "Competitive Intelligence",
+		Description: "Alert when partnerships, acquisitions, or competitive moves are announced",
+		Type:        ConditionCompetitiveIntel,
+		Level:       AlertLevelInfo,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"keywords": []string{
+				"strategic partnership", "acquires", "acquisition", "merger", "joint venture",
+				"strategic alliance", "partnership agreement", "collaboration",
+				"competitor", "market share", "competitive advantage", "buyout",
+				"hostile takeover", "spinoff", "divestiture", "strategic investment",
+			},
+			"case_insensitive": true,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Geographic Impact Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "geographic-impact",
+		Name:        "Geographic Impact",
+		Description: "Alert when natural disasters or geopolitical events affect business operations",
+		Type:        ConditionGeographicImpact,
+		Level:       AlertLevelWarning,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"keywords": []string{
+				"earthquake", "hurricane", "tsunami", "flood", "wildfire",
+				"supply chain disruption", "trade war", "border closure", "embargo",
+				"natural disaster", "geopolitical crisis", "war", "conflict",
+				"political instability", "coup", "election results", "diplomatic crisis",
+			},
+			"case_insensitive": true,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Time-Sensitive Content Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "time-sensitive",
+		Name:        "Time-Sensitive Content",
+		Description: "Alert when articles mention deadlines, urgent timelines, or expiring opportunities",
+		Type:        ConditionTimeSensitive,
+		Level:       AlertLevelWarning,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"keywords": []string{
+				"deadline", "expires", "last chance", "urgent", "time-sensitive",
+				"final call", "limited time", "expires soon", "act now",
+				"closing date", "registration deadline", "submission deadline",
+				"offer expires", "window closing", "time running out",
+			},
+			"case_insensitive": true,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Industry Disruption Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "industry-disruption",
+		Name:        "Industry Disruption",
+		Description: "Alert when major industry changes or business model shifts occur",
+		Type:        ConditionIndustryDisruption,
+		Level:       AlertLevelCritical,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"keywords": []string{
+				"industry disruption", "business model", "transforms industry",
+				"changes everything", "industry revolution", "disruptive innovation",
+				"market transformation", "new business model", "industry shift",
+				"digital transformation", "industry overhaul", "reimagining",
+			},
+			"case_insensitive": true,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Multiple Source Validation Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "multiple-source",
+		Name:        "Multiple Source Validation",
+		Description: "Alert when the same story is reported by multiple sources (indicates high importance)",
+		Type:        ConditionMultipleSource,
+		Level:       AlertLevelInfo,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"min_sources":          3,   // Minimum number of sources
+			"similarity_threshold": 0.7, // Topic similarity threshold
+		},
+		CreatedAt: time.Now(),
+	})
+
+	// Sentiment Extremes Alerts
+	am.conditions = append(am.conditions, AlertCondition{
+		ID:          "sentiment-extreme",
+		Name:        "Sentiment Extremes",
+		Description: "Alert when articles have extremely positive or negative sentiment",
+		Type:        ConditionSentimentExtreme,
+		Level:       AlertLevelInfo,
+		Enabled:     true,
+		Config: map[string]interface{}{
+			"positive_threshold": 0.8,  // Very positive sentiment threshold
+			"negative_threshold": -0.8, // Very negative sentiment threshold
 		},
 		CreatedAt: time.Now(),
 	})
@@ -272,6 +472,26 @@ func (am *AlertManager) evaluateCondition(condition AlertCondition, ctx AlertCon
 		return am.checkVolumeChange(condition, ctx)
 	case ConditionCostThreshold:
 		return am.checkCostThreshold(condition, ctx)
+	case ConditionMarketImpact:
+		return am.checkKeywordMatch(condition, ctx)
+	case ConditionRegulatoryPolicy:
+		return am.checkKeywordMatch(condition, ctx)
+	case ConditionLeadershipPersonnel:
+		return am.checkKeywordMatch(condition, ctx)
+	case ConditionTechnologyDisruption:
+		return am.checkKeywordMatch(condition, ctx)
+	case ConditionCompetitiveIntel:
+		return am.checkKeywordMatch(condition, ctx)
+	case ConditionGeographicImpact:
+		return am.checkKeywordMatch(condition, ctx)
+	case ConditionTimeSensitive:
+		return am.checkKeywordMatch(condition, ctx)
+	case ConditionIndustryDisruption:
+		return am.checkKeywordMatch(condition, ctx)
+	case ConditionMultipleSource:
+		return am.checkMultipleSource(condition, ctx)
+	case ConditionSentimentExtreme:
+		return am.checkSentimentExtreme(condition, ctx)
 	default:
 		return nil
 	}
@@ -433,6 +653,141 @@ func (am *AlertManager) checkCostThreshold(condition AlertCondition, ctx AlertCo
 	return nil
 }
 
+// checkMultipleSource evaluates multiple source validation conditions
+func (am *AlertManager) checkMultipleSource(condition AlertCondition, ctx AlertContext) *Alert {
+	minSources, _ := condition.Config["min_sources"].(int)
+	if minSources == 0 {
+		minSources = 3
+	}
+
+	// Group articles by similar topics/keywords
+	topicGroups := make(map[string][]string)
+
+	for _, article := range ctx.Articles {
+		// Extract key terms from title for grouping
+		title := strings.ToLower(article.Title)
+		words := strings.Fields(title)
+
+		// Create topic signature from meaningful words
+		var topicWords []string
+		for _, word := range words {
+			if len(word) > 3 && !isCommonWord(word) {
+				topicWords = append(topicWords, word)
+			}
+		}
+
+		if len(topicWords) > 0 {
+			// Use first few words as topic signature
+			topicKey := strings.Join(topicWords[:min(len(topicWords), 3)], " ")
+			topicGroups[topicKey] = append(topicGroups[topicKey], article.Title)
+		}
+	}
+
+	// Check if any topic appears in multiple articles from different sources
+	for topic, articles := range topicGroups {
+		if len(articles) >= minSources {
+			alert := &Alert{
+				ID:          fmt.Sprintf("multiple-source-%d", time.Now().Unix()),
+				ConditionID: condition.ID,
+				Level:       condition.Level,
+				Title:       "Multiple Source Validation",
+				Message:     fmt.Sprintf("Story covered by %d sources: %s", len(articles), topic),
+				Context: map[string]interface{}{
+					"topic":            topic,
+					"source_count":     len(articles),
+					"matched_articles": articles,
+				},
+				TriggeredAt: time.Now(),
+			}
+			return alert
+		}
+	}
+
+	return nil
+}
+
+// checkSentimentExtreme evaluates sentiment extreme conditions
+func (am *AlertManager) checkSentimentExtreme(condition AlertCondition, ctx AlertContext) *Alert {
+	positiveThreshold, _ := condition.Config["positive_threshold"].(float64)
+	if positiveThreshold == 0 {
+		positiveThreshold = 0.8
+	}
+
+	negativeThreshold, _ := condition.Config["negative_threshold"].(float64)
+	if negativeThreshold == 0 {
+		negativeThreshold = -0.8
+	}
+
+	var extremeArticles []string
+	var sentimentType string
+	var averageScore float64
+	var count int
+
+	for _, article := range ctx.Articles {
+		// Check if article has sentiment score (this would come from sentiment analysis)
+		// For now, we'll check if the article object has sentiment fields
+		if article.Title != "" { // Placeholder - in real implementation, check article.SentimentScore
+			// This is a simplified check - in practice, you'd get sentiment from the article
+			// For demonstration, we'll trigger on certain emotional keywords
+			title := strings.ToLower(article.Title)
+			content := strings.ToLower(article.CleanedText)
+
+			// Check for extremely positive indicators
+			positiveWords := []string{"amazing", "incredible", "revolutionary", "breakthrough", "spectacular", "outstanding"}
+			negativeWords := []string{"catastrophic", "devastating", "disaster", "crisis", "collapse", "failure"}
+
+			for _, word := range positiveWords {
+				if strings.Contains(title, word) || strings.Contains(content, word) {
+					extremeArticles = append(extremeArticles, article.Title)
+					sentimentType = "extremely positive"
+					averageScore += positiveThreshold
+					count++
+					break
+				}
+			}
+
+			for _, word := range negativeWords {
+				if strings.Contains(title, word) || strings.Contains(content, word) {
+					extremeArticles = append(extremeArticles, article.Title)
+					sentimentType = "extremely negative"
+					averageScore += negativeThreshold
+					count++
+					break
+				}
+			}
+		}
+	}
+
+	if count > 0 {
+		averageScore = averageScore / float64(count)
+		alert := &Alert{
+			ID:          fmt.Sprintf("sentiment-extreme-%d", time.Now().Unix()),
+			ConditionID: condition.ID,
+			Level:       condition.Level,
+			Title:       "Sentiment Extremes Detected",
+			Message:     fmt.Sprintf("%d articles with %s sentiment (avg: %.2f)", count, sentimentType, averageScore),
+			Context: map[string]interface{}{
+				"sentiment_type":   sentimentType,
+				"article_count":    count,
+				"average_score":    averageScore,
+				"matched_articles": extremeArticles,
+			},
+			TriggeredAt: time.Now(),
+		}
+		return alert
+	}
+
+	return nil
+}
+
+// min returns the smaller of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // AddCondition adds a new alert condition
 func (am *AlertManager) AddCondition(condition AlertCondition) {
 	am.conditions = append(am.conditions, condition)
@@ -523,4 +878,3 @@ func uniqueStrings(slice []string) []string {
 
 	return result
 }
-

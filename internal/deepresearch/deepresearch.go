@@ -25,10 +25,10 @@ type ResearchBrief struct {
 
 // DetailedFinding represents a specific finding from the research
 type DetailedFinding struct {
-	Topic       string `json:"topic"`
-	Content     string `json:"content"`
-	Citations   []int  `json:"citations"` // References to Sources array indices
-	Confidence  float64 `json:"confidence"`
+	Topic      string  `json:"topic"`
+	Content    string  `json:"content"`
+	Citations  []int   `json:"citations"` // References to Sources array indices
+	Confidence float64 `json:"confidence"`
 }
 
 // Source represents a research source with citation information
@@ -45,13 +45,13 @@ type Source struct {
 
 // ResearchConfig holds configuration for deep research operations
 type ResearchConfig struct {
-	MaxSources   int           `json:"max_sources"`
-	SinceTime    time.Duration `json:"since_time"`
-	Model        string        `json:"model"`
-	SearchProvider string      `json:"search_provider"`
-	UseJavaScript  bool         `json:"use_javascript"`
-	RefreshCache   bool         `json:"refresh_cache"`
-	OutputHTML     bool         `json:"output_html"`
+	MaxSources     int           `json:"max_sources"`
+	SinceTime      time.Duration `json:"since_time"`
+	Model          string        `json:"model"`
+	SearchProvider string        `json:"search_provider"`
+	UseJavaScript  bool          `json:"use_javascript"`
+	RefreshCache   bool          `json:"refresh_cache"`
+	OutputHTML     bool          `json:"output_html"`
 }
 
 // Planner interface defines the topic decomposition functionality

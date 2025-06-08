@@ -282,7 +282,7 @@ func TestMockProviderSearch(t *testing.T) {
 
 func TestMockProviderCustomization(t *testing.T) {
 	provider := NewMockProvider()
-	
+
 	// Test name customization
 	provider.SetName("CustomMock")
 	if provider.GetName() != "CustomMock" {
@@ -300,21 +300,21 @@ func TestMockProviderCustomization(t *testing.T) {
 			Rank:    1,
 		},
 	}
-	
+
 	provider.SetResults(customResults)
-	
+
 	ctx := context.Background()
 	config := Config{MaxResults: 5}
-	
+
 	results, err := provider.Search(ctx, "test", config)
 	if err != nil {
 		t.Fatalf("Expected no error from mock search, got %v", err)
 	}
-	
+
 	if len(results) != 1 {
 		t.Errorf("Expected 1 result, got %d", len(results))
 	}
-	
+
 	if results[0].Domain != "custom.com" {
 		t.Errorf("Expected domain to be 'custom.com', got %s", results[0].Domain)
 	}

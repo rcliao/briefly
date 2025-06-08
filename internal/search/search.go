@@ -10,7 +10,7 @@ import (
 type Provider interface {
 	// Search performs a search with configuration
 	Search(ctx context.Context, query string, config Config) ([]Result, error)
-	
+
 	// GetName returns the name of the search provider
 	GetName() string
 }
@@ -37,10 +37,10 @@ type Result struct {
 type ProviderType string
 
 const (
-	ProviderTypeDuckDuckGo     ProviderType = "duckduckgo"
-	ProviderTypeGoogle         ProviderType = "google"
-	ProviderTypeSerpAPI        ProviderType = "serpapi"
-	ProviderTypeMock           ProviderType = "mock"
+	ProviderTypeDuckDuckGo ProviderType = "duckduckgo"
+	ProviderTypeGoogle     ProviderType = "google"
+	ProviderTypeSerpAPI    ProviderType = "serpapi"
+	ProviderTypeMock       ProviderType = "mock"
 )
 
 // ProviderFactory creates search providers based on type and configuration
@@ -61,7 +61,7 @@ func (f *ProviderFactory) CreateProvider(providerType ProviderType, config map[s
 		if !exists {
 			return nil, ErrMissingAPIKey
 		}
-		searchID, exists := config["search_id"] 
+		searchID, exists := config["search_id"]
 		if !exists {
 			return nil, ErrMissingSearchID
 		}

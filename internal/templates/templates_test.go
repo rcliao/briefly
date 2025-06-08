@@ -183,7 +183,7 @@ func TestGroupArticlesByTopic(t *testing.T) {
 
 	expectedAvgConfidence := (0.9 + 0.8) / 2.0
 	tolerance := 0.000001
-	if math.Abs(techGroup.AvgConfidence - expectedAvgConfidence) > tolerance {
+	if math.Abs(techGroup.AvgConfidence-expectedAvgConfidence) > tolerance {
 		t.Errorf("Expected Technology group average confidence to be %.6f, got %.6f", expectedAvgConfidence, techGroup.AvgConfidence)
 	}
 
@@ -338,9 +338,9 @@ func TestTopicGroupCreation(t *testing.T) {
 func TestRenderInsightsSectionEmpty(t *testing.T) {
 	template := GetTemplate(FormatBrief)
 	digestItems := []render.DigestData{}
-	
+
 	result := renderInsightsSection(digestItems, template, "", "", "", []string{})
-	
+
 	if result != "" {
 		t.Errorf("Expected empty insights section for brief format, got: %s", result)
 	}
@@ -353,9 +353,9 @@ func TestRenderInsightsSectionWithData(t *testing.T) {
 		{SentimentLabel: "negative"},
 		{SentimentLabel: "positive"},
 	}
-	
+
 	result := renderInsightsSection(digestItems, template, "Overall positive sentiment", "No alerts", "Trending topics", []string{"AI research", "Tech trends"})
-	
+
 	if !strings.Contains(result, "## 🧠 AI-Powered Insights") {
 		t.Error("Expected insights section header")
 	}

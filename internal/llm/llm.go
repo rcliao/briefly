@@ -407,21 +407,34 @@ Please generate the Prompt Corner section:`, digestContent)
 	return string(content), nil
 }
 
-// GenerateDigestTitle creates a compelling title for a digest based on the content
+// GenerateDigestTitle creates a compelling Smart Headline for a digest based on the content
 func (c *Client) GenerateDigestTitle(digestContent string, format string) (string, error) {
 	if digestContent == "" {
 		return "", fmt.Errorf("cannot generate title for empty digest content")
 	}
 
-	// Create a prompt that asks for a compelling title based on the digest content
-	prompt := fmt.Sprintf(`Generate a compelling and concise title for the following digest content. The title MUST primarily reflect the core substance, main themes, and key insights of the digest. It should be engaging, informative, and under 80 characters. As a secondary consideration, ensure the tone aligns with a '%s' format style (e.g., Brief: direct; Standard: informative; Detailed: analytical; Newsletter: engaging/shareable).
+	// Create a prompt that asks for a compelling Smart Headline based on the digest content
+	prompt := fmt.Sprintf(`Generate a compelling Smart Headline for the following digest content. This headline will be the main title of the digest and should capture readers' attention while accurately representing the content.
+
+REQUIREMENTS:
+- Must be under 80 characters
+- Should capture the core themes, insights, or trends from the content
+- Be engaging and informative to encourage reading
+- Avoid generic words like "Update", "News", or "Summary"
+- Focus on the most impactful or surprising element from the content
+- Align with '%s' format style:
+  * Brief: Direct and action-oriented
+  * Standard: Clear and informative
+  * Detailed: Analytical and comprehensive
+  * Newsletter: Engaging and shareable
+  * Email: Personal and relevant
 
 DIGEST CONTENT:
 ---
 %s
 ---
 
-Generate only the title text, without any markdown formatting or additional text:`, format, digestContent)
+Generate only the Smart Headline text, without quotes or additional formatting:`, format, digestContent)
 
 	ctx := context.Background()
 	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
@@ -446,7 +459,7 @@ Generate only the title text, without any markdown formatting or additional text
 	return titleStr, nil
 }
 
-// GenerateDigestTitle creates a compelling title for a digest based on the content
+// GenerateDigestTitle creates a compelling Smart Headline for a digest based on the content
 // It uses the GEMINI_API_KEY environment variable and the default model.
 func GenerateDigestTitle(digestContent string, format string) (string, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
@@ -463,15 +476,28 @@ func GenerateDigestTitle(digestContent string, format string) (string, error) {
 
 	model := client.GenerativeModel(DefaultModel)
 
-	// Create a prompt that asks for a compelling title based on the digest content
-	prompt := fmt.Sprintf(`Generate a compelling and concise title for the following digest content. The title MUST primarily reflect the core substance, main themes, and key insights of the digest. It should be engaging, informative, and under 80 characters. As a secondary consideration, ensure the tone aligns with a '%s' format style (e.g., Brief: direct; Standard: informative; Detailed: analytical; Newsletter: engaging/shareable).
+	// Create a prompt that asks for a compelling Smart Headline based on the digest content
+	prompt := fmt.Sprintf(`Generate a compelling Smart Headline for the following digest content. This headline will be the main title of the digest and should capture readers' attention while accurately representing the content.
+
+REQUIREMENTS:
+- Must be under 80 characters
+- Should capture the core themes, insights, or trends from the content
+- Be engaging and informative to encourage reading
+- Avoid generic words like "Update", "News", or "Summary"
+- Focus on the most impactful or surprising element from the content
+- Align with '%s' format style:
+  * Brief: Direct and action-oriented
+  * Standard: Clear and informative
+  * Detailed: Analytical and comprehensive
+  * Newsletter: Engaging and shareable
+  * Email: Personal and relevant
 
 DIGEST CONTENT:
 ---
 %s
 ---
 
-Generate only the title text, without any markdown formatting or additional text:`, format, digestContent)
+Generate only the Smart Headline text, without quotes or additional formatting:`, format, digestContent)
 
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {

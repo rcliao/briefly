@@ -1,8 +1,8 @@
 package fetch
 
 import (
-	"bufio"
 	"briefly/internal/core"
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -77,7 +77,7 @@ func ReadLinksFromFile(filePath string) ([]core.Link, error) {
 			links = append(links, core.Link{
 				ID:        uuid.NewString(),
 				URL:       textURL,
-				DateAdded: time.Now().UTC(), // Use UTC for consistency
+				DateAdded: time.Now().UTC(),   // Use UTC for consistency
 				Source:    "file:" + filePath, // More specific source
 			})
 		}
@@ -139,7 +139,7 @@ func extractTitle(htmlContent string, sourceURL string) string {
 	if ogTitle != "" {
 		return strings.TrimSpace(ogTitle)
 	}
-	
+
 	// Fallback to h1
 	h1Title := doc.Find("h1").First().Text()
 	if h1Title != "" {
@@ -165,12 +165,12 @@ func ParseArticleContent(article *core.Article) error {
 	// Remove common non-content elements
 	// This list is similar to the one in main.go, can be expanded.
 	doc.Find("script, style, nav, footer, header, aside, form, iframe, noscript, .sidebar, #sidebar, .ad, .advertisement, .popup, .modal, .cookie-banner").Remove()
-	
+
 	// Attempt to find main content using common selectors (inspired by main.go)
 	var textBuilder strings.Builder
 	mainContentSelectors := []string{
 		"article", "main", ".main-content", ".entry-content", ".post-content", ".post-body", ".article-body", // Common semantic tags and classes
-		"[role='main']",                                                                                      // ARIA role
+		"[role='main']",        // ARIA role
 		".content", "#content", // Generic content containers
 		// Add more specific selectors if common patterns are observed in target sites
 	}
@@ -186,7 +186,7 @@ func ParseArticleContent(article *core.Article) error {
 		})
 		if textBuilder.Len() > 0 {
 			foundMainContent = true
-			break 
+			break
 		}
 	}
 
@@ -197,7 +197,7 @@ func ParseArticleContent(article *core.Article) error {
 			textBuilder.WriteString("\\n\\n")
 		})
 	}
-	
+
 	fullText := textBuilder.String()
 
 	// Basic cleaning:
@@ -222,7 +222,6 @@ func ParseArticleContent(article *core.Article) error {
 			article.Title = strings.Join(words, " ")
 		}
 	}
-
 
 	if strings.TrimSpace(article.CleanedText) == "" {
 		// It's not necessarily an error if no text is extracted, could be a non-article page.

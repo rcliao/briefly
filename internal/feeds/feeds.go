@@ -170,15 +170,15 @@ func (fm *FeedManager) parseRSS(rss RSS, feedURL string) *ParsedFeed {
 	var items []core.FeedItem
 	for _, item := range rss.Channel.Items {
 		feedItem := core.FeedItem{
-			ID:              generateItemID(feed.ID, item.Link),
-			FeedID:          feed.ID,
-			Title:           item.Title,
-			Link:            item.Link,
-			Description:     item.Description,
-			GUID:            item.GUID,
-			Published:       parseRSSDate(item.PubDate),
-			DateDiscovered:  time.Now().UTC(),
-			Processed:       false,
+			ID:             generateItemID(feed.ID, item.Link),
+			FeedID:         feed.ID,
+			Title:          item.Title,
+			Link:           item.Link,
+			Description:    item.Description,
+			GUID:           item.GUID,
+			Published:      parseRSSDate(item.PubDate),
+			DateDiscovered: time.Now().UTC(),
+			Processed:      false,
 		}
 		items = append(items, feedItem)
 	}
@@ -212,15 +212,15 @@ func (fm *FeedManager) parseAtom(atom Atom, feedURL string) *ParsedFeed {
 		}
 
 		feedItem := core.FeedItem{
-			ID:              generateItemID(feed.ID, link),
-			FeedID:          feed.ID,
-			Title:           entry.Title,
-			Link:            link,
-			Description:     entry.Summary,
-			GUID:            entry.ID,
-			Published:       parseAtomDate(entry.Published),
-			DateDiscovered:  time.Now().UTC(),
-			Processed:       false,
+			ID:             generateItemID(feed.ID, link),
+			FeedID:         feed.ID,
+			Title:          entry.Title,
+			Link:           link,
+			Description:    entry.Summary,
+			GUID:           entry.ID,
+			Published:      parseAtomDate(entry.Published),
+			DateDiscovered: time.Now().UTC(),
+			Processed:      false,
 		}
 		items = append(items, feedItem)
 	}

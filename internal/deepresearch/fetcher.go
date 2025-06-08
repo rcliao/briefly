@@ -29,12 +29,12 @@ func (f *BasicFetcher) FetchArticle(ctx context.Context, link *core.Link) (*core
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Clean the article HTML
 	if err := fetch.CleanArticleHTML(&article); err != nil {
 		return nil, fmt.Errorf("failed to clean article HTML: %w", err)
 	}
-	
+
 	return &article, nil
 }
 
@@ -93,12 +93,12 @@ func (f *ResearchContentFetcher) FetchContent(ctx context.Context, url string, u
 func (f *ResearchContentFetcher) enhanceForResearch(article *core.Article) error {
 	// Clean up text for better research quality
 	article.CleanedText = f.cleanTextForResearch(article.CleanedText)
-	
+
 	// Ensure we have a title
 	if article.Title == "" {
 		article.Title = f.extractTitleFromContent(article.CleanedText)
 	}
-	
+
 	return nil
 }
 
@@ -106,10 +106,10 @@ func (f *ResearchContentFetcher) enhanceForResearch(article *core.Article) error
 func (f *ResearchContentFetcher) cleanTextForResearch(text string) string {
 	// Remove common boilerplate text that appears in articles
 	cleanText := text
-	
+
 	// Remove navigation elements, cookie notices, etc.
 	// This is a simplified version - could be enhanced with more sophisticated cleaning
-	
+
 	// Remove very short lines (likely navigation or ads)
 	lines := make([]string, 0)
 	for _, line := range splitLines(cleanText) {
@@ -117,7 +117,7 @@ func (f *ResearchContentFetcher) cleanTextForResearch(text string) string {
 			lines = append(lines, line)
 		}
 	}
-	
+
 	return joinLines(lines)
 }
 
@@ -136,7 +136,7 @@ func (f *ResearchContentFetcher) extractTitleFromContent(content string) string 
 func splitLines(text string) []string {
 	var lines []string
 	var current string
-	
+
 	for _, char := range text {
 		if char == '\n' {
 			if current != "" {
@@ -147,11 +147,11 @@ func splitLines(text string) []string {
 			current += string(char)
 		}
 	}
-	
+
 	if current != "" {
 		lines = append(lines, current)
 	}
-	
+
 	return lines
 }
 

@@ -52,58 +52,58 @@ func TestEstimateTokenCount(t *testing.T) {
 
 func TestEstimateArticleLength(t *testing.T) {
 	tests := []struct {
-		name         string
-		url          string
+		name          string
+		url           string
 		expectedWords int
 	}{
 		{
-			name:         "twitter URL",
-			url:          "https://twitter.com/user/status/123",
+			name:          "twitter URL",
+			url:           "https://twitter.com/user/status/123",
 			expectedWords: 50,
 		},
 		{
-			name:         "x.com URL",
-			url:          "https://x.com/user/status/123",
+			name:          "x.com URL",
+			url:           "https://x.com/user/status/123",
 			expectedWords: 50,
 		},
 		{
-			name:         "github URL",
-			url:          "https://github.com/user/repo",
+			name:          "github URL",
+			url:           "https://github.com/user/repo",
 			expectedWords: 300,
 		},
 		{
-			name:         "hacker news URL",
-			url:          "https://news.ycombinator.com/item?id=123",
+			name:          "hacker news URL",
+			url:           "https://news.ycombinator.com/item?id=123",
 			expectedWords: 100,
 		},
 		{
-			name:         "medium article",
-			url:          "https://medium.com/@author/article-title",
+			name:          "medium article",
+			url:           "https://medium.com/@author/article-title",
 			expectedWords: 1200,
 		},
 		{
-			name:         "substack post",
-			url:          "https://newsletter.substack.com/p/post-title",
+			name:          "substack post",
+			url:           "https://newsletter.substack.com/p/post-title",
 			expectedWords: 1200,
 		},
 		{
-			name:         "blog post",
-			url:          "https://example.com/blog/post-title",
+			name:          "blog post",
+			url:           "https://example.com/blog/post-title",
 			expectedWords: 800,
 		},
 		{
-			name:         "arxiv paper",
-			url:          "https://arxiv.org/abs/2301.00000",
+			name:          "arxiv paper",
+			url:           "https://arxiv.org/abs/2301.00000",
 			expectedWords: 2000,
 		},
 		{
-			name:         "documentation",
-			url:          "https://docs.example.com/api",
+			name:          "documentation",
+			url:           "https://docs.example.com/api",
 			expectedWords: 600,
 		},
 		{
-			name:         "generic URL",
-			url:          "https://example.com/some-article",
+			name:          "generic URL",
+			url:           "https://example.com/some-article",
 			expectedWords: 700,
 		},
 	}
@@ -328,6 +328,6 @@ func TestRateLimitWarning(t *testing.T) {
 	if estimate.ProcessingTimeMinutes <= 0 {
 		t.Errorf("Expected positive processing time, got %f", estimate.ProcessingTimeMinutes)
 	}
-	
+
 	// Test can pass with or without warning since rate limiting depends on exact timing calculation
 }

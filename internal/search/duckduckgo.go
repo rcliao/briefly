@@ -47,40 +47,40 @@ func (d *DuckDuckGoProvider) Search(ctx context.Context, query string, config Co
 
 	// Build search URL
 	searchURL := d.buildSearchURL(query, config)
-	
+
 	// Create request with context
 	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("User-Agent", d.userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 	req.Header.Set("DNT", "1")
-	
+
 	// Execute request
 	resp, err := d.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute search request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("search request failed with status: %d", resp.StatusCode)
 	}
-	
+
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-	
+
 	// Parse results from HTML
 	results := d.parseSearchResults(string(body), config.MaxResults)
-	
+
 	logger.Info("DuckDuckGo search completed", "query", query, "results_found", len(results))
-	
+
 	return results, nil
 }
 
@@ -88,7 +88,7 @@ func (d *DuckDuckGoProvider) Search(ctx context.Context, query string, config Co
 func (d *DuckDuckGoProvider) buildSearchURL(query string, config Config) string {
 	baseURL := "https://duckduckgo.com/html/"
 	params := url.Values{}
-	
+
 	// Add time filter if specified
 	if config.SinceTime > 0 {
 		days := int(config.SinceTime.Hours() / 24)
@@ -96,66 +96,66 @@ func (d *DuckDuckGoProvider) buildSearchURL(query string, config Config) string 
 		case days <= 1:
 			params.Set("df", "d") // Past day
 		case days <= 7:
-			params.Set("df", "w") // Past week  
+			params.Set("df", "w") // Past week
 		case days <= 30:
 			params.Set("df", "m") // Past month
 		case days <= 365:
 			params.Set("df", "y") // Past year
 		}
 	}
-	
+
 	params.Set("q", query)
-	params.Set("b", "0") // Start from first result
+	params.Set("b", "0")      // Start from first result
 	params.Set("kl", "us-en") // Language/region
-	params.Set("s", "0") // Safe search off
-	
+	params.Set("s", "0")      // Safe search off
+
 	return baseURL + "?" + params.Encode()
 }
 
 // parseSearchResults extracts search results from DuckDuckGo HTML response
 func (d *DuckDuckGoProvider) parseSearchResults(html string, maxResults int) []Result {
 	var results []Result
-	
+
 	// Regular expressions for parsing DuckDuckGo HTML results
 	// Note: These patterns may need adjustment if DuckDuckGo changes their HTML structure
 	resultPattern := regexp.MustCompile(`<div class="result[^"]*"[^>]*>(.*?)</div>`)
 	titlePattern := regexp.MustCompile(`<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>`)
 	snippetPattern := regexp.MustCompile(`<a[^>]*class="result__snippet"[^>]*>(.*?)</a>`)
-	
+
 	resultMatches := resultPattern.FindAllStringSubmatch(html, -1)
-	
+
 	for i, match := range resultMatches {
 		if i >= maxResults {
 			break
 		}
-		
+
 		resultHTML := match[1]
-		
+
 		// Extract title and URL
 		titleMatch := titlePattern.FindStringSubmatch(resultHTML)
 		if len(titleMatch) < 3 {
 			continue
 		}
-		
+
 		rawURL := titleMatch[1]
 		title := d.cleanHTMLText(titleMatch[2])
-		
+
 		// Extract snippet
 		snippetMatch := snippetPattern.FindStringSubmatch(resultHTML)
 		snippet := ""
 		if len(snippetMatch) >= 2 {
 			snippet = d.cleanHTMLText(snippetMatch[1])
 		}
-		
+
 		// Decode URL (DuckDuckGo uses redirect URLs)
 		finalURL := d.extractFinalURL(rawURL)
 		if finalURL == "" {
 			continue
 		}
-		
+
 		// Extract domain
 		domain := d.extractDomain(finalURL)
-		
+
 		result := Result{
 			URL:     finalURL,
 			Title:   title,
@@ -164,10 +164,10 @@ func (d *DuckDuckGoProvider) parseSearchResults(html string, maxResults int) []R
 			Source:  "DuckDuckGo",
 			Rank:    i + 1,
 		}
-		
+
 		results = append(results, result)
 	}
-	
+
 	return results
 }
 
@@ -179,7 +179,7 @@ func (d *DuckDuckGoProvider) extractFinalURL(redirectURL string) string {
 		if err != nil {
 			return ""
 		}
-		
+
 		uddg := parsed.Query().Get("uddg")
 		if uddg != "" {
 			decoded, err := url.QueryUnescape(uddg)
@@ -189,12 +189,12 @@ func (d *DuckDuckGoProvider) extractFinalURL(redirectURL string) string {
 			return decoded
 		}
 	}
-	
+
 	// If it's already a full URL, return as-is
 	if strings.HasPrefix(redirectURL, "http") {
 		return redirectURL
 	}
-	
+
 	return ""
 }
 
@@ -204,11 +204,11 @@ func (d *DuckDuckGoProvider) extractDomain(urlStr string) string {
 	if err != nil {
 		return ""
 	}
-	
+
 	domain := parsed.Hostname()
 	// Remove www. prefix
 	domain = strings.TrimPrefix(domain, "www.")
-	
+
 	return domain
 }
 
@@ -217,7 +217,7 @@ func (d *DuckDuckGoProvider) cleanHTMLText(text string) string {
 	// Remove HTML tags
 	tagPattern := regexp.MustCompile(`<[^>]*>`)
 	text = tagPattern.ReplaceAllString(text, "")
-	
+
 	// Decode common HTML entities
 	text = strings.ReplaceAll(text, "&amp;", "&")
 	text = strings.ReplaceAll(text, "&lt;", "<")
@@ -225,10 +225,10 @@ func (d *DuckDuckGoProvider) cleanHTMLText(text string) string {
 	text = strings.ReplaceAll(text, "&quot;", "\"")
 	text = strings.ReplaceAll(text, "&#39;", "'")
 	text = strings.ReplaceAll(text, "&nbsp;", " ")
-	
+
 	// Clean up whitespace
 	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
 	text = strings.TrimSpace(text)
-	
+
 	return text
 }
