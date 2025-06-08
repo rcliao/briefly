@@ -319,3 +319,362 @@ func TestMockProviderCustomization(t *testing.T) {
 		t.Errorf("Expected domain to be 'custom.com', got %s", results[0].Domain)
 	}
 }
+
+// Test LegacyProviderAdapter functionality
+
+type mockLegacyProvider struct {
+	name    string
+	results []LegacySearchResult
+}
+
+func (m *mockLegacyProvider) Search(query string, maxResults int) ([]LegacySearchResult, error) {
+	if len(m.results) == 0 {
+		return []LegacySearchResult{
+			{
+				Title:       "Legacy Result 1: " + query,
+				URL:         "https://legacy.example.com/1",
+				Snippet:     "Legacy snippet for " + query,
+				Source:      "legacy.example.com",
+				PublishedAt: "2024-01-01",
+				Rank:        1,
+			},
+			{
+				Title:       "Legacy Result 2: " + query,
+				URL:         "https://legacy.example.com/2",
+				Snippet:     "Another legacy snippet",
+				Source:      "legacy.example.com",
+				PublishedAt: "2024-01-02",
+				Rank:        2,
+			},
+		}, nil
+	}
+	
+	// Return limited results based on maxResults
+	if maxResults < len(m.results) {
+		return m.results[:maxResults], nil
+	}
+	return m.results, nil
+}
+
+func (m *mockLegacyProvider) GetName() string {
+	return m.name
+}
+
+func TestLegacyProviderAdapter(t *testing.T) {
+	adapter := NewLegacyProviderAdapter(NewMockProvider())
+
+	if adapter == nil {
+		t.Fatal("Expected non-nil adapter")
+	}
+
+	// Test search functionality
+	results, err := adapter.Search("test query", 2)
+	if err != nil {
+		t.Fatalf("Expected no error from adapter search, got %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("Expected 2 results, got %d", len(results))
+	}
+
+	// Check result format conversion
+	for _, result := range results {
+		if result.Title == "" {
+			t.Error("Expected non-empty title")
+		}
+		if result.URL == "" {
+			t.Error("Expected non-empty URL")
+		}
+		if result.Snippet == "" {
+			t.Error("Expected non-empty snippet")
+		}
+		if result.Source == "" {
+			t.Error("Expected non-empty source")
+		}
+		if result.Rank <= 0 {
+			t.Error("Expected positive rank")
+		}
+	}
+
+	// Test name passthrough
+	if adapter.GetName() != "Mock" {
+		t.Errorf("Expected adapter name to be 'Mock', got %s", adapter.GetName())
+	}
+}
+
+func TestModernProviderAdapter(t *testing.T) {
+	legacyProvider := &mockLegacyProvider{name: "MockLegacy"}
+	adapter := NewModernProviderAdapter(legacyProvider)
+
+	if adapter == nil {
+		t.Fatal("Expected non-nil adapter")
+	}
+
+	// Test search functionality
+	ctx := context.Background()
+	config := Config{
+		MaxResults: 2,
+		Language:   "en",
+	}
+
+	results, err := adapter.Search(ctx, "test query", config)
+	if err != nil {
+		t.Fatalf("Expected no error from adapter search, got %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("Expected 2 results, got %d", len(results))
+	}
+
+	// Check result format conversion
+	for i, result := range results {
+		if result.Title == "" {
+			t.Error("Expected non-empty title")
+		}
+		if result.URL == "" {
+			t.Error("Expected non-empty URL")
+		}
+		if result.Snippet == "" {
+			t.Error("Expected non-empty snippet")
+		}
+		if result.Domain == "" {
+			t.Error("Expected non-empty domain")
+		}
+		if result.Source != "MockLegacy" {
+			t.Errorf("Expected source to be 'MockLegacy', got %s", result.Source)
+		}
+		if result.Rank != i+1 {
+			t.Errorf("Expected rank %d, got %d", i+1, result.Rank)
+		}
+		if result.PublishedAt.IsZero() {
+			t.Error("Expected non-zero published date")
+		}
+	}
+
+	// Test name passthrough
+	if adapter.GetName() != "MockLegacy" {
+		t.Errorf("Expected adapter name to be 'MockLegacy', got %s", adapter.GetName())
+	}
+}
+
+func TestModernProviderAdapter_InvalidDate(t *testing.T) {
+	legacyProvider := &mockLegacyProvider{
+		name: "MockLegacy",
+		results: []LegacySearchResult{
+			{
+				Title:       "Test Result",
+				URL:         "https://example.com",
+				Snippet:     "Test snippet",
+				Source:      "example.com",
+				PublishedAt: "invalid-date",
+				Rank:        1,
+			},
+		},
+	}
+	adapter := NewModernProviderAdapter(legacyProvider)
+
+	ctx := context.Background()
+	config := Config{MaxResults: 1}
+
+	results, err := adapter.Search(ctx, "test", config)
+	if err != nil {
+		t.Fatalf("Expected no error from adapter search, got %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(results))
+	}
+
+	// Should handle invalid date gracefully with zero time
+	if !results[0].PublishedAt.IsZero() {
+		t.Error("Expected zero time for invalid date")
+	}
+}
+
+func TestModernProviderAdapter_EmptyDate(t *testing.T) {
+	legacyProvider := &mockLegacyProvider{
+		name: "MockLegacy",
+		results: []LegacySearchResult{
+			{
+				Title:       "Test Result",
+				URL:         "https://example.com",
+				Snippet:     "Test snippet",
+				Source:      "example.com",
+				PublishedAt: "",
+				Rank:        1,
+			},
+		},
+	}
+	adapter := NewModernProviderAdapter(legacyProvider)
+
+	ctx := context.Background()
+	config := Config{MaxResults: 1}
+
+	results, err := adapter.Search(ctx, "test", config)
+	if err != nil {
+		t.Fatalf("Expected no error from adapter search, got %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(results))
+	}
+
+	// Should handle empty date gracefully with zero time
+	if !results[0].PublishedAt.IsZero() {
+		t.Error("Expected zero time for empty date")
+	}
+}
+
+func TestLegacyProviderAdapter_MaxResultsLimiting(t *testing.T) {
+	adapter := NewLegacyProviderAdapter(NewMockProvider())
+
+	// Test with smaller max results than provider returns
+	results, err := adapter.Search("test", 1)
+	if err != nil {
+		t.Fatalf("Expected no error from adapter search, got %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Errorf("Expected 1 result when maxResults=1, got %d", len(results))
+	}
+}
+
+func TestConfigDefaults(t *testing.T) {
+	// Test zero-value config
+	var config Config
+	if config.MaxResults != 0 {
+		t.Error("Expected default MaxResults to be 0")
+	}
+	if config.SinceTime != 0 {
+		t.Error("Expected default SinceTime to be 0")
+	}
+	if config.Language != "" {
+		t.Error("Expected default Language to be empty")
+	}
+}
+
+func TestResultDefaults(t *testing.T) {
+	// Test zero-value result
+	var result Result
+	if result.URL != "" {
+		t.Error("Expected default URL to be empty")
+	}
+	if result.Rank != 0 {
+		t.Error("Expected default Rank to be 0")
+	}
+	if !result.PublishedAt.IsZero() {
+		t.Error("Expected default PublishedAt to be zero time")
+	}
+}
+
+func TestMockProviderWithContext(t *testing.T) {
+	provider := NewMockProvider()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	config := Config{
+		MaxResults: 1,
+		Language:   "en",
+	}
+
+	results, err := provider.Search(ctx, "test query", config)
+	if err != nil {
+		t.Fatalf("Expected no error from mock search with context, got %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(results))
+	}
+}
+
+func TestMockProviderCancelledContext(t *testing.T) {
+	provider := NewMockProvider()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	config := Config{MaxResults: 1}
+
+	// Mock provider should still work even with cancelled context
+	// since it doesn't actually respect cancellation
+	results, err := provider.Search(ctx, "test", config)
+	if err != nil {
+		t.Fatalf("Mock provider should not fail with cancelled context, got %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(results))
+	}
+}
+
+func TestProviderTypeStringValues(t *testing.T) {
+	// Test that provider type constants have expected string values
+	testCases := map[ProviderType]string{
+		ProviderTypeDuckDuckGo: "duckduckgo",
+		ProviderTypeGoogle:     "google",
+		ProviderTypeSerpAPI:    "serpapi",
+		ProviderTypeMock:       "mock",
+	}
+
+	for providerType, expectedString := range testCases {
+		if string(providerType) != expectedString {
+			t.Errorf("Expected %s to equal %s", string(providerType), expectedString)
+		}
+	}
+}
+
+// Test error handling edge cases
+
+type errorProvider struct{}
+
+func (e *errorProvider) Search(ctx context.Context, query string, config Config) ([]Result, error) {
+	return nil, ErrProviderUnavailable
+}
+
+func (e *errorProvider) GetName() string {
+	return "ErrorProvider"
+}
+
+func TestLegacyProviderAdapter_ErrorHandling(t *testing.T) {
+	errorProvider := &errorProvider{}
+	adapter := NewLegacyProviderAdapter(errorProvider)
+
+	results, err := adapter.Search("test", 10)
+	if err == nil {
+		t.Error("Expected error from adapter when underlying provider fails")
+	}
+	if results != nil {
+		t.Error("Expected nil results when error occurs")
+	}
+	if !errors.Is(err, ErrProviderUnavailable) {
+		t.Errorf("Expected ErrProviderUnavailable, got %v", err)
+	}
+}
+
+type errorLegacyProvider struct{}
+
+func (e *errorLegacyProvider) Search(query string, maxResults int) ([]LegacySearchResult, error) {
+	return nil, ErrNoResults
+}
+
+func (e *errorLegacyProvider) GetName() string {
+	return "ErrorLegacyProvider"
+}
+
+func TestModernProviderAdapter_ErrorHandling(t *testing.T) {
+	errorLegacyProvider := &errorLegacyProvider{}
+	adapter := NewModernProviderAdapter(errorLegacyProvider)
+
+	ctx := context.Background()
+	config := Config{MaxResults: 10}
+
+	results, err := adapter.Search(ctx, "test", config)
+	if err == nil {
+		t.Error("Expected error from adapter when underlying legacy provider fails")
+	}
+	if results != nil {
+		t.Error("Expected nil results when error occurs")
+	}
+	if !errors.Is(err, ErrNoResults) {
+		t.Errorf("Expected ErrNoResults, got %v", err)
+	}
+}
