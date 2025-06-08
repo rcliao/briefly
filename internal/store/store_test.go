@@ -18,7 +18,7 @@ func TestNewStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	if store.db == nil {
 		t.Error("Store database should not be nil")
@@ -35,7 +35,7 @@ func TestNewStore_InvalidDirectory(t *testing.T) {
 	// Try to create store in a file (not directory)
 	tmpDir := t.TempDir()
 	invalidPath := filepath.Join(tmpDir, "file.txt")
-	os.WriteFile(invalidPath, []byte("test"), 0644)
+	_ = os.WriteFile(invalidPath, []byte("test"), 0644)
 
 	_, err := NewStore(invalidPath)
 	if err == nil {
@@ -49,7 +49,7 @@ func TestCacheArticle_GetCachedArticle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create test article
 	article := core.Article{
@@ -143,7 +143,7 @@ func TestGetCachedArticle_CacheMiss(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Try to get non-existent article
 	cachedArticle, err := store.GetCachedArticle("non-existent", 24*time.Hour)
@@ -162,7 +162,7 @@ func TestGetCachedArticle_Expired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create article with old date
 	article := core.Article{
@@ -195,7 +195,7 @@ func TestCacheSummary_GetCachedSummary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create test summary
 	summary := core.Summary{
@@ -253,7 +253,7 @@ func TestGetCachedSummary_CacheMiss(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Try to get non-existent summary
 	cachedSummary, err := store.GetCachedSummary("non-existent", "hash", 24*time.Hour)
@@ -272,7 +272,7 @@ func TestCacheDigest_GetCachedDigest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	digestID := uuid.NewString()
 	title := "Test Digest"
@@ -324,7 +324,7 @@ func TestCacheDigestWithFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	digestID := uuid.NewString()
 	format := "newsletter"
@@ -350,7 +350,7 @@ func TestUpdateDigestMyTake(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	digestID := uuid.NewString()
 	newMyTake := "My updated take on this digest"
@@ -384,7 +384,7 @@ func TestGetLatestDigests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Cache multiple digests
 	for i := 0; i < 5; i++ {
@@ -422,7 +422,7 @@ func TestFindDigestByPartialID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	digestID := "1234567890abcdef"
 	err = store.CacheDigest(digestID, "Test", "Content", "Summary", []string{"url"}, "model")
@@ -464,7 +464,7 @@ func TestGetCacheStats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Add some test data
 	article := core.Article{
@@ -507,7 +507,7 @@ func TestClearCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Add some test data
 	article := core.Article{
@@ -547,7 +547,7 @@ func TestCleanupOldCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Add old article
 	oldArticle := core.Article{
@@ -672,7 +672,7 @@ func TestGetRecentArticles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Add articles from different dates
 	now := time.Now().UTC()
@@ -724,7 +724,7 @@ func TestGetArticleByURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	article := core.Article{
 		ID:          uuid.NewString(),
@@ -768,7 +768,7 @@ func TestSaveArticle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	article := &core.Article{
 		ID:          uuid.NewString(),
@@ -799,7 +799,7 @@ func TestGetArticlesByDateRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	now := time.Now().UTC()
 	startDate := now.AddDate(0, 0, -5) // 5 days ago

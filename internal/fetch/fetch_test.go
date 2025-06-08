@@ -148,7 +148,7 @@ func TestFetchArticle_Success(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(testHTML))
+		_, _ = w.Write([]byte(testHTML))
 	}))
 	defer server.Close()
 

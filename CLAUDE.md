@@ -24,8 +24,9 @@ go test -v ./...
 # Run tests with race detection and coverage (CI mode)
 go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
-# Run linting (requires golangci-lint to be installed)
+# Run linting (install golangci-lint if needed)
 golangci-lint run --timeout=5m
+# If not in PATH: $(go env GOPATH)/bin/golangci-lint run --timeout=5m
 
 # Basic Go formatting and vetting
 go fmt ./...
@@ -225,8 +226,14 @@ go test -v ./internal/templates -run TestTemplateRendering
 
 ### Linting Commands
 ```bash
+# Install golangci-lint if not already installed
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
 # Run full linting suite (same as CI)
 golangci-lint run --timeout=5m
+
+# If golangci-lint is not in PATH, use full path
+$(go env GOPATH)/bin/golangci-lint run --timeout=5m
 
 # Run linting on specific directory
 golangci-lint run ./internal/core

@@ -41,11 +41,11 @@ func TestNewClient_Success(t *testing.T) {
 func TestNewClient_NoAPIKey(t *testing.T) {
 	// Temporarily unset API key
 	originalKey := os.Getenv("GEMINI_API_KEY")
-	os.Unsetenv("GEMINI_API_KEY")
+	_ = os.Unsetenv("GEMINI_API_KEY")
 	viper.Set("gemini.api_key", "") // Clear viper as well
 	defer func() {
 		if originalKey != "" {
-			os.Setenv("GEMINI_API_KEY", originalKey)
+			_ = os.Setenv("GEMINI_API_KEY", originalKey)
 		}
 	}()
 
@@ -66,11 +66,11 @@ func TestNewClient_WithViperConfig(t *testing.T) {
 	}
 
 	// Temporarily unset env var and use viper
-	os.Unsetenv("GEMINI_API_KEY")
+	_ = os.Unsetenv("GEMINI_API_KEY")
 	viper.Set("gemini.api_key", apiKey)
 	viper.Set("gemini.model", "gemini-1.5-flash")
 	defer func() {
-		os.Setenv("GEMINI_API_KEY", apiKey)
+		_ = os.Setenv("GEMINI_API_KEY", apiKey)
 		viper.Set("gemini.api_key", "")
 		viper.Set("gemini.model", "")
 	}()
@@ -185,10 +185,10 @@ func TestSummarizeArticleWithKeyMoments_EmptyContent(t *testing.T) {
 func TestGenerateSummary_NoAPIKey(t *testing.T) {
 	// Temporarily unset API key
 	originalKey := os.Getenv("GEMINI_API_KEY")
-	os.Unsetenv("GEMINI_API_KEY")
+	_ = os.Unsetenv("GEMINI_API_KEY")
 	defer func() {
 		if originalKey != "" {
-			os.Setenv("GEMINI_API_KEY", originalKey)
+			_ = os.Setenv("GEMINI_API_KEY", originalKey)
 		}
 	}()
 
@@ -204,10 +204,10 @@ func TestGenerateSummary_NoAPIKey(t *testing.T) {
 func TestRegenerateDigestWithMyTake_NoAPIKey(t *testing.T) {
 	// Temporarily unset API key
 	originalKey := os.Getenv("GEMINI_API_KEY")
-	os.Unsetenv("GEMINI_API_KEY")
+	_ = os.Unsetenv("GEMINI_API_KEY")
 	defer func() {
 		if originalKey != "" {
-			os.Setenv("GEMINI_API_KEY", originalKey)
+			_ = os.Setenv("GEMINI_API_KEY", originalKey)
 		}
 	}()
 
@@ -223,10 +223,10 @@ func TestRegenerateDigestWithMyTake_NoAPIKey(t *testing.T) {
 func TestGeneratePromptCorner_NoAPIKey(t *testing.T) {
 	// Temporarily unset API key
 	originalKey := os.Getenv("GEMINI_API_KEY")
-	os.Unsetenv("GEMINI_API_KEY")
+	_ = os.Unsetenv("GEMINI_API_KEY")
 	defer func() {
 		if originalKey != "" {
-			os.Setenv("GEMINI_API_KEY", originalKey)
+			_ = os.Setenv("GEMINI_API_KEY", originalKey)
 		}
 	}()
 
@@ -242,10 +242,10 @@ func TestGeneratePromptCorner_NoAPIKey(t *testing.T) {
 func TestGenerateDigestTitle_NoAPIKey(t *testing.T) {
 	// Temporarily unset API key
 	originalKey := os.Getenv("GEMINI_API_KEY")
-	os.Unsetenv("GEMINI_API_KEY")
+	_ = os.Unsetenv("GEMINI_API_KEY")
 	defer func() {
 		if originalKey != "" {
-			os.Setenv("GEMINI_API_KEY", originalKey)
+			_ = os.Setenv("GEMINI_API_KEY", originalKey)
 		}
 	}()
 

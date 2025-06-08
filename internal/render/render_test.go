@@ -201,8 +201,8 @@ func TestRenderMarkdownDigest_DefaultOutputDir(t *testing.T) {
 	// Use current directory as test directory
 	originalWd, _ := os.Getwd()
 	tmpDir := t.TempDir()
-	os.Chdir(tmpDir)
-	defer os.Chdir(originalWd)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	digestItems := []DigestData{
 		{
@@ -260,7 +260,7 @@ func TestRenderMarkdownDigest_InvalidOutputDir(t *testing.T) {
 	// Try to create digest in a file (not directory)
 	tmpDir := t.TempDir()
 	invalidPath := filepath.Join(tmpDir, "file.txt")
-	os.WriteFile(invalidPath, []byte("test"), 0644)
+	_ = os.WriteFile(invalidPath, []byte("test"), 0644)
 
 	digestItems := []DigestData{}
 
@@ -306,8 +306,8 @@ func TestWriteDigestToFile_DefaultOutputDir(t *testing.T) {
 	// Use current directory as test directory
 	originalWd, _ := os.Getwd()
 	tmpDir := t.TempDir()
-	os.Chdir(tmpDir)
-	defer os.Chdir(originalWd)
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	content := "Test content"
 	filename := "test.md"
@@ -333,7 +333,7 @@ func TestWriteDigestToFile_InvalidOutputDir(t *testing.T) {
 	// Try to write to a file (not directory)
 	tmpDir := t.TempDir()
 	invalidPath := filepath.Join(tmpDir, "file.txt")
-	os.WriteFile(invalidPath, []byte("test"), 0644)
+	_ = os.WriteFile(invalidPath, []byte("test"), 0644)
 
 	_, err := WriteDigestToFile("content", invalidPath, "test.md")
 	if err == nil {
@@ -345,7 +345,7 @@ func TestWriteDigestToFile_WriteError(t *testing.T) {
 	// Try to write to a read-only directory
 	tmpDir := t.TempDir()
 	readOnlyDir := filepath.Join(tmpDir, "readonly")
-	os.MkdirAll(readOnlyDir, 0444) // Read-only permissions
+	_ = os.MkdirAll(readOnlyDir, 0444) // Read-only permissions
 
 	_, err := WriteDigestToFile("content", readOnlyDir, "test.md")
 	// Note: This test might not work on all systems due to permission handling differences
