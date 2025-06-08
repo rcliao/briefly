@@ -15,8 +15,21 @@ go install ./cmd/briefly
 # Run from source during development
 go run ./cmd/briefly digest input/test-links.md
 
-# Run tests
+# Run tests (standard)
 go test ./...
+
+# Run tests with verbose output
+go test -v ./...
+
+# Run tests with race detection and coverage (CI mode)
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+# Run linting (requires golangci-lint to be installed)
+golangci-lint run --timeout=5m
+
+# Basic Go formatting and vetting
+go fmt ./...
+go vet ./...
 
 # Clean dependencies
 go mod tidy
@@ -24,9 +37,11 @@ go mod tidy
 
 ### Key Development Commands
 ```bash
-# Generate a digest with different formats
+# Generate a digest with Smart Headlines and different formats
 briefly digest --format newsletter --output digests input/links.md
 briefly digest --format email --output digests input/links.md  # v1.0: HTML email
+
+# Smart Headlines are automatically generated for all digests based on content
 
 # Cost estimation (dry run)
 briefly digest --dry-run input/links.md
@@ -65,6 +80,7 @@ briefly generate-tts input/links.md --provider elevenlabs --voice Rachel
 - **`cmd/cmd/root.go`**: CLI command definitions using Cobra framework
 - **`internal/`**: Core application modules organized by domain
 - **`llmclient/`**: Legacy Gemini client (being phased out in favor of `internal/llm`)
+- **`research/`**: Empty directory for future research data storage
 
 ### Core Architecture Patterns
 
@@ -84,7 +100,9 @@ briefly generate-tts input/links.md --provider elevenlabs --voice Rachel
 - `alerts/`: Configurable alert monitoring and evaluation
 - `trends/`: Historical trend analysis and comparison
 - `research/`: Deep research with AI-generated queries
+- `deepresearch/`: Advanced deep research pipeline with iterative query generation
 - `clustering/`: Topic clustering and content organization
+- **Smart Headlines**: AI-generated compelling titles based on digest content and format
 
 **Caching Strategy**: Multi-layer SQLite caching system:
 - Article content cached for 24 hours to avoid re-fetching
@@ -98,7 +116,8 @@ briefly generate-tts input/links.md --provider elevenlabs --voice Rachel
 3. **AI Processing**: LLM-powered summarization with format-specific prompts
 4. **Insights Generation**: Parallel processing of sentiment, alerts, trends, and research
 5. **Topic Clustering**: Automatic categorization using embedding-based clustering
-6. **Template Rendering**: Format-specific output generation with insights integration
+6. **Smart Headline Generation**: AI-powered title creation based on digest content and format
+7. **Template Rendering**: Format-specific output generation with insights integration
 
 ### Configuration Management
 The application uses a hierarchical configuration system with Viper:
@@ -127,7 +146,32 @@ The application uses a hierarchical configuration system with Viper:
 - Optional: SerpAPI for enhanced search capabilities
 
 ### Testing Strategy
-The application includes both unit and integration tests. Run tests with standard Go testing commands.
+The application includes unit tests for core functionality. Current test coverage includes:
+- Core data structures (`internal/core/core_test.go`)
+- Search functionality (`internal/search/search_test.go`)
+- Cost estimation (`internal/cost/estimation_test.go`)
+- Template rendering (`internal/templates/templates_test.go`)
+
+Use GitHub Actions CI/CD pipeline for automated testing with race detection and coverage reporting.
+
+### Linting and Code Quality
+The project uses **golangci-lint** as the primary linting tool:
+- Runs automatically in CI/CD pipeline on every push and PR
+- Uses default golangci-lint configuration (no custom `.golangci.yml`)
+- Includes comprehensive Go linting rules for code quality and consistency
+- Recent commit history shows active linting compliance maintenance
+
+Install golangci-lint locally for development:
+```bash
+# macOS
+brew install golangci-lint
+
+# Linux
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
+# Or using go install
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+```
 
 ### Error Handling
 - Graceful degradation when articles fail to fetch or process
@@ -147,11 +191,14 @@ The application includes both unit and integration tests. Run tests with standar
 2. Add format handling in `cmd/cmd/root.go` digest command
 3. Update format validation in CLI
 4. For email formats, add templates to `internal/email/email.go`
+5. Add corresponding unit tests in `internal/templates/templates_test.go`
 
 ### Extending Insights Features
 1. Create new analyzer in appropriate `internal/` package
 2. Integrate into digest generation pipeline in `runDigest()`
 3. Add CLI commands for standalone usage
+4. Write unit tests for new functionality
+5. Update core data structures in `internal/core/core.go` if needed
 
 ### Adding New Multi-Channel Output
 1. Create new package in `internal/` (e.g., `internal/newchannel/`)
@@ -163,6 +210,34 @@ The application includes both unit and integration tests. Run tests with standar
 - Cache is stored in `.briefly-cache/` directory (SQLite database)
 - Use `briefly cache stats` to monitor usage
 - Clear cache when debugging content extraction issues
+
+### Running Single Tests
+```bash
+# Run tests for a specific package
+go test ./internal/core
+
+# Run a specific test function
+go test ./internal/core -run TestLinkCreation
+
+# Run tests with verbose output for debugging
+go test -v ./internal/templates -run TestTemplateRendering
+```
+
+### Linting Commands
+```bash
+# Run full linting suite (same as CI)
+golangci-lint run --timeout=5m
+
+# Run linting on specific directory
+golangci-lint run ./internal/core
+
+# Run basic Go tools
+go fmt ./...
+go vet ./...
+
+# Auto-fix formatting issues
+gofmt -w .
+```
 
 ## v1.0 Multi-Channel Architecture
 

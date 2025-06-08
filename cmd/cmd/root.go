@@ -21,7 +21,6 @@ import (
 	"briefly/internal/core"
 	"briefly/internal/cost"
 	"briefly/internal/deepresearch"
-	"briefly/internal/search"
 	"briefly/internal/feeds"
 	"briefly/internal/fetch"
 	"briefly/internal/llm"
@@ -29,6 +28,7 @@ import (
 	"briefly/internal/messaging"
 	"briefly/internal/render"
 	"briefly/internal/research"
+	"briefly/internal/search"
 	"briefly/internal/sentiment"
 	"briefly/internal/store"
 	"briefly/internal/templates"
@@ -67,7 +67,7 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do Stuff Here
 	},
-			}
+}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
@@ -76,7 +76,7 @@ func Execute() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-			}
+}
 
 func init() {
 	cobra.OnInitialize(initConfig)
@@ -89,7 +89,7 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-			}
+}
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
@@ -128,7 +128,7 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
-			}
+}
 
 var tuiCmd = &cobra.Command{
 	Use:   "tui",
@@ -138,7 +138,7 @@ var tuiCmd = &cobra.Command{
 		fmt.Println("Launching TUI...")
 		tui.StartTUI()
 	},
-			}
+}
 
 func init() {
 	rootCmd.AddCommand(tuiCmd)
@@ -151,15 +151,18 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// tuiCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-			}
+}
 
 var digestCmd = &cobra.Command{
 	Use:   "digest [input-file]",
-	Short: "Generate a digest from URLs in a markdown file",
+	Short: "Generate a digest with Smart Headlines from URLs in a markdown file",
 	Long: `Process URLs from a markdown file, fetch articles, summarize them using Gemini,
-and generate a markdown digest file.
+and generate a markdown digest file with an AI-powered Smart Headline.
 
-Available formats: brief, standard, detailed, newsletter, email
+Features:
+- Smart Headlines: Automatically generates compelling, content-based titles
+- AI-powered insights: Sentiment analysis, alerts, and trend analysis
+- Multiple formats: brief, standard, detailed, newsletter, email
 
 Example:
   briefly digest input/2025-05-30.md
@@ -186,7 +189,7 @@ Example:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 	logger.Info("Starting digest generation", "input_file", inputFile, "format", format, "dry_run", dryRun)
@@ -232,7 +235,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 		fmt.Printf("⚠️  Cache disabled due to error: %s\n", err)
 		cacheStore = nil
 	} else {
-				defer func() {
+		defer func() {
 			if err := cacheStore.Close(); err != nil {
 				logger.Error("Failed to close cache store", err)
 			}
@@ -689,17 +692,21 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 			fmt.Printf("⚠️  Failed to generate final digest summary, using individual summaries: %s\n", err)
 			contentForTitleGeneration = combinedSummaries.String() // Use combined summaries for title if final digest failed
 
-			// Generate title even in fallback
+			// Generate Smart Headline even in fallback
+			fmt.Printf("🎯 Generating Smart Headline...\n")
 			if llmClient != nil {
 				title, titleErr := llmClient.GenerateDigestTitle(contentForTitleGeneration, format)
 				if titleErr != nil {
 					logger.Error("Failed to generate digest title in fallback", titleErr)
+					fmt.Printf("   ⚠️ Smart Headline generation failed, using default\n")
 					generatedTitle = template.Title // Fallback to template's generic title if specific generation fails
 				} else {
 					generatedTitle = title
+					fmt.Printf("   ✅ Smart Headline: \"%s\"\n", generatedTitle)
 					logger.Info("Digest title generated in fallback", "title", generatedTitle)
 				}
 			} else {
+				fmt.Printf("   ⚠️ LLM client not available, using default title\n")
 				generatedTitle = template.Title // Fallback if llmClient is nil
 			}
 
@@ -717,15 +724,15 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 
 				// Format alerts summary
 				if len(triggeredAlerts) > 0 {
-					alertsSummaryText = fmt.Sprintf("%d alerts triggered", len(triggeredAlerts))
+					alertsSummaryText = alertManager.FormatAlertsSection(triggeredAlerts)
 				} else {
-					alertsSummaryText = "No alerts triggered"
+					alertsSummaryText = "### ✅ Alert Monitoring\nNo alerts triggered for this digest. All articles passed through standard monitoring criteria."
 				}
 			}
 
 			var renderedContent, digestPath string
 			var renderErr error
-			
+
 			if format == "email" {
 				// Handle email format specially
 				renderedContent, digestPath, renderErr = templates.RenderHTMLEmail(digestItems, outputDir, "", generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions, "default")
@@ -733,7 +740,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				// Handle other formats with standard markdown rendering
 				renderedContent, digestPath, renderErr = templates.RenderWithInsights(digestItems, outputDir, "", "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions)
 			}
-			
+
 			if renderErr != nil {
 				return fmt.Errorf("failed to render digest with template: %w", renderErr)
 			}
@@ -756,17 +763,21 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 		} else {
 			contentForTitleGeneration = finalDigest // Use final digest for title generation
 
-			// Generate title
+			// Generate Smart Headline
+			fmt.Printf("🎯 Generating Smart Headline...\n")
 			if llmClient != nil {
 				title, titleErr := llmClient.GenerateDigestTitle(contentForTitleGeneration, format)
 				if titleErr != nil {
 					logger.Error("Failed to generate digest title", titleErr)
+					fmt.Printf("   ⚠️ Smart Headline generation failed, using default\n")
 					generatedTitle = template.Title // Fallback to template's generic title
 				} else {
 					generatedTitle = title
+					fmt.Printf("   ✅ Smart Headline: \"%s\"\n", generatedTitle)
 					logger.Info("Digest title generated", "title", generatedTitle)
 				}
 			} else {
+				fmt.Printf("   ⚠️ LLM client not available, using default title\n")
 				generatedTitle = template.Title // Fallback if llmClient is nil
 			}
 
@@ -784,15 +795,15 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 
 				// Format alerts summary
 				if len(triggeredAlerts) > 0 {
-					alertsSummaryText = fmt.Sprintf("%d alerts triggered", len(triggeredAlerts))
+					alertsSummaryText = alertManager.FormatAlertsSection(triggeredAlerts)
 				} else {
-					alertsSummaryText = "No alerts triggered"
+					alertsSummaryText = "### ✅ Alert Monitoring\nNo alerts triggered for this digest. All articles passed through standard monitoring criteria."
 				}
 			}
 
 			var renderedContent, digestPath string
 			var renderErr error
-			
+
 			if format == "email" {
 				// Handle email format specially
 				renderedContent, digestPath, renderErr = templates.RenderHTMLEmail(digestItems, outputDir, finalDigest, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions, "default")
@@ -800,7 +811,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 				// Handle other formats with standard markdown rendering
 				renderedContent, digestPath, renderErr = templates.RenderWithInsights(digestItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, researchSuggestions)
 			}
-			
+
 			if renderErr != nil {
 				return fmt.Errorf("failed to render digest with template: %w", renderErr)
 			}
@@ -827,7 +838,7 @@ func runDigest(inputFile, outputDir, format string, dryRun bool) error {
 	}
 
 	return nil
-			}
+}
 
 func init() {
 	rootCmd.AddCommand(digestCmd)
@@ -835,14 +846,14 @@ func init() {
 	digestCmd.Flags().StringP("output", "o", "digests", "Output directory for digest file")
 	digestCmd.Flags().Bool("dry-run", false, "Estimate costs without making API calls")
 	digestCmd.Flags().StringP("format", "f", "standard", "Digest format: brief, standard, detailed, newsletter")
-			}
+}
 
 // Add cache management commands
 var cacheCmd = &cobra.Command{
 	Use:   "cache",
 	Short: "Manage the article and summary cache",
 	Long:  `Inspect, clean, and manage the SQLite cache for articles and summaries.`,
-			}
+}
 
 var listFormatsCmd = &cobra.Command{
 	Use:   "formats",
@@ -868,7 +879,7 @@ var listFormatsCmd = &cobra.Command{
 		fmt.Println()
 		fmt.Printf("Usage: briefly digest --format <format> input.md\n")
 	},
-			}
+}
 
 var cacheStatsCmd = &cobra.Command{
 	Use:   "stats",
@@ -880,11 +891,11 @@ var cacheStatsCmd = &cobra.Command{
 			fmt.Printf("Error opening cache: %s\n", err)
 			return
 		}
-				defer func() {
-		if err := cacheStore.Close(); err != nil {
-			logger.Error("Failed to close cache store", err)
-		}
-	}()
+		defer func() {
+			if err := cacheStore.Close(); err != nil {
+				logger.Error("Failed to close cache store", err)
+			}
+		}()
 
 		stats, err := cacheStore.GetCacheStats()
 		if err != nil {
@@ -924,7 +935,7 @@ var cacheStatsCmd = &cobra.Command{
 			fmt.Printf("\nTotal clustered items: %d\n", totalClustered)
 		}
 	},
-			}
+}
 
 var cacheClearCmd = &cobra.Command{
 	Use:   "clear",
@@ -951,13 +962,13 @@ var cacheClearCmd = &cobra.Command{
 
 		fmt.Println("✅ Cache cleared successfully")
 	},
-			}
+}
 
 var myTakeCmd = &cobra.Command{
 	Use:   "my-take",
 	Short: "Manage my-take for digests",
 	Long:  `Add or edit your personal take on generated digests.`,
-			}
+}
 
 var addMyTakeCmd = &cobra.Command{
 	Use:   "add [digest-id] [my-take-text]",
@@ -1058,7 +1069,7 @@ Example:
 		fmt.Println("✅ My-take added successfully!")
 		fmt.Printf("Your take: %s\n", myTake)
 	},
-			}
+}
 
 var listMyTakeCmd = &cobra.Command{
 	Use:   "list",
@@ -1103,7 +1114,7 @@ var listMyTakeCmd = &cobra.Command{
 			fmt.Println()
 		}
 	},
-			}
+}
 
 var regenerateCmd = &cobra.Command{
 	Use:   "regenerate [digest-id]",
@@ -1176,14 +1187,14 @@ Example:
 		}
 		fmt.Printf("Preview: %s...\n", regeneratedContent[:previewLength])
 	},
-			}
+}
 
 // Feed management commands
 var feedCmd = &cobra.Command{
 	Use:   "feed",
 	Short: "Manage RSS/Atom feeds",
 	Long:  `Add, list, and manage RSS/Atom feeds for automatic content discovery.`,
-			}
+}
 
 var addFeedCmd = &cobra.Command{
 	Use:   "add [feed-url]",
@@ -1250,7 +1261,7 @@ Example:
 		fmt.Printf("Description: %s\n", parsedFeed.Feed.Description)
 		fmt.Printf("Items discovered: %d\n", itemCount)
 	},
-			}
+}
 
 var listFeedsCmd = &cobra.Command{
 	Use:   "list",
@@ -1305,7 +1316,7 @@ var listFeedsCmd = &cobra.Command{
 			fmt.Println()
 		}
 	},
-			}
+}
 
 var pullFeedsCmd = &cobra.Command{
 	Use:   "pull",
@@ -1382,7 +1393,7 @@ var pullFeedsCmd = &cobra.Command{
 			fmt.Println("Use 'briefly feed items' to see unprocessed items")
 		}
 	},
-			}
+}
 
 var manageFeedCmd = &cobra.Command{
 	Use:   "manage [feed-id]",
@@ -1479,7 +1490,7 @@ Example:
 		fmt.Println("  briefly feed manage", feedID, "--disable   # Disable feed")
 		fmt.Println("  briefly feed manage", feedID, "--remove    # Remove feed")
 	},
-			}
+}
 
 var feedItemsCmd = &cobra.Command{
 	Use:   "items",
@@ -1520,7 +1531,7 @@ var feedItemsCmd = &cobra.Command{
 
 		fmt.Printf("Use these links in your digest input files or mark them as processed.\n")
 	},
-			}
+}
 
 var summarizeCmd = &cobra.Command{
 	Use:   "summarize [url]",
@@ -1540,7 +1551,7 @@ Example:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 func runSummarize(url string) error {
 	// Create a link object from the URL
@@ -1599,7 +1610,7 @@ func runSummarize(url string) error {
 	fmt.Printf("✨ Summary generated in %.1f seconds\n", time.Since(time.Now()).Seconds())
 
 	return nil
-			}
+}
 
 func generateQuickSummary(llmClient *llm.Client, article core.Article) (core.Summary, error) {
 	// Use the new method that generates summaries with key moments
@@ -1609,7 +1620,7 @@ func generateQuickSummary(llmClient *llm.Client, article core.Article) (core.Sum
 	}
 
 	return summary, nil
-			}
+}
 
 func init() {
 	// Add cache commands
@@ -1628,7 +1639,7 @@ func init() {
 	rootCmd.AddCommand(sendSlackCmd)
 	rootCmd.AddCommand(sendDiscordCmd)
 	rootCmd.AddCommand(generateTTSCmd)
-	
+
 	// Add deep-research command
 	rootCmd.AddCommand(deepResearchCmd)
 
@@ -1667,7 +1678,7 @@ func init() {
 	sendSlackCmd.Flags().String("webhook", "", "Slack webhook URL (or set SLACK_WEBHOOK_URL)")
 	sendSlackCmd.Flags().String("message-format", "bullets", "Message format: bullets, summary, highlights")
 	sendSlackCmd.Flags().Bool("include-sentiment", true, "Include sentiment emojis")
-	
+
 	sendDiscordCmd.Flags().String("webhook", "", "Discord webhook URL (or set DISCORD_WEBHOOK_URL)")
 	sendDiscordCmd.Flags().String("message-format", "bullets", "Message format: bullets, summary, highlights")
 	sendDiscordCmd.Flags().Bool("include-sentiment", true, "Include sentiment emojis")
@@ -1691,14 +1702,14 @@ func init() {
 	deepResearchCmd.Flags().String("search-provider", "duckduckgo", "Search provider: duckduckgo, serpapi, google, mock")
 
 	cacheClearCmd.Flags().Bool("confirm", false, "Confirm cache deletion")
-			}
+}
 
 // Insights commands for v0.4
 var insightsCmd = &cobra.Command{
 	Use:   "insights",
 	Short: "Access insights features (trends, alerts, sentiment)",
 	Long:  `Access advanced insights features including trend analysis, alert monitoring, and sentiment analysis.`,
-			}
+}
 
 var trendsCmd = &cobra.Command{
 	Use:   "trends [period]",
@@ -1721,13 +1732,13 @@ Examples:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 var alertsCmd = &cobra.Command{
 	Use:   "alerts",
 	Short: "Manage alert conditions and triggers",
 	Long:  `Configure and manage alert conditions that trigger notifications during digest processing.`,
-			}
+}
 
 var listAlertsCmd = &cobra.Command{
 	Use:   "list",
@@ -1739,7 +1750,7 @@ var listAlertsCmd = &cobra.Command{
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 var testAlertsCmd = &cobra.Command{
 	Use:   "test [input-file]",
@@ -1756,7 +1767,7 @@ Example:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 var sentimentCmd = &cobra.Command{
 	Use:   "sentiment [input-file]",
@@ -1773,7 +1784,7 @@ Example:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 var researchCmd = &cobra.Command{
 	Use:   "research [topic]",
@@ -1797,7 +1808,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 // Messaging commands for v1.0
 var sendSlackCmd = &cobra.Command{
@@ -1821,7 +1832,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 var sendDiscordCmd = &cobra.Command{
 	Use:   "send-discord [input-file]",
@@ -1844,7 +1855,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 var generateTTSCmd = &cobra.Command{
 	Use:   "generate-tts [input-file]",
@@ -1871,7 +1882,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 // Deep Research command
 var deepResearchCmd = &cobra.Command{
@@ -1902,7 +1913,7 @@ Examples:
 			os.Exit(1)
 		}
 	},
-			}
+}
 
 // Implementation functions for the new commands
 
@@ -1940,7 +1951,7 @@ func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model
 	// Initialize search provider using shared search module
 	factory := search.NewProviderFactory()
 	var searcher search.Provider
-	
+
 	switch searchProvider {
 	case "duckduckgo":
 		searcher, err = factory.CreateProvider(search.ProviderTypeDuckDuckGo, nil)
@@ -1959,7 +1970,7 @@ func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model
 			return fmt.Errorf("GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID environment variables required for Google Custom Search")
 		}
 		searcher, err = factory.CreateProvider(search.ProviderTypeGoogle, map[string]string{
-			"api_key": apiKey,
+			"api_key":   apiKey,
 			"search_id": searchID,
 		})
 		fmt.Printf("🔌 Using Google Custom Search\n")
@@ -1969,7 +1980,7 @@ func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model
 	default:
 		return fmt.Errorf("unsupported search provider: %s", searchProvider)
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to create search provider: %w", err)
 	}
@@ -1985,9 +1996,9 @@ func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model
 
 	// Configure research
 	config := deepresearch.ResearchConfig{
-		MaxSources:    maxSources,
-		SinceTime:     sinceTime,
-		Model:         model,
+		MaxSources:     maxSources,
+		SinceTime:      sinceTime,
+		Model:          model,
 		SearchProvider: searchProvider,
 		UseJavaScript:  useJS,
 		RefreshCache:   refresh,
@@ -2004,7 +2015,7 @@ func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model
 
 	// Generate outputs
 	fmt.Printf("\n📝 Generating outputs...\n")
-	
+
 	// Create research directory if it doesn't exist
 	if err := os.MkdirAll("research", 0755); err != nil {
 		return fmt.Errorf("failed to create research directory: %w", err)
@@ -2012,7 +2023,7 @@ func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model
 
 	// Generate slug for filenames
 	slug := generateSlug(topic)
-	
+
 	// Output Markdown
 	markdownPath := fmt.Sprintf("research/%s.md", slug)
 	markdownContent := formatBriefAsMarkdown(brief)
@@ -2063,7 +2074,7 @@ func runDeepResearch(topic, since string, maxSources int, outputHTML bool, model
 	fmt.Printf("   • Add to digest: briefly digest research/%s.md\n", slug)
 
 	return nil
-			}
+}
 
 func runTrends(period string) error {
 	cacheStore, err := store.NewStore(".briefly-cache")
@@ -2108,7 +2119,7 @@ func runTrends(period string) error {
 	fmt.Println(analyzer.FormatReport(report))
 
 	return nil
-			}
+}
 
 func runListAlerts() error {
 	alertManager := alerts.NewAlertManager()
@@ -2157,7 +2168,7 @@ func runListAlerts() error {
 	}
 
 	return nil
-			}
+}
 
 func runTestAlerts(inputFile string) error {
 	// Read links from input file
@@ -2227,7 +2238,7 @@ func runTestAlerts(inputFile string) error {
 	}
 
 	return nil
-			}
+}
 
 func runSentiment(inputFile string) error {
 	// Read links from input file
@@ -2297,7 +2308,7 @@ func runSentiment(inputFile string) error {
 	}
 
 	return nil
-			}
+}
 
 func runResearch(topic string, depth, maxResults int, outputFile, provider string) error {
 	fmt.Printf("🔍 Starting deep research on: %s\n", topic)
@@ -2415,14 +2426,14 @@ func runResearch(topic string, depth, maxResults int, outputFile, provider strin
 	}
 
 	return nil
-			}
+}
 
 // Helper function to read links from markdown file (reused from existing code)
 func readLinksFromFile(inputFile string) ([]core.Link, error) {
 	// This would be implemented similar to existing link reading logic
 	// For now, return empty slice as placeholder
 	return []core.Link{}, fmt.Errorf("link reading not implemented in this example")
-			}
+}
 
 func runSendMessage(platform messaging.MessagePlatform, inputFile string, webhookURL string, messageFormat string, includeSentiment bool) error {
 	// Get webhook URL from environment if not provided
@@ -2487,7 +2498,7 @@ func runSendMessage(platform messaging.MessagePlatform, inputFile string, webhoo
 			cachedArticle, err := cacheStore.GetCachedArticle(link.URL, 24*time.Hour)
 			if err == nil && cachedArticle != nil {
 				article = *cachedArticle
-				
+
 				// Try to get cached summary
 				contentHash := fmt.Sprintf("%d-%s-messaging", len(article.CleanedText), link.URL)
 				cachedSummary, err := cacheStore.GetCachedSummary(link.URL, contentHash, 7*24*time.Hour)
@@ -2533,12 +2544,12 @@ func runSendMessage(platform messaging.MessagePlatform, inputFile string, webhoo
 		}
 
 		digestItem := render.DigestData{
-			Title:           article.Title,
-			URL:             link.URL,
-			SummaryText:     summary,
-			SentimentEmoji:  article.SentimentEmoji,
-			SentimentLabel:  article.SentimentLabel,
-			SentimentScore:  article.SentimentScore,
+			Title:          article.Title,
+			URL:            link.URL,
+			SummaryText:    summary,
+			SentimentEmoji: article.SentimentEmoji,
+			SentimentLabel: article.SentimentLabel,
+			SentimentScore: article.SentimentScore,
 		}
 
 		digestItems = append(digestItems, digestItem)
@@ -2575,7 +2586,7 @@ func runSendMessage(platform messaging.MessagePlatform, inputFile string, webhoo
 
 	fmt.Printf("✅ Successfully sent %s message with %d articles\n", platform, len(digestItems))
 	return nil
-			}
+}
 
 func runGenerateTTS(inputFile string, provider string, voiceID string, apiKey string, speed float64, maxArticles int, includeSummaries bool, outputDir string) error {
 	// Get API key from environment if not provided
@@ -2649,7 +2660,7 @@ func runGenerateTTS(inputFile string, provider string, voiceID string, apiKey st
 			cachedArticle, err := cacheStore.GetCachedArticle(link.URL, 24*time.Hour)
 			if err == nil && cachedArticle != nil {
 				article = *cachedArticle
-				
+
 				// Try to get cached summary
 				contentHash := fmt.Sprintf("%d-%s-tts", len(article.CleanedText), link.URL)
 				cachedSummary, err := cacheStore.GetCachedSummary(link.URL, contentHash, 7*24*time.Hour)
@@ -2736,20 +2747,20 @@ func runGenerateTTS(inputFile string, provider string, voiceID string, apiKey st
 	fmt.Printf("✅ TTS audio generated successfully!\n")
 	fmt.Printf("📁 Output file: %s\n", outputPath)
 	fmt.Printf("🎧 Articles included: %d\n", len(digestItems))
-	
+
 	if maxArticles > 0 && len(digestItems) > maxArticles {
 		fmt.Printf("📝 Note: Limited to first %d articles (total available: %d)\n", maxArticles, len(digestItems))
 	}
 
 	return nil
-			}
+}
 
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
-			}
+}
 
 // Helper functions for deep research
 
@@ -2758,15 +2769,15 @@ func parseDuration(s string) (time.Duration, error) {
 	if len(s) < 2 {
 		return 0, fmt.Errorf("invalid duration format")
 	}
-	
+
 	numStr := s[:len(s)-1]
 	unit := s[len(s)-1:]
-	
+
 	num, err := strconv.Atoi(numStr)
 	if err != nil {
 		return 0, fmt.Errorf("invalid number in duration: %w", err)
 	}
-	
+
 	switch unit {
 	case "d":
 		return time.Duration(num) * 24 * time.Hour, nil
@@ -2777,7 +2788,7 @@ func parseDuration(s string) (time.Duration, error) {
 	default:
 		return 0, fmt.Errorf("unsupported time unit: %s", unit)
 	}
-			}
+}
 
 func generateSlug(topic string) string {
 	// Convert topic to filesystem-safe slug
@@ -2789,23 +2800,23 @@ func generateSlug(topic string) string {
 		slug = slug[:50]
 	}
 	return slug
-			}
+}
 
 func formatBriefAsMarkdown(brief *deepresearch.ResearchBrief) string {
 	var md strings.Builder
-	
+
 	// Title and metadata
 	md.WriteString(fmt.Sprintf("# Research Brief: %s\n\n", brief.Topic))
 	md.WriteString(fmt.Sprintf("**Generated:** %s  \n", brief.GeneratedAt.Format("January 2, 2006 at 3:04 PM")))
 	md.WriteString(fmt.Sprintf("**Model:** %s  \n", brief.Config.Model))
 	md.WriteString(fmt.Sprintf("**Sources:** %d  \n", len(brief.Sources)))
 	md.WriteString(fmt.Sprintf("**Sub-queries:** %d  \n\n", len(brief.SubQueries)))
-	
+
 	// Executive Summary
 	md.WriteString("## Executive Summary\n\n")
 	md.WriteString(brief.ExecutiveSummary)
 	md.WriteString("\n\n")
-	
+
 	// Detailed Findings
 	if len(brief.DetailedFindings) > 0 {
 		md.WriteString("## Detailed Findings\n\n")
@@ -2815,7 +2826,7 @@ func formatBriefAsMarkdown(brief *deepresearch.ResearchBrief) string {
 			md.WriteString("\n\n")
 		}
 	}
-	
+
 	// Open Questions
 	if len(brief.OpenQuestions) > 0 {
 		md.WriteString("## Open Questions\n\n")
@@ -2824,7 +2835,7 @@ func formatBriefAsMarkdown(brief *deepresearch.ResearchBrief) string {
 		}
 		md.WriteString("\n")
 	}
-	
+
 	// Sources
 	md.WriteString("## Sources\n\n")
 	for i, source := range brief.Sources {
@@ -2835,7 +2846,7 @@ func formatBriefAsMarkdown(brief *deepresearch.ResearchBrief) string {
 		}
 		md.WriteString("\n")
 	}
-	
+
 	// Sub-queries
 	if len(brief.SubQueries) > 0 {
 		md.WriteString("## Research Queries Used\n\n")
@@ -2844,13 +2855,13 @@ func formatBriefAsMarkdown(brief *deepresearch.ResearchBrief) string {
 		}
 		md.WriteString("\n")
 	}
-	
+
 	return md.String()
-			}
+}
 
 func formatBriefAsHTML(brief *deepresearch.ResearchBrief) string {
 	var html strings.Builder
-	
+
 	html.WriteString("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n")
 	html.WriteString("    <meta charset=\"UTF-8\">\n")
 	html.WriteString("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n")
@@ -2866,7 +2877,7 @@ func formatBriefAsHTML(brief *deepresearch.ResearchBrief) string {
 	html.WriteString("    </style>\n")
 	html.WriteString("</head>\n<body>\n")
 	html.WriteString("    <div class=\"container\">\n")
-	
+
 	// Title and metadata
 	html.WriteString(fmt.Sprintf("        <h1>Research Brief: %s</h1>\n", brief.Topic))
 	html.WriteString("        <div class=\"metadata\">\n")
@@ -2875,11 +2886,11 @@ func formatBriefAsHTML(brief *deepresearch.ResearchBrief) string {
 	html.WriteString(fmt.Sprintf("            <strong>Sources:</strong> %d<br>\n", len(brief.Sources)))
 	html.WriteString(fmt.Sprintf("            <strong>Sub-queries:</strong> %d\n", len(brief.SubQueries)))
 	html.WriteString("        </div>\n")
-	
+
 	// Executive Summary
 	html.WriteString("        <h2>Executive Summary</h2>\n")
 	html.WriteString(fmt.Sprintf("        <p>%s</p>\n", strings.ReplaceAll(brief.ExecutiveSummary, "\n", "<br>")))
-	
+
 	// Detailed Findings
 	if len(brief.DetailedFindings) > 0 {
 		html.WriteString("        <h2>Detailed Findings</h2>\n")
@@ -2888,7 +2899,7 @@ func formatBriefAsHTML(brief *deepresearch.ResearchBrief) string {
 			html.WriteString(fmt.Sprintf("        <p>%s</p>\n", strings.ReplaceAll(finding.Content, "\n", "<br>")))
 		}
 	}
-	
+
 	// Open Questions
 	if len(brief.OpenQuestions) > 0 {
 		html.WriteString("        <h2>Open Questions</h2>\n")
@@ -2898,7 +2909,7 @@ func formatBriefAsHTML(brief *deepresearch.ResearchBrief) string {
 		}
 		html.WriteString("        </ul>\n")
 	}
-	
+
 	// Sources
 	html.WriteString("        <h2>Sources</h2>\n")
 	for i, source := range brief.Sources {
@@ -2910,9 +2921,9 @@ func formatBriefAsHTML(brief *deepresearch.ResearchBrief) string {
 		}
 		html.WriteString("        </div>\n")
 	}
-	
+
 	html.WriteString("    </div>\n")
 	html.WriteString("</body>\n</html>\n")
-	
+
 	return html.String()
-			}
+}

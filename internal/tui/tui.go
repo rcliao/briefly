@@ -20,17 +20,17 @@ const (
 
 // Model represents the state of the TUI application.
 type model struct {
-	store            *store.Store
-	digests          []core.Digest  // Recent digests
-	articles         []core.Article // Placeholder for articles
-	summaries        []core.Summary // Placeholder for summaries
-	selectedIdx      int            // Index of the selected item
-	width            int            // Terminal width
-	height           int            // Terminal height
-	mode             viewMode       // Current view mode
-	editingMyTake    string         // Text being edited for my-take
-	editingDigestID  string         // ID of digest being edited
-	quitting         bool
+	store           *store.Store
+	digests         []core.Digest  // Recent digests
+	articles        []core.Article // Placeholder for articles
+	summaries       []core.Summary // Placeholder for summaries
+	selectedIdx     int            // Index of the selected item
+	width           int            // Terminal width
+	height          int            // Terminal height
+	mode            viewMode       // Current view mode
+	editingMyTake   string         // Text being edited for my-take
+	editingDigestID string         // ID of digest being edited
+	quitting        bool
 }
 
 // InitialModel returns the initial state of the TUI model.
@@ -62,12 +62,12 @@ func loadDigests(store *store.Store) tea.Cmd {
 		if store == nil {
 			return digestsLoadedMsg{digests: []core.Digest{}}
 		}
-		
+
 		digests, err := store.GetLatestDigests(10)
 		if err != nil {
 			return digestsLoadedMsg{digests: []core.Digest{}}
 		}
-		
+
 		return digestsLoadedMsg{digests: digests}
 	}
 }
@@ -182,12 +182,12 @@ func (m model) View() string {
 				if i == m.selectedIdx {
 					cursor = ">"
 				}
-				
+
 				myTakeStatus := "❌"
 				if digest.MyTake != "" {
 					myTakeStatus = "✅"
 				}
-				
+
 				digestListContent += fmt.Sprintf("%s %s %s (%s)\n", cursor, myTakeStatus, digest.ID[:8], digest.Format)
 				digestListContent += fmt.Sprintf("   %s\n", digest.DateGenerated.Format("2006-01-02 15:04"))
 				if digest.Title != "" {
@@ -206,7 +206,7 @@ func (m model) View() string {
 			digestDetailContent += fmt.Sprintf("ID: %s\n", selectedDigest.ID)
 			digestDetailContent += fmt.Sprintf("Format: %s\n", selectedDigest.Format)
 			digestDetailContent += fmt.Sprintf("Generated: %s\n\n", selectedDigest.DateGenerated.Format("2006-01-02 15:04"))
-			
+
 			if selectedDigest.DigestSummary != "" {
 				digestDetailContent += "Summary:\n"
 				// Truncate long summaries
@@ -216,7 +216,7 @@ func (m model) View() string {
 				}
 				digestDetailContent += summary + "\n\n"
 			}
-			
+
 			if selectedDigest.MyTake != "" {
 				digestDetailContent += "My Take:\n"
 				digestDetailContent += selectedDigest.MyTake + "\n"
@@ -244,18 +244,18 @@ func (m model) View() string {
 					break
 				}
 			}
-			
+
 			if digest != nil {
 				editContent += fmt.Sprintf("Digest: %s (%s)\n", digest.ID[:8], digest.Format)
 				editContent += fmt.Sprintf("Generated: %s\n\n", digest.DateGenerated.Format("2006-01-02 15:04"))
 			}
 		}
-		
+
 		editContent += "Your Take:\n"
 		editContent += strings.Repeat("-", 40) + "\n"
 		editContent += m.editingMyTake
 		editContent += "\n" + strings.Repeat("-", 40) + "\n"
-		
+
 		editBox := listStyle.Width(m.width - 10).Render(editContent)
 		help := "\n\n[Ctrl+S] Save | [Esc] Cancel | [Ctrl+C] Quit"
 		return docStyle.Render(editBox + help)

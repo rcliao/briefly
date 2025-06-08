@@ -58,7 +58,7 @@ func (a *LegacyProviderAdapter) Search(query string, maxResults int) ([]LegacySe
 			Title:       result.Title,
 			URL:         result.URL,
 			Snippet:     result.Snippet,
-			Source:      result.Domain, // Map Domain to Source
+			Source:      result.Domain,                           // Map Domain to Source
 			PublishedAt: result.PublishedAt.Format("2006-01-02"), // Convert time to string
 			Rank:        result.Rank,
 		}

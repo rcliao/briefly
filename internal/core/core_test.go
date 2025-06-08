@@ -240,7 +240,7 @@ func TestCacheStatsCreation(t *testing.T) {
 func TestPromptCreation(t *testing.T) {
 	creationTime := time.Now()
 	lastUsedTime := creationTime.Add(1 * time.Hour)
-	
+
 	prompt := Prompt{
 		ID:           "prompt-1",
 		Text:         "Summarize this article",

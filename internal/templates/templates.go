@@ -289,7 +289,31 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 	return content.String()
 }
 
-// renderInsightsSection renders the insights section with sentiment, alerts, trends, and research
+// renderAlertsSection renders just the alerts section
+func renderAlertsSection(digestItems []render.DigestData, alertsSummary string) string {
+	var content strings.Builder
+
+	if alertsSummary != "" {
+		content.WriteString(alertsSummary)
+		content.WriteString("\n")
+	} else {
+		// Show that monitoring is active even if no alerts
+		alertCount := 0
+		for _, item := range digestItems {
+			if item.AlertTriggered {
+				alertCount++
+			}
+		}
+		if alertCount == 0 {
+			content.WriteString("### ✅ Alert Monitoring\n\n")
+			content.WriteString("No alerts triggered for this digest. All articles passed through standard monitoring criteria.\n\n")
+		}
+	}
+
+	return content.String()
+}
+
+// renderInsightsSection renders the insights section with sentiment, trends, and research (alerts moved to separate section)
 func renderInsightsSection(digestItems []render.DigestData, template *DigestTemplate, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string) string {
 	var content strings.Builder
 
@@ -327,26 +351,7 @@ func renderInsightsSection(digestItems []render.DigestData, template *DigestTemp
 		}
 	}
 
-	// 2. Alert Summary
-	if alertsSummary != "" {
-		content.WriteString("### 🚨 Alert Monitoring\n\n")
-		content.WriteString(alertsSummary)
-		content.WriteString("\n\n")
-	} else {
-		// Show that monitoring is active even if no alerts
-		alertCount := 0
-		for _, item := range digestItems {
-			if item.AlertTriggered {
-				alertCount++
-			}
-		}
-		if alertCount == 0 {
-			content.WriteString("### ✅ Alert Monitoring\n\n")
-			content.WriteString("No alerts triggered for this digest. All articles passed through standard monitoring criteria.\n\n")
-		}
-	}
-
-	// 3. Trend Analysis
+	// 2. Trend Analysis (alerts moved to separate section above)
 	if trendsSummary != "" {
 		content.WriteString("### 📈 Trend Analysis\n\n")
 		content.WriteString(trendsSummary)
@@ -569,8 +574,15 @@ func RenderWithInsights(digestItems []render.DigestData, outputDir string, final
 		content.WriteString("\n\n")
 	}
 
-	// AI-Powered Insights Section (new for v0.4)
-	insightsSection := renderInsightsSection(digestItems, template, overallSentiment, alertsSummary, trendsSummary, researchSuggestions)
+	// Alert Monitoring Section (moved up for prominence)
+	alertsSection := renderAlertsSection(digestItems, alertsSummary)
+	if alertsSection != "" {
+		content.WriteString(alertsSection)
+		content.WriteString("\n")
+	}
+
+	// AI-Powered Insights Section (without alerts, which are now shown above)
+	insightsSection := renderInsightsSection(digestItems, template, overallSentiment, "", trendsSummary, researchSuggestions)
 	if insightsSection != "" {
 		content.WriteString(insightsSection)
 		content.WriteString("\n")
@@ -614,7 +626,7 @@ func RenderWithInsights(digestItems []render.DigestData, outputDir string, final
 // RenderHTMLEmail renders a digest as HTML email
 func RenderHTMLEmail(digestItems []render.DigestData, outputDir string, finalDigest string, customTitle string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string, emailStyle string) (string, string, error) {
 	template := GetTemplate(FormatEmail)
-	
+
 	// Choose email template style
 	var emailTemplate *email.EmailTemplate
 	switch emailStyle {
@@ -653,7 +665,7 @@ func RenderHTMLEmail(digestItems []render.DigestData, outputDir string, finalDig
 	// Write HTML file
 	dateStr := time.Now().UTC().Format("2006-01-02")
 	filename := fmt.Sprintf("digest_email_%s.html", dateStr)
-	
+
 	if outputDir == "" {
 		outputDir = "digests"
 	}

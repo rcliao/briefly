@@ -54,9 +54,9 @@ type ElevenLabsVoiceResponse struct {
 
 // ElevenLabsTTSRequest represents ElevenLabs TTS request
 type ElevenLabsTTSRequest struct {
-	Text           string                      `json:"text"`
-	ModelID        string                      `json:"model_id"`
-	VoiceSettings  ElevenLabsVoiceSettings    `json:"voice_settings"`
+	Text          string                  `json:"text"`
+	ModelID       string                  `json:"model_id"`
+	VoiceSettings ElevenLabsVoiceSettings `json:"voice_settings"`
 }
 
 // ElevenLabsVoiceSettings represents voice settings for ElevenLabs
@@ -94,7 +94,7 @@ func NewTTSClient(config *TTSConfig) *TTSClient {
 	if config.Speed == 0 {
 		config.Speed = 1.0
 	}
-	
+
 	return &TTSClient{
 		Config: config,
 	}
@@ -130,26 +130,26 @@ func GetDefaultVoices() map[TTSProvider][]TTSVoice {
 // PrepareTTSText converts digest content to TTS-friendly text
 func PrepareTTSText(digestItems []render.DigestData, title string, includeSummaries bool, maxArticles int) string {
 	var text strings.Builder
-	
+
 	// Introduction
 	text.WriteString(fmt.Sprintf("Welcome to your %s. ", title))
 	text.WriteString(fmt.Sprintf("Here are the highlights from %d articles. ", len(digestItems)))
 	text.WriteString("\n\n")
-	
+
 	// Limit articles for audio length
 	itemCount := len(digestItems)
 	if maxArticles > 0 && itemCount > maxArticles {
 		itemCount = maxArticles
 		text.WriteString(fmt.Sprintf("We'll cover the top %d articles. ", maxArticles))
 	}
-	
+
 	// Process articles
 	for i := 0; i < itemCount; i++ {
 		item := digestItems[i]
-		
+
 		// Article number and title
 		text.WriteString(fmt.Sprintf("Article %d: %s. ", i+1, cleanTextForTTS(item.Title)))
-		
+
 		// Summary if included
 		if includeSummaries && item.SummaryText != "" {
 			summary := cleanTextForTTS(item.SummaryText)
@@ -160,17 +160,17 @@ func PrepareTTSText(digestItems []render.DigestData, title string, includeSummar
 			text.WriteString(summary)
 			text.WriteString(". ")
 		}
-		
+
 		text.WriteString("\n\n")
 	}
-	
+
 	// Conclusion
 	if itemCount < len(digestItems) {
 		text.WriteString(fmt.Sprintf("That covers the top %d articles. ", itemCount))
 		text.WriteString(fmt.Sprintf("There are %d more articles in the full digest. ", len(digestItems)-itemCount))
 	}
 	text.WriteString("Thank you for listening to your Briefly digest. ")
-	
+
 	return text.String()
 }
 
@@ -182,7 +182,7 @@ func cleanTextForTTS(text string) string {
 	text = strings.ReplaceAll(text, "_", "")
 	text = strings.ReplaceAll(text, "`", "")
 	text = strings.ReplaceAll(text, "#", "")
-	
+
 	// Remove URLs (basic pattern)
 	words := strings.Fields(text)
 	var cleanWords []string
@@ -192,18 +192,18 @@ func cleanTextForTTS(text string) string {
 		}
 	}
 	text = strings.Join(cleanWords, " ")
-	
+
 	// Replace common symbols with words
 	text = strings.ReplaceAll(text, "&", "and")
 	text = strings.ReplaceAll(text, "@", "at")
 	text = strings.ReplaceAll(text, "%", "percent")
 	text = strings.ReplaceAll(text, "$", "dollars")
-	
+
 	// Add pauses for better speech flow
 	text = strings.ReplaceAll(text, ". ", ". ... ")
 	text = strings.ReplaceAll(text, "? ", "? ... ")
 	text = strings.ReplaceAll(text, "! ", "! ... ")
-	
+
 	return strings.TrimSpace(text)
 }
 
@@ -213,14 +213,14 @@ func (c *TTSClient) GenerateAudio(text string, filename string) (string, error) 
 	if err := os.MkdirAll(c.Config.OutputDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
-	
+
 	// Add .mp3 extension if not present
 	if !strings.HasSuffix(filename, ".mp3") {
 		filename = strings.TrimSuffix(filename, ".wav") + ".mp3"
 	}
-	
+
 	outputPath := filepath.Join(c.Config.OutputDir, filename)
-	
+
 	switch c.Config.Provider {
 	case ProviderElevenLabs:
 		return c.generateElevenLabsAudio(text, outputPath)
@@ -240,14 +240,14 @@ func (c *TTSClient) generateElevenLabsAudio(text string, outputPath string) (str
 	if c.Config.APIKey == "" {
 		return "", fmt.Errorf("ElevenLabs API key is required")
 	}
-	
+
 	voiceID := c.Config.Voice.ID
 	if voiceID == "" {
 		voiceID = "21m00Tcm4TlvDq8ikWAM" // Default Rachel voice
 	}
-	
+
 	url := fmt.Sprintf("https://api.elevenlabs.io/v1/text-to-speech/%s", voiceID)
-	
+
 	requestData := ElevenLabsTTSRequest{
 		Text:    text,
 		ModelID: "eleven_monolingual_v1",
@@ -256,44 +256,44 @@ func (c *TTSClient) generateElevenLabsAudio(text string, outputPath string) (str
 			SimilarityBoost: 0.5,
 		},
 	}
-	
+
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("Accept", "audio/mpeg")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("xi-api-key", c.Config.APIKey)
-	
+
 	resp, err := c.Config.HTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to make request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("ElevenLabs API error %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	// Write audio data to file
 	file, err := os.Create(outputPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer func() { _ = file.Close() }()
-	
+
 	_, err = io.Copy(file, resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to write audio data: %w", err)
 	}
-	
+
 	return outputPath, nil
 }
 
@@ -302,14 +302,14 @@ func (c *TTSClient) generateOpenAIAudio(text string, outputPath string) (string,
 	if c.Config.APIKey == "" {
 		return "", fmt.Errorf("OpenAI API key is required")
 	}
-	
+
 	voice := c.Config.Voice.ID
 	if voice == "" {
 		voice = "alloy" // Default voice
 	}
-	
+
 	url := "https://api.openai.com/v1/audio/speech"
-	
+
 	requestData := OpenAITTSRequest{
 		Model:          "tts-1",
 		Input:          text,
@@ -317,43 +317,43 @@ func (c *TTSClient) generateOpenAIAudio(text string, outputPath string) (string,
 		ResponseFormat: "mp3",
 		Speed:          c.Config.Speed,
 	}
-	
+
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	req.Header.Set("Authorization", "Bearer "+c.Config.APIKey)
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := c.Config.HTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to make request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("OpenAI API error %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	// Write audio data to file
 	file, err := os.Create(outputPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer func() { _ = file.Close() }()
-	
+
 	_, err = io.Copy(file, resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to write audio data: %w", err)
 	}
-	
+
 	return outputPath, nil
 }
 
@@ -372,15 +372,15 @@ func (c *TTSClient) generateMockAudio(text string, outputPath string) (string, e
 		len(text),
 		c.Config.Voice.Name,
 		text)
-	
+
 	// Change extension to .txt for mock
 	outputPath = strings.TrimSuffix(outputPath, ".mp3") + "_mock.txt"
-	
+
 	err := os.WriteFile(outputPath, []byte(mockContent), 0644)
 	if err != nil {
 		return "", fmt.Errorf("failed to write mock audio file: %w", err)
 	}
-	
+
 	return outputPath, nil
 }
 
@@ -399,7 +399,7 @@ func ValidateConfig(config *TTSConfig) error {
 	if config.Provider == "" {
 		return fmt.Errorf("TTS provider is required")
 	}
-	
+
 	providers := GetAvailableProviders()
 	validProvider := false
 	for _, provider := range providers {
@@ -409,18 +409,18 @@ func ValidateConfig(config *TTSConfig) error {
 		}
 	}
 	if !validProvider {
-		return fmt.Errorf("invalid TTS provider: %s (available: %s)", 
+		return fmt.Errorf("invalid TTS provider: %s (available: %s)",
 			config.Provider, strings.Join(providers, ", "))
 	}
-	
+
 	if config.Provider != ProviderMock && config.APIKey == "" {
 		return fmt.Errorf("%s requires an API key", config.Provider)
 	}
-	
+
 	if config.Speed < 0.5 || config.Speed > 2.0 {
 		return fmt.Errorf("speed must be between 0.5 and 2.0")
 	}
-	
+
 	return nil
 }
 
@@ -429,9 +429,9 @@ func EstimateAudioLength(text string, speed float64) float64 {
 	// Average speaking rate is about 150-160 words per minute
 	// Adjust for speed setting
 	wordsPerMinute := 155.0 * speed
-	
+
 	words := len(strings.Fields(text))
 	minutes := float64(words) / wordsPerMinute
-	
+
 	return minutes
 }

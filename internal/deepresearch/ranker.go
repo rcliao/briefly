@@ -50,7 +50,7 @@ func (r *EmbeddingRanker) deduplicateSources(sources []Source) []Source {
 	for _, source := range sources {
 		// Create a key for deduplication
 		key := r.createDeduplicationKey(source)
-		
+
 		if !seen[key] {
 			seen[key] = true
 			unique = append(unique, source)
@@ -67,12 +67,12 @@ func (r *EmbeddingRanker) createDeduplicationKey(source Source) string {
 	simplified = strings.ReplaceAll(simplified, " ", "")
 	simplified = strings.ReplaceAll(simplified, "-", "")
 	simplified = strings.ReplaceAll(simplified, "_", "")
-	
+
 	// Keep only first 50 characters to handle slight variations
 	if len(simplified) > 50 {
 		simplified = simplified[:50]
 	}
-	
+
 	return source.Domain + ":" + simplified
 }
 
@@ -110,7 +110,7 @@ func (r *EmbeddingRanker) calculateTextRelevance(text, topic string) float64 {
 
 	// Extract keywords from topic
 	topicWords := r.extractKeywords(topicLower)
-	
+
 	matchCount := 0
 	totalWords := len(topicWords)
 
@@ -177,7 +177,7 @@ func (r *EmbeddingRanker) calculateAuthorityScore(source Source) float64 {
 
 	// Domain-specific authority bonuses
 	domain := strings.ToLower(source.Domain)
-	
+
 	// High authority domains
 	highAuthority := []string{
 		"arxiv.org", "doi.org", "pubmed.ncbi.nlm.nih.gov",
@@ -217,7 +217,7 @@ func (r *EmbeddingRanker) calculateAuthorityScore(source Source) float64 {
 func (r *EmbeddingRanker) calculateRecencyScore(source Source) float64 {
 	// For MVP, we'll use a simple time-based decay
 	// In practice, this would use actual publication dates from the content
-	
+
 	// Since we don't have reliable publication dates from search results,
 	// we'll use retrieval time as a proxy and give a small bonus
 	return 0.1 // Small constant bonus for now
@@ -232,7 +232,7 @@ func (r *EmbeddingRanker) diversifySourceSelection(sources []Source) []Source {
 	var result []Source
 	domainCount := make(map[string]int)
 	typeCount := make(map[string]int)
-	
+
 	// First pass: take highest-ranking sources while maintaining diversity
 	for _, source := range sources {
 		// Check diversity constraints

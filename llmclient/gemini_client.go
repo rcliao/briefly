@@ -11,7 +11,7 @@ import (
 
 // Prompts are now package-level constants for easy iteration and visibility.
 const (
-	summarizeTextPromptTemplate = "Please summarize the following text concisely:\n\n---\n%s\n---"
+	summarizeTextPromptTemplate           = "Please summarize the following text concisely:\n\n---\n%s\n---"
 	summarizeTextWithFormatPromptTemplate = `Please summarize the following text for a %s digest format.
 
 FORMAT GUIDELINES:
@@ -25,7 +25,7 @@ Please tailor your summary to match the %s format characteristics.
 ---
 %s
 ---`
-	finalDigestPromptTemplate   = `You are an assistant tasked with creating a friendly and cohesive weekly digest in Markdown format.
+	finalDigestPromptTemplate = `You are an assistant tasked with creating a friendly and cohesive weekly digest in Markdown format.
 Below are several summaries of articles, each explicitly linked to its original source URL.
 Your goal is to synthesize these into a single, engaging narrative digest.
 
@@ -170,7 +170,7 @@ func GenerateFinalDigest(apiKey string, modelName string, combinedSummariesAndSo
 
 // GenerateFinalDigestWithTemplate sends the combined summaries and sources to the Gemini API to generate a cohesive digest
 // with specific format and template information to guide the LLM's output.
-func GenerateFinalDigestWithTemplate(apiKey string, modelName string, combinedSummariesAndSources string, 
+func GenerateFinalDigestWithTemplate(apiKey string, modelName string, combinedSummariesAndSources string,
 	format string, targetStyle string, maxSummaryLength string, keyFeatures string) (string, error) {
 	if apiKey == "" {
 		return "", fmt.Errorf("gemini API key is not provided")

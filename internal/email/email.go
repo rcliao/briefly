@@ -569,7 +569,7 @@ func WriteHTMLEmail(content string, outputDir string, filename string) (string, 
 	if !strings.HasSuffix(filename, ".html") {
 		filename = strings.TrimSuffix(filename, ".md") + ".html"
 	}
-	
+
 	return render.WriteDigestToFile(content, outputDir, filename)
 }
 

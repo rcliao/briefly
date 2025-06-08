@@ -44,7 +44,7 @@ func (s *SerpAPIProvider) Search(ctx context.Context, query string, config Confi
 		time.Sleep(s.rateLimit - elapsed)
 	}
 	s.lastCall = time.Now()
-	
+
 	// Build API URL
 	apiURL := "https://serpapi.com/search"
 	params := url.Values{}
@@ -52,7 +52,7 @@ func (s *SerpAPIProvider) Search(ctx context.Context, query string, config Confi
 	params.Set("engine", "google")
 	params.Set("api_key", s.apiKey)
 	params.Set("num", strconv.Itoa(config.MaxResults))
-	
+
 	// Add time filter if specified
 	if config.SinceTime > 0 {
 		days := int(config.SinceTime.Hours() / 24)
@@ -67,26 +67,26 @@ func (s *SerpAPIProvider) Search(ctx context.Context, query string, config Confi
 			params.Set("tbs", "qdr:y")
 		}
 	}
-	
+
 	fullURL := apiURL + "?" + params.Encode()
-	
+
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SerpAPI request: %w", err)
 	}
-	
+
 	// Execute request
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute SerpAPI request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("SerpAPI request failed with status: %d", resp.StatusCode)
 	}
-	
+
 	// Parse JSON response
 	var apiResponse struct {
 		OrganicResults []struct {
@@ -100,16 +100,16 @@ func (s *SerpAPIProvider) Search(ctx context.Context, query string, config Confi
 			Message string `json:"message"`
 		} `json:"error,omitempty"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse SerpAPI response: %w", err)
 	}
-	
+
 	// Check for API errors
 	if apiResponse.Error.Code != 0 {
 		return nil, fmt.Errorf("SerpAPI error (%d): %s", apiResponse.Error.Code, apiResponse.Error.Message)
 	}
-	
+
 	// Convert to Result format
 	var results []Result
 	for _, item := range apiResponse.OrganicResults {
@@ -123,9 +123,9 @@ func (s *SerpAPIProvider) Search(ctx context.Context, query string, config Confi
 		}
 		results = append(results, result)
 	}
-	
+
 	logger.Info("SerpAPI search completed", "query", query, "results_found", len(results))
-	
+
 	return results, nil
 }
 
@@ -135,10 +135,10 @@ func (s *SerpAPIProvider) extractDomain(urlStr string) string {
 	if err != nil {
 		return ""
 	}
-	
+
 	domain := parsed.Hostname()
 	// Remove www. prefix
 	domain = strings.TrimPrefix(domain, "www.")
-	
+
 	return domain
 }

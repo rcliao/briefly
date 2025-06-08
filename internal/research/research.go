@@ -391,7 +391,6 @@ func NewSerpAPISearchProvider(apiKey string) SearchProvider {
 	return search.NewLegacyProviderAdapter(serpProvider)
 }
 
-
 // NewGoogleCustomSearchProvider creates a new Google Custom Search provider using the shared search module
 func NewGoogleCustomSearchProvider(apiKey, searchID string) SearchProvider {
 	googleProvider := search.NewGoogleProvider(apiKey, searchID)

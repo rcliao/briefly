@@ -23,19 +23,19 @@ const (
 type MessageFormat string
 
 const (
-	FormatBullets   MessageFormat = "bullets"  // Short bullet points
-	FormatSummary   MessageFormat = "summary"  // Brief summary
+	FormatBullets    MessageFormat = "bullets"    // Short bullet points
+	FormatSummary    MessageFormat = "summary"    // Brief summary
 	FormatHighlights MessageFormat = "highlights" // Key highlights only
 )
 
 // SlackMessage represents a Slack message structure
 type SlackMessage struct {
-	Text        string               `json:"text,omitempty"`
-	Blocks      []SlackBlock         `json:"blocks,omitempty"`
-	Attachments []SlackAttachment    `json:"attachments,omitempty"`
-	Username    string               `json:"username,omitempty"`
-	IconEmoji   string               `json:"icon_emoji,omitempty"`
-	Channel     string               `json:"channel,omitempty"`
+	Text        string            `json:"text,omitempty"`
+	Blocks      []SlackBlock      `json:"blocks,omitempty"`
+	Attachments []SlackAttachment `json:"attachments,omitempty"`
+	Username    string            `json:"username,omitempty"`
+	IconEmoji   string            `json:"icon_emoji,omitempty"`
+	Channel     string            `json:"channel,omitempty"`
 }
 
 // SlackBlock represents a Slack block kit element
@@ -68,12 +68,12 @@ type SlackAccessory struct {
 
 // SlackAttachment represents legacy Slack attachments
 type SlackAttachment struct {
-	Color    string       `json:"color,omitempty"`
-	Title    string       `json:"title,omitempty"`
-	Text     string       `json:"text,omitempty"`
-	Fields   []SlackField `json:"fields,omitempty"`
-	Footer   string       `json:"footer,omitempty"`
-	Ts       int64        `json:"ts,omitempty"`
+	Color  string       `json:"color,omitempty"`
+	Title  string       `json:"title,omitempty"`
+	Text   string       `json:"text,omitempty"`
+	Fields []SlackField `json:"fields,omitempty"`
+	Footer string       `json:"footer,omitempty"`
+	Ts     int64        `json:"ts,omitempty"`
 }
 
 // SlackField represents fields in attachments
@@ -85,10 +85,10 @@ type SlackField struct {
 
 // DiscordMessage represents a Discord message structure
 type DiscordMessage struct {
-	Content   string          `json:"content,omitempty"`
-	Username  string          `json:"username,omitempty"`
-	AvatarURL string          `json:"avatar_url,omitempty"`
-	Embeds    []DiscordEmbed  `json:"embeds,omitempty"`
+	Content   string         `json:"content,omitempty"`
+	Username  string         `json:"username,omitempty"`
+	AvatarURL string         `json:"avatar_url,omitempty"`
+	Embeds    []DiscordEmbed `json:"embeds,omitempty"`
 }
 
 // DiscordEmbed represents a Discord embed

@@ -6,7 +6,7 @@ import (
 
 // Re-export search providers from the shared search module for convenience
 var (
-	NewDuckDuckGoSearchProvider     = search.NewDuckDuckGoProvider
-	NewGoogleCustomSearchProvider  = search.NewGoogleProvider  
-	NewSerpAPISearchProvider       = search.NewSerpAPIProvider
+	NewDuckDuckGoSearchProvider   = search.NewDuckDuckGoProvider
+	NewGoogleCustomSearchProvider = search.NewGoogleProvider
+	NewSerpAPISearchProvider      = search.NewSerpAPIProvider
 )

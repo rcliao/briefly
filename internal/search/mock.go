@@ -27,7 +27,7 @@ func NewMockProvider() *MockProvider {
 			},
 			{
 				URL:     "https://test.org/article2",
-				Title:   "Test Article 2", 
+				Title:   "Test Article 2",
 				Snippet: "Another mock search result with different content.",
 				Domain:  "test.org",
 				Source:  "Mock",
@@ -54,13 +54,13 @@ func (m *MockProvider) GetName() string {
 func (m *MockProvider) Search(ctx context.Context, query string, config Config) ([]Result, error) {
 	// Simulate some processing time
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Limit results based on config
 	maxResults := config.MaxResults
 	if maxResults <= 0 || maxResults > len(m.results) {
 		maxResults = len(m.results)
 	}
-	
+
 	// Create copies of results with query-specific modifications
 	results := make([]Result, maxResults)
 	for i := 0; i < maxResults; i++ {
@@ -69,7 +69,7 @@ func (m *MockProvider) Search(ctx context.Context, query string, config Config) 
 		result.Title = fmt.Sprintf("%s (for query: %s)", result.Title, query)
 		results[i] = result
 	}
-	
+
 	return results, nil
 }
 
