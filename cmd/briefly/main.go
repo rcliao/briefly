@@ -1,11 +1,11 @@
 package main
 
 import (
-	"briefly/cmd/cmd"
+	"briefly/cmd/handlers"
 	"briefly/internal/logger"
 )
 
 func main() {
 	logger.Init() // Initialize the logger
-	cmd.Execute()
+	handlers.Execute()
 }

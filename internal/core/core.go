@@ -122,3 +122,41 @@ type CacheStats struct {
 	CacheSize     int64     `json:"cache_size"`      // Total cache size in bytes
 	LastUpdated   time.Time `json:"last_updated"`    // Last cache update time
 }
+
+// ResearchReport represents the results of a research operation
+type ResearchReport struct {
+	ID              string    `json:"id"`               // Unique identifier for the research report
+	Query           string    `json:"query"`            // Original research query
+	Depth           int       `json:"depth"`            // Research depth level
+	GeneratedQueries []string `json:"generated_queries"` // AI-generated search queries
+	Results         []ResearchResult `json:"results"`  // Research results
+	Summary         string    `json:"summary"`          // Summary of findings
+	DateGenerated   time.Time `json:"date_generated"`   // When the research was conducted
+	TotalResults    int       `json:"total_results"`    // Total number of results found
+	RelevanceScore  float64   `json:"relevance_score"`  // Overall relevance score
+}
+
+// ResearchResult represents a single research result
+type ResearchResult struct {
+	ID          string    `json:"id"`           // Unique identifier
+	Title       string    `json:"title"`        // Result title
+	URL         string    `json:"url"`          // Result URL
+	Snippet     string    `json:"snippet"`      // Result snippet/description
+	Source      string    `json:"source"`       // Source (Google, DuckDuckGo, etc.)
+	Relevance   float64   `json:"relevance"`    // Relevance score (0-1)
+	DateFound   time.Time `json:"date_found"`   // When this result was found
+	Keywords    []string  `json:"keywords"`     // Extracted keywords
+}
+
+// FeedAnalysisReport represents analysis of RSS feed content
+type FeedAnalysisReport struct {
+	ID                string    `json:"id"`                 // Unique identifier for the report
+	DateGenerated     time.Time `json:"date_generated"`     // When the analysis was performed
+	FeedsAnalyzed     int       `json:"feeds_analyzed"`     // Number of feeds analyzed
+	ItemsAnalyzed     int       `json:"items_analyzed"`     // Number of feed items analyzed
+	TopTopics         []string  `json:"top_topics"`         // Most common topics
+	TrendingKeywords  []string  `json:"trending_keywords"`  // Trending keywords
+	RecommendedItems  []FeedItem `json:"recommended_items"` // Recommended items for digest
+	QualityScore      float64   `json:"quality_score"`      // Overall quality score
+	Summary           string    `json:"summary"`            // Summary of analysis
+}
