@@ -920,7 +920,7 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 	// Cache the digest
 	cacheStore, err := store.NewStore(".briefly-cache")
 	if err == nil {
-		defer cacheStore.Close()
+		defer func() { _ = cacheStore.Close() }()
 		digestID := uuid.NewString()
 		var articleURLs []string
 		for _, item := range digestItems {

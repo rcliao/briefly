@@ -92,7 +92,7 @@ func runCacheClear(confirm bool) error {
 	if !confirm {
 		fmt.Print("⚠️  This will remove all cached articles and summaries. Continue? [y/N]: ")
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if response != "y" && response != "Y" && response != "yes" {
 			fmt.Println("Cache clear cancelled")
 			return nil

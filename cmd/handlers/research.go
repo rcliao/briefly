@@ -80,7 +80,7 @@ func researchRunFunc(cmd *cobra.Command, args []string) {
 	// Handle topic research
 	if len(args) == 0 {
 		fmt.Fprintf(os.Stderr, "Error: research command requires a topic or feed management flag\n")
-		cmd.Help()
+		_ = cmd.Help()
 		os.Exit(1)
 	}
 
