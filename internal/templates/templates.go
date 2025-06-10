@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"briefly/internal/core"
 	"briefly/internal/email"
 	"briefly/internal/llm"
 	"briefly/internal/render"
@@ -37,6 +38,7 @@ type DigestTemplate struct {
 	IncludePromptCorner       bool // For newsletter format to include AI prompts section
 	IncludeIndividualArticles bool // Whether to include the "Individual Articles" section
 	IncludeTopicClustering    bool // Whether to group articles by topic clusters
+	IncludeBanner             bool // Whether to include banner image
 	MaxSummaryLength          int  // 0 for no limit
 	IntroductionText          string
 	ConclusionText            string
@@ -57,6 +59,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludePromptCorner:       false,
 			IncludeIndividualArticles: false,
 			IncludeTopicClustering:    false, // Keep simple for brief format
+			IncludeBanner:             false, // Keep minimal for brief format
 			MaxSummaryLength:          150,
 			IntroductionText:          "Quick highlights from today's reading:",
 			ConclusionText:            "",
@@ -73,6 +76,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludePromptCorner:       false,
 			IncludeIndividualArticles: true, // Enable to showcase topic clustering
 			IncludeTopicClustering:    true, // Enable topic clustering for better organization
+			IncludeBanner:             false, // Standard format keeps simple
 			MaxSummaryLength:          300,
 			IntroductionText:          "Here's what's worth knowing from today's articles:",
 			ConclusionText:            "",
@@ -89,6 +93,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludePromptCorner:       false,
 			IncludeIndividualArticles: true, // Enable to showcase topic clustering
 			IncludeTopicClustering:    true, // Enable topic clustering for detailed analysis
+			IncludeBanner:             false, // Detailed format focuses on content
 			MaxSummaryLength:          0,    // No limit
 			IntroductionText:          "In-depth analysis of today's key articles:",
 			ConclusionText:            "These insights provide a comprehensive view of current developments in the field.",
@@ -105,6 +110,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludePromptCorner:       true, // Enable prompt corner for newsletter format
 			IncludeIndividualArticles: false,
 			IncludeTopicClustering:    true, // Enable topic clustering for newsletter organization
+			IncludeBanner:             true, // Enable banner for newsletter format
 			MaxSummaryLength:          250,
 			IntroductionText:          "Welcome to this week's curated selection of insights! Here's what caught our attention:",
 			ConclusionText:            "Thank you for reading! Forward this to colleagues who might find it valuable.",
@@ -121,6 +127,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludePromptCorner:       false,
 			IncludeIndividualArticles: true,
 			IncludeTopicClustering:    true, // Enable topic clustering for email organization
+			IncludeBanner:             true, // Enable banner for email format
 			MaxSummaryLength:          300,
 			IntroductionText:          "Here's your personalized digest with today's most important insights:",
 			ConclusionText:            "Stay informed and keep exploring!",
@@ -451,6 +458,70 @@ func getSentimentEmoji(sentimentLabel string) string {
 	}
 }
 
+// renderBannerSection renders the banner image section for formats that support it
+func renderBannerSection(banner *core.BannerImage, template *DigestTemplate, format string) string {
+	if banner == nil || !template.IncludeBanner {
+		return ""
+	}
+	
+	var content strings.Builder
+	
+	switch format {
+	case "markdown":
+		// Markdown format with image and alt text
+		if banner.AltText != "" {
+			content.WriteString(fmt.Sprintf("![%s](%s)\n\n", banner.AltText, banner.ImageURL))
+		} else {
+			content.WriteString(fmt.Sprintf("![AI-generated banner](%s)\n\n", banner.ImageURL))
+		}
+		
+		// Optional: Add themes as subtle text
+		if len(banner.Themes) > 0 {
+			content.WriteString(fmt.Sprintf("*Featured themes: %s*\n\n", strings.Join(banner.Themes, ", ")))
+		}
+		
+	case "html":
+		// HTML format for email templates
+		content.WriteString(fmt.Sprintf(`<img src="%s" alt="%s" style="width: 100%%; max-width: 600px; height: auto; border-radius: 8px; margin-bottom: 20px;" />`, 
+			banner.ImageURL, banner.AltText))
+		content.WriteString("\n\n")
+		
+	case "plain":
+		// Plain text fallback
+		content.WriteString("🎨 **Banner Image Available**\n")
+		if len(banner.Themes) > 0 {
+			content.WriteString(fmt.Sprintf("Themes: %s\n", strings.Join(banner.Themes, ", ")))
+		}
+		content.WriteString(fmt.Sprintf("View at: %s\n\n", banner.ImageURL))
+		
+	default:
+		// Default to markdown format
+		return renderBannerSection(banner, template, "markdown")
+	}
+	
+	return content.String()
+}
+
+// renderReferencesSection renders the references section with numbered citations
+func renderReferencesSection(digestItems []render.DigestData) string {
+	if len(digestItems) == 0 {
+		return ""
+	}
+	
+	var content strings.Builder
+	content.WriteString("## References\n\n")
+	
+	for i, item := range digestItems {
+		content.WriteString(fmt.Sprintf("[%d] %s\n", i+1, item.URL))
+		if item.Title != "" {
+			content.WriteString(fmt.Sprintf("    *%s*\n", item.Title))
+		}
+		content.WriteString("\n")
+	}
+	
+	return content.String()
+}
+
 // RenderWithTemplate renders a digest using the specified template
 func RenderWithTemplate(digestItems []render.DigestData, outputDir string, finalDigest string, template *DigestTemplate) (string, error) {
 	return RenderWithTemplateAndMyTake(digestItems, outputDir, finalDigest, "", template)
@@ -592,13 +663,30 @@ func RenderWithTemplateAndMyTakeReturnContentWithTitle(digestItems []render.Dige
 		content.WriteString("\n")
 	}
 
+	// References section
+	referencesSection := renderReferencesSection(digestItems)
+	if referencesSection != "" {
+		content.WriteString("\n\n---\n\n")
+		content.WriteString(referencesSection)
+	}
+
 	// Write to file and return both content and path
 	filePath, err := render.WriteDigestToFile(content.String(), outputDir, filename)
 	return content.String(), filePath, err
 }
 
-// RenderWithInsights renders a digest with comprehensive insights data
+// RenderWithBanner renders a digest with banner image support
+func RenderWithBanner(digestItems []render.DigestData, outputDir string, finalDigest string, digestMyTake string, template *DigestTemplate, customTitle string, banner *core.BannerImage) (string, string, error) {
+	return RenderWithBannerAndInsights(digestItems, outputDir, finalDigest, digestMyTake, template, customTitle, "", "", "", []string{}, banner)
+}
+
+// RenderWithInsights renders a digest with comprehensive insights data (backward compatibility)
 func RenderWithInsights(digestItems []render.DigestData, outputDir string, finalDigest string, digestMyTake string, template *DigestTemplate, customTitle string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string) (string, string, error) {
+	return RenderWithBannerAndInsights(digestItems, outputDir, finalDigest, digestMyTake, template, customTitle, overallSentiment, alertsSummary, trendsSummary, researchSuggestions, nil)
+}
+
+// RenderWithBannerAndInsights renders a digest with both banner and insights data
+func RenderWithBannerAndInsights(digestItems []render.DigestData, outputDir string, finalDigest string, digestMyTake string, template *DigestTemplate, customTitle string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string, banner *core.BannerImage) (string, string, error) {
 	dateStr := time.Now().UTC().Format("2006-01-02")
 	filename := fmt.Sprintf("digest_%s_%s.md", strings.ToLower(string(template.Format)), dateStr)
 
@@ -614,6 +702,12 @@ func RenderWithInsights(digestItems []render.DigestData, outputDir string, final
 		title = customTitle
 	}
 	content.WriteString(fmt.Sprintf("# %s - %s\n\n", title, dateStr))
+
+	// Banner image (if provided and template supports it)
+	bannerSection := renderBannerSection(banner, template, "markdown")
+	if bannerSection != "" {
+		content.WriteString(bannerSection)
+	}
 
 	// Introduction
 	if template.IntroductionText != "" {
@@ -671,6 +765,13 @@ func RenderWithInsights(digestItems []render.DigestData, outputDir string, final
 		content.WriteString("\n")
 	}
 
+	// References section
+	referencesSection := renderReferencesSection(digestItems)
+	if referencesSection != "" {
+		content.WriteString("\n\n---\n\n")
+		content.WriteString(referencesSection)
+	}
+
 	// Write to file and return both content and path
 	filePath, err := render.WriteDigestToFile(content.String(), outputDir, filename)
 	return content.String(), filePath, err
@@ -678,6 +779,11 @@ func RenderWithInsights(digestItems []render.DigestData, outputDir string, final
 
 // RenderHTMLEmail renders a digest as HTML email
 func RenderHTMLEmail(digestItems []render.DigestData, outputDir string, finalDigest string, customTitle string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string, emailStyle string) (string, string, error) {
+	return RenderHTMLEmailWithBanner(digestItems, outputDir, finalDigest, customTitle, overallSentiment, alertsSummary, trendsSummary, researchSuggestions, emailStyle, nil)
+}
+
+// RenderHTMLEmailWithBanner renders a digest as HTML email with banner support
+func RenderHTMLEmailWithBanner(digestItems []render.DigestData, outputDir string, finalDigest string, customTitle string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string, emailStyle string, banner *core.BannerImage) (string, string, error) {
 	template := GetTemplate(FormatEmail)
 
 	// Choose email template style
@@ -697,7 +803,7 @@ func RenderHTMLEmail(digestItems []render.DigestData, outputDir string, finalDig
 		title = template.Title
 	}
 
-	emailData := email.ConvertDigestToEmail(
+	emailData := email.ConvertDigestToEmailWithBanner(
 		digestItems,
 		title,
 		template.IntroductionText,
@@ -707,6 +813,7 @@ func RenderHTMLEmail(digestItems []render.DigestData, outputDir string, finalDig
 		alertsSummary,
 		trendsSummary,
 		researchSuggestions,
+		banner,
 	)
 
 	// Render HTML email

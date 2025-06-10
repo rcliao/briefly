@@ -64,6 +64,33 @@ tts:
     # Voice ID from ElevenLabs
     voice_id: "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
 
+# AI Banner Image Configuration
+visual:
+  # OpenAI Image Generation Configuration for banner generation
+  openai:
+    # OpenAI API key for image generation (can also be set via OPENAI_API_KEY)
+    api_key: "your-openai-api-key-here"
+    
+    # Image generation model (latest API)
+    # Model: gpt-image-1 (latest image generation model)
+    model: "gpt-image-1"
+  
+  # Banner Generation Settings
+  banners:
+    # Default banner style
+    # Options: minimalist, tech, professional
+    default_style: "tech"
+    
+    # Enable banner generation by default for newsletter and email formats
+    auto_generate: false
+    
+    # Banner image dimensions (gpt-image-1 supports 1024x1024, 1792x1024, 1024x1792)
+    width: 1792   # Landscape format for presentation (16:9-ish ratio)
+    height: 1024
+    
+    # Output directory for banner images (relative to digest output directory)
+    output_directory: "banners"
+
 # Research Configuration
 research:
   # Default search provider for research commands

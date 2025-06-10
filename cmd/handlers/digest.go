@@ -11,9 +11,11 @@ import (
 	"briefly/internal/messaging"
 	"briefly/internal/render"
 	"briefly/internal/sentiment"
+	"briefly/internal/services"
 	"briefly/internal/store"
 	"briefly/internal/templates"
 	"briefly/internal/tts"
+	"briefly/internal/visual"
 	"bufio"
 	"context"
 	"fmt"
@@ -37,7 +39,8 @@ func NewDigestCmd() *cobra.Command {
 
 Features:
 - Smart Headlines: Automatically generates compelling, content-based titles
-- AI-powered insights: Sentiment analysis, alerts, and trend analysis
+- AI-powered insights: Sentiment analysis, alerts, and trend analysis  
+- AI banner images: Generate visual banners using DALL-E for enhanced presentation
 - Multiple formats: brief, standard, detailed, newsletter, email, slack, discord, audio, condensed
 - Interactive my-take workflow: Add personal commentary
 - Single article mode: Process just one URL
@@ -46,6 +49,9 @@ Examples:
   # Standard digest generation
   briefly digest input/links.md
   briefly digest --format newsletter --output digests input/links.md
+  
+  # Generate digest with AI banner image
+  briefly digest --with-banner --format newsletter input/links.md
   
   # Single article processing  
   briefly digest --single https://example.com/article
@@ -73,7 +79,7 @@ Examples:
 	digestCmd.Flags().Bool("list-formats", false, "List available output formats")
 	digestCmd.Flags().Bool("single", false, "Process single URL instead of input file")
 	digestCmd.Flags().Bool("interactive", false, "Interactive my-take workflow")
-	digestCmd.Flags().Bool("with-banner", false, "Generate AI banner image (future feature)")
+	digestCmd.Flags().Bool("with-banner", false, "Generate AI banner image using DALL-E")
 	digestCmd.Flags().String("style-guide", "", "Path to personal style guide file")
 
 	// Messaging platform flags
@@ -130,8 +136,9 @@ func digestRunFunc(cmd *cobra.Command, args []string) {
 
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	interactive, _ := cmd.Flags().GetBool("interactive")
+	withBanner, _ := cmd.Flags().GetBool("with-banner")
 
-	if err := runDigest(cmd, inputFile, outputDir, format, dryRun, interactive); err != nil {
+	if err := runDigest(cmd, inputFile, outputDir, format, dryRun, interactive, withBanner); err != nil {
 		logger.Error("Failed to generate digest", err)
 		os.Exit(1)
 	}
@@ -195,7 +202,7 @@ func runSingleArticle(cmd *cobra.Command, url string) error {
 	return nil
 }
 
-func runDigest(cmd *cobra.Command, inputFile, outputDir, format string, dryRun, interactive bool) error {
+func runDigest(cmd *cobra.Command, inputFile, outputDir, format string, dryRun, interactive, withBanner bool) error {
 	logger.Info("Starting digest generation", "input_file", inputFile, "format", format, "dry_run", dryRun, "interactive", interactive)
 
 	// Read links from input file
@@ -239,7 +246,7 @@ func runDigest(cmd *cobra.Command, inputFile, outputDir, format string, dryRun, 
 	}
 
 	// Generate final digest based on format
-	digestPath, err := generateOutput(cmd, digestItems, processedArticles, insightsData, outputDir, format, styleGuide)
+	digestPath, err := generateOutput(cmd, digestItems, processedArticles, insightsData, outputDir, format, styleGuide, withBanner)
 	if err != nil {
 		return fmt.Errorf("failed to generate output: %w", err)
 	}
@@ -621,7 +628,7 @@ func loadStyleGuide(cmd *cobra.Command) (string, error) {
 	return string(content), nil
 }
 
-func generateOutput(cmd *cobra.Command, digestItems []render.DigestData, processedArticles []core.Article, insightsData *InsightsData, outputDir, format, styleGuide string) (string, error) {
+func generateOutput(cmd *cobra.Command, digestItems []render.DigestData, processedArticles []core.Article, insightsData *InsightsData, outputDir, format, styleGuide string, withBanner bool) (string, error) {
 	switch format {
 	case "slack":
 		return generateSlackOutput(cmd, digestItems, insightsData)
@@ -632,7 +639,7 @@ func generateOutput(cmd *cobra.Command, digestItems []render.DigestData, process
 	case "condensed":
 		return generateCondensedOutput(digestItems, outputDir, insightsData)
 	default:
-		return generateStandardOutput(digestItems, processedArticles, insightsData, outputDir, format, styleGuide)
+		return generateStandardOutput(digestItems, processedArticles, insightsData, outputDir, format, styleGuide, withBanner)
 	}
 }
 
@@ -818,7 +825,7 @@ func generateCondensedOutput(digestItems []render.DigestData, outputDir string, 
 	return filepath, nil
 }
 
-func generateStandardOutput(digestItems []render.DigestData, processedArticles []core.Article, insightsData *InsightsData, outputDir, format, styleGuide string) (string, error) {
+func generateStandardOutput(digestItems []render.DigestData, processedArticles []core.Article, insightsData *InsightsData, outputDir, format, styleGuide string, withBanner bool) (string, error) {
 	// Initialize LLM client for final digest generation
 	llmClient, err := llm.NewClient("")
 	if err != nil {
@@ -907,14 +914,23 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 		}
 	}
 
+	// Generate banner image if requested
+	var banner *core.BannerImage
+	if withBanner && (template.IncludeBanner || format == "email" || format == "newsletter") {
+		banner = generateBannerImage(finalDigest, outputDir, format)
+		if banner != nil {
+			logger.Info("Banner image generated", "path", banner.ImageURL, "themes", len(banner.Themes))
+		}
+	}
+
 	// Generate digest output
 	var renderedContent, digestPath string
 	var renderErr error
 
 	if format == "email" {
-		renderedContent, digestPath, renderErr = templates.RenderHTMLEmail(digestItems, outputDir, finalDigest, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, "default")
+		renderedContent, digestPath, renderErr = templates.RenderHTMLEmailWithBanner(digestItems, outputDir, finalDigest, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, "default", banner)
 	} else {
-		renderedContent, digestPath, renderErr = templates.RenderWithInsights(digestItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions)
+		renderedContent, digestPath, renderErr = templates.RenderWithBannerAndInsights(digestItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, banner)
 	}
 
 	if renderErr != nil {
@@ -1087,9 +1103,8 @@ func generateDigestWithStyleGuide(llmClient *llm.Client, content, format string,
 }
 
 func generateStandardDigest(llmClient *llm.Client, content, format string, template templates.DigestTemplate) (string, error) {
-	// Implementation would call the existing LLM digest generation
-	// This is a placeholder - the actual implementation would need to be moved from the old root.go
-	return "", fmt.Errorf("digest generation not yet implemented in new architecture")
+	// Use the new LLM client method to generate the final digest
+	return llmClient.GenerateFinalDigest(content, format)
 }
 
 func regenerateDigestWithMyTake(llmClient *llm.Client, originalContent, myTake, styleGuide string) (string, error) {
@@ -1103,4 +1118,112 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// generateBannerImage creates an AI-generated banner image for the digest
+func generateBannerImage(digestContent, outputDir, format string) *core.BannerImage {
+	// Initialize LLM service for content analysis
+	llmClient, err := llm.NewClient("")
+	if err != nil {
+		logger.Warn("Failed to initialize LLM client for banner generation", "error", err)
+		return nil
+	}
+	defer llmClient.Close()
+
+	// Get OpenAI API key for DALL-E (try visual config first, then fallback to env var)
+	openAIKey := viper.GetString("visual.openai.api_key")
+	if openAIKey == "" {
+		openAIKey = viper.GetString("openai.api_key")
+	}
+	if openAIKey == "" {
+		openAIKey = os.Getenv("OPENAI_API_KEY")
+	}
+	if openAIKey == "" {
+		logger.Warn("OpenAI API key not configured (set visual.openai.api_key, openai.api_key, or OPENAI_API_KEY env var), skipping banner generation")
+		return nil
+	}
+
+	// Initialize visual service (pass nil for LLM service since we'll handle theme analysis differently)
+	visualService := visual.NewService(nil, openAIKey, outputDir)
+
+	// Create a digest object for theme analysis
+	digest := &core.Digest{
+		Title:         "Digest",
+		Content:       digestContent,
+		DigestSummary: digestContent,
+	}
+
+	ctx := context.Background()
+
+	// Analyze content themes
+	themes, err := visualService.AnalyzeContentThemes(ctx, digest)
+	if err != nil {
+		logger.Warn("Failed to analyze content themes", "error", err)
+		return nil
+	}
+
+	// Determine banner style (use config or format-based default)
+	style := viper.GetString("visual.banners.default_style")
+	if style == "" {
+		switch format {
+		case "newsletter":
+			style = "minimalist"
+		case "email":
+			style = "professional"
+		default:
+			style = "tech"
+		}
+	}
+
+	// Generate banner prompt
+	prompt, err := visualService.GenerateBannerPrompt(ctx, themes, style)
+	if err != nil {
+		logger.Warn("Failed to generate banner prompt", "error", err)
+		return nil
+	}
+
+	// Get configuration values with defaults
+	width := viper.GetInt("visual.banners.width")
+	if width == 0 {
+		width = 1792  // Default to DALL-E's 16:9-ish ratio
+	}
+	height := viper.GetInt("visual.banners.height")
+	if height == 0 {
+		height = 1024
+	}
+
+	// Set up banner output directory
+	bannerOutputDir := outputDir
+	if bannerSubDir := viper.GetString("visual.banners.output_directory"); bannerSubDir != "" {
+		bannerOutputDir = filepath.Join(outputDir, bannerSubDir)
+	}
+
+	// Generate banner image
+	bannerConfig := services.BannerConfig{
+		Style:     style,
+		Width:     width,
+		Height:    height,
+		Quality:   "high", // Keep for backward compatibility, not used by new API
+		Format:    "JPEG",
+		OutputDir: bannerOutputDir,
+	}
+
+	banner, err := visualService.GenerateBannerImage(ctx, prompt, bannerConfig)
+	if err != nil {
+		logger.Warn("Failed to generate banner image", "error", err)
+		return nil
+	}
+
+	// Generate alt text
+	altText, err := visualService.GenerateAltText(ctx, themes)
+	if err == nil {
+		banner.AltText = altText
+	}
+
+	// Store theme information in banner
+	for _, theme := range themes {
+		banner.Themes = append(banner.Themes, theme.Theme)
+	}
+
+	return banner
 }
