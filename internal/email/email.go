@@ -1,6 +1,7 @@
 package email
 
 import (
+	"briefly/internal/core"
 	"briefly/internal/render"
 	"bytes"
 	"fmt"
@@ -38,6 +39,7 @@ type EmailData struct {
 	TrendsSummary       string
 	ResearchSuggestions []string
 	Conclusion          string
+	Banner              *core.BannerImage
 }
 
 // TopicGroup represents a group of articles with the same topic cluster
@@ -394,6 +396,19 @@ func RenderHTMLEmail(data EmailData, emailTemplate *EmailTemplate) (string, erro
                         <p class="date">{{.Data.Date}}</p>
                     </div>
 
+                    <!-- Banner Image -->
+                    {{if .Data.Banner}}
+                    <div class="banner-section">
+                        <img src="{{.Data.Banner.ImageURL}}" alt="{{.Data.Banner.AltText}}" 
+                             style="width: 100%; max-width: 600px; height: auto; border-radius: 8px; margin: 20px 0;" />
+                        {{if .Data.Banner.Themes}}
+                        <p style="font-size: 12px; color: #666; text-align: center; margin-top: 5px;">
+                            Featured themes: {{range $i, $theme := .Data.Banner.Themes}}{{if $i}}, {{end}}{{$theme}}{{end}}
+                        </p>
+                        {{end}}
+                    </div>
+                    {{end}}
+
                     <!-- Content -->
                     <div class="content">
                         {{if .Data.Introduction}}
@@ -573,8 +588,13 @@ func WriteHTMLEmail(content string, outputDir string, filename string) (string, 
 	return render.WriteDigestToFile(content, outputDir, filename)
 }
 
-// ConvertDigestToEmail converts digest data to email format
+// ConvertDigestToEmail converts digest data to email format (backward compatibility)
 func ConvertDigestToEmail(digestItems []render.DigestData, title string, introduction string, executiveSummary string, conclusion string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string) EmailData {
+	return ConvertDigestToEmailWithBanner(digestItems, title, introduction, executiveSummary, conclusion, overallSentiment, alertsSummary, trendsSummary, researchSuggestions, nil)
+}
+
+// ConvertDigestToEmailWithBanner converts digest data to email format with banner support
+func ConvertDigestToEmailWithBanner(digestItems []render.DigestData, title string, introduction string, executiveSummary string, conclusion string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string, banner *core.BannerImage) EmailData {
 	return EmailData{
 		Title:               title,
 		Date:                time.Now().Format("January 2, 2006"),
@@ -586,5 +606,6 @@ func ConvertDigestToEmail(digestItems []render.DigestData, title string, introdu
 		TrendsSummary:       trendsSummary,
 		ResearchSuggestions: researchSuggestions,
 		Conclusion:          conclusion,
+		Banner:              banner,
 	}
 }

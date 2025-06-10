@@ -42,6 +42,10 @@ go mod tidy
 briefly digest --format newsletter --output digests input/links.md
 briefly digest --format email --output digests input/links.md  # v1.0: HTML email
 
+# Generate digests with AI banner images (Sprint 3: AI-Generated Banner Images)
+briefly digest --with-banner --format newsletter input/links.md
+briefly digest --with-banner --format email input/links.md
+
 # Smart Headlines are automatically generated for all digests based on content
 
 # Cost estimation (dry run)
@@ -95,6 +99,7 @@ briefly generate-tts input/links.md --provider elevenlabs --voice Rachel
 - `email/`: HTML email template system with responsive design (v1.0)
 - `messaging/`: Slack/Discord integration with webhook support (v1.0)
 - `tts/`: Text-to-Speech audio generation with multiple providers (v1.0)
+- `visual/`: AI banner image generation using DALL-E with content theme analysis (Sprint 3)
 
 **AI-Powered Insights Pipeline**: Comprehensive analytics automatically integrated:
 - `sentiment/`: Sentiment analysis with emoji indicators
@@ -143,6 +148,7 @@ The application uses a hierarchical configuration system with Viper:
 
 ### API Requirements
 - Gemini API key required (set via `GEMINI_API_KEY` environment variable)
+- Optional: OpenAI API key for banner image generation (set via `OPENAI_API_KEY` environment variable)
 - Optional: Google Custom Search API for research features
 - Optional: SerpAPI for enhanced search capabilities
 
@@ -206,6 +212,24 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 2. Implement converter functions for digest data
 3. Add CLI commands in `cmd/cmd/root.go`
 4. Add configuration options and validation
+
+### Configuring Banner Image Generation (Sprint 3)
+1. Set OpenAI API key: `OPENAI_API_KEY` environment variable or `visual.openai.api_key` in config
+2. Configure banner settings in `.briefly.yaml`:
+   ```yaml
+   visual:
+     openai:
+       api_key: "your-openai-api-key-here"
+       model: "gpt-image-1"  # Latest image generation model
+     banners:
+       default_style: "tech"  # minimalist, tech, professional
+       width: 1536           # Landscape format (3:2 ratio)
+       height: 1024          # Supported sizes: 1024x1024, 1024x1536, 1536x1024
+   ```
+3. Use `--with-banner` flag: `briefly digest --with-banner --format newsletter input/links.md`
+4. Banner images are automatically included in newsletter and email formats when enabled
+5. Images are generated using the latest OpenAI image generation API with base64 encoding
+6. Supported image sizes: 1024x1024 (square), 1536x1024 (landscape), 1024x1536 (portrait)
 
 ### Cache Management
 - Cache is stored in `.briefly-cache/` directory (SQLite database)

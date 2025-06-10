@@ -176,3 +176,29 @@ type FeedAnalysisReport struct {
 	QualityScore      float64   `json:"quality_score"`      // Overall quality score
 	Summary           string    `json:"summary"`            // Summary of analysis
 }
+
+// BannerImage represents a generated banner image for a digest
+type BannerImage struct {
+	ID              string    `json:"id"`               // Unique identifier for the banner
+	DigestID        string    `json:"digest_id"`        // Associated digest ID
+	ImageURL        string    `json:"image_url"`        // URL/path to generated image
+	PromptUsed      string    `json:"prompt_used"`      // DALL-E prompt used for generation
+	Style           string    `json:"style"`            // Banner style (minimalist, tech, etc.)
+	Themes          []string  `json:"themes"`           // Identified content themes
+	GeneratedAt     time.Time `json:"generated_at"`     // When the banner was generated
+	FileSize        int64     `json:"file_size"`        // File size in bytes
+	Width           int       `json:"width"`            // Image width in pixels
+	Height          int       `json:"height"`           // Image height in pixels
+	Format          string    `json:"format"`           // Image format (JPEG, PNG)
+	AltText         string    `json:"alt_text"`         // Accessibility alt text
+}
+
+// ContentTheme represents a thematic analysis of digest content
+type ContentTheme struct {
+	Theme       string   `json:"theme"`       // Primary theme (AI, Security, Development, etc.)
+	Keywords    []string `json:"keywords"`    // Key terms associated with this theme
+	Articles    []string `json:"articles"`    // Article IDs contributing to this theme
+	Confidence  float64  `json:"confidence"`  // Confidence score (0-1)
+	Category    string   `json:"category"`    // Visual category (🔧 Dev, 📚 Research, 💡 Insight)
+	Description string   `json:"description"` // Theme description for prompt generation
+}

@@ -97,3 +97,22 @@ type TTSConfig struct {
 	OutputDir   string
 	MaxArticles int
 }
+
+// VisualService handles banner image generation and visual processing
+type VisualService interface {
+	AnalyzeContentThemes(ctx context.Context, digest *core.Digest) ([]core.ContentTheme, error)
+	GenerateBannerPrompt(ctx context.Context, themes []core.ContentTheme, style string) (string, error)
+	GenerateBannerImage(ctx context.Context, prompt string, config BannerConfig) (*core.BannerImage, error)
+	OptimizeImageForFormat(ctx context.Context, imagePath string, format string) (string, error)
+	GenerateAltText(ctx context.Context, themes []core.ContentTheme) (string, error)
+}
+
+// BannerConfig represents banner generation configuration
+type BannerConfig struct {
+	Style     string // Banner style (minimalist, tech, etc.)
+	Width     int    // Image width (default 1920)
+	Height    int    // Image height (default 1080)
+	Quality   string // Image quality (high, medium, low)
+	Format    string // Output format (JPEG, PNG)
+	OutputDir string // Output directory
+}
