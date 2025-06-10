@@ -17,6 +17,15 @@ type DigestData struct {
 	MyTake          string  // User's take from core.Article or core.Summary (optional)
 	TopicCluster    string  // Assigned topic cluster label
 	TopicConfidence float64 // Confidence score for topic assignment
+	// Multi-format content support
+	ContentType     string // Content type (html, pdf, youtube)
+	ContentIcon     string // Icon/emoji for content type
+	ContentLabel    string // Human-readable content type label
+	// Content-specific metadata
+	Duration        int    // Video duration in seconds (YouTube only)
+	Channel         string // Channel name (YouTube only)
+	FileSize        int64  // File size in bytes (PDF only)
+	PageCount       int    // Number of pages (PDF only)
 	// v0.4 Insights fields
 	SentimentScore  float64  // Sentiment analysis score (-1.0 to 1.0)
 	SentimentLabel  string   // Sentiment label (positive, negative, neutral)

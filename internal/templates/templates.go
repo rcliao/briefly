@@ -213,6 +213,10 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 
 				// Article title with sentiment emoji
 				title := item.Title
+				// Add content type icon first, then sentiment emoji
+				if item.ContentIcon != "" {
+					title = fmt.Sprintf("%s %s", item.ContentIcon, title)
+				}
 				if item.SentimentEmoji != "" {
 					title = fmt.Sprintf("%s %s", item.SentimentEmoji, title)
 				}
@@ -221,6 +225,28 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 					content.WriteString(fmt.Sprintf("#### %s\n\n", title))
 				} else {
 					content.WriteString(fmt.Sprintf("#### %s\n\n", title))
+				}
+				
+				// Content type metadata (for non-HTML content)
+				if item.ContentType != "html" && item.ContentType != "" {
+					var metadata []string
+					if item.ContentLabel != "" {
+						metadata = append(metadata, item.ContentLabel)
+					}
+					if item.Duration > 0 {
+						minutes := item.Duration / 60
+						seconds := item.Duration % 60
+						metadata = append(metadata, fmt.Sprintf("%d:%02d", minutes, seconds))
+					}
+					if item.Channel != "" {
+						metadata = append(metadata, fmt.Sprintf("by %s", item.Channel))
+					}
+					if item.PageCount > 0 {
+						metadata = append(metadata, fmt.Sprintf("%d pages", item.PageCount))
+					}
+					if len(metadata) > 0 {
+						content.WriteString(fmt.Sprintf("*%s*\n\n", strings.Join(metadata, " • ")))
+					}
 				}
 
 				// Topic confidence indicator (if high confidence)
@@ -260,11 +286,38 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 				content.WriteString(template.SectionSeparator)
 			}
 
-			// Article title and source
+			// Article title with content type indicator
+			titleWithIcon := item.Title
+			if item.ContentIcon != "" {
+				titleWithIcon = fmt.Sprintf("%s %s", item.ContentIcon, item.Title)
+			}
+			
 			if template.IncludeSourceLinks {
-				content.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, item.Title))
+				content.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, titleWithIcon))
 			} else {
-				content.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, item.Title))
+				content.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, titleWithIcon))
+			}
+			
+			// Content type metadata (for non-HTML content)
+			if item.ContentType != "html" && item.ContentType != "" {
+				var metadata []string
+				if item.ContentLabel != "" {
+					metadata = append(metadata, item.ContentLabel)
+				}
+				if item.Duration > 0 {
+					minutes := item.Duration / 60
+					seconds := item.Duration % 60
+					metadata = append(metadata, fmt.Sprintf("%d:%02d", minutes, seconds))
+				}
+				if item.Channel != "" {
+					metadata = append(metadata, fmt.Sprintf("by %s", item.Channel))
+				}
+				if item.PageCount > 0 {
+					metadata = append(metadata, fmt.Sprintf("%d pages", item.PageCount))
+				}
+				if len(metadata) > 0 {
+					content.WriteString(fmt.Sprintf("*%s*\n\n", strings.Join(metadata, " • ")))
+				}
 			}
 
 			// Summary

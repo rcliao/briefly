@@ -16,9 +16,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// urlRegex is a simple regex to find URLs.
-// This can be refined to be more comprehensive if needed.
+// urlRegex finds HTTP/HTTPS URLs
 var urlRegex = regexp.MustCompile(`https?://[^\s)]+`)
+
+// filePathRegex finds file paths (including file:// URLs and relative paths) - currently unused but kept for potential future use
+//var filePathRegex = regexp.MustCompile(`(?:file://)?(?:[./])?[^\s]+\.(?:pdf|html|htm)`)
+
+// allContentRegex finds all supported content (URLs and file paths)
+var allContentRegex = regexp.MustCompile(`(?:https?://[^\s)]+|(?:file://)?(?:[./])?[^\s]+\.(?:pdf|html|htm))`)
 
 // ReadLinksFromFile reads a list of URLs from a text file.
 // It expects URLs to be on lines, potentially prefixed (e.g., in a markdown list).
@@ -40,43 +45,57 @@ func ReadLinksFromFile(filePath string) ([]core.Link, error) {
 		lineNumber++
 		line := scanner.Text()
 
-		// Attempt to find a URL in the line
-		foundURLs := urlRegex.FindAllString(line, -1)
+		// Attempt to find URLs and file paths in the line
+		foundContent := allContentRegex.FindAllString(line, -1)
 
-		for _, textURL := range foundURLs {
-			// Trim potential markdown list characters or other noise if necessary,
-			// though the regex should capture a clean URL.
-			// For example, if lines are like "- https://example.com", textURL should be "https://example.com"
+		for _, content := range foundContent {
+			var isValid bool
+			var contentURL string
 
-			// Validate URL
-			parsedURL, err := url.ParseRequestURI(textURL)
-			if err != nil {
-				fmt.Printf("Skipping invalid URL on line %d: %s (%s)\\n", lineNumber, textURL, err)
+			// Check if it's a URL or file path
+			if strings.HasPrefix(content, "http://") || strings.HasPrefix(content, "https://") {
+				// Validate HTTP/HTTPS URL
+				parsedURL, err := url.ParseRequestURI(content)
+				if err != nil {
+					fmt.Printf("Skipping invalid URL on line %d: %s (%s)\\n", lineNumber, content, err)
+					continue
+				}
+				if parsedURL.Scheme == "http" || parsedURL.Scheme == "https" {
+					isValid = true
+					contentURL = content
+				}
+			} else {
+				// Handle file paths and file:// URLs
+				if strings.HasPrefix(content, "file://") {
+					contentURL = content
+					isValid = true
+				} else {
+					// Relative or absolute file path
+					contentURL = content
+					isValid = true
+				}
+			}
+
+			if !isValid {
 				continue
 			}
 
-			// Further check: ensure scheme is http or https
-			if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-				fmt.Printf("Skipping URL with non-http(s) scheme on line %d: %s\\n", lineNumber, textURL)
-				continue
-			}
-
-			// Check if this link (URL) has already been added to avoid duplicates from the same file
+			// Check if this content has already been added to avoid duplicates from the same file
 			alreadyAdded := false
 			for _, l := range links {
-				if l.URL == textURL {
+				if l.URL == contentURL {
 					alreadyAdded = true
 					break
 				}
 			}
 			if alreadyAdded {
-				fmt.Printf("Skipping duplicate URL from file: %s\\n", textURL)
+				fmt.Printf("Skipping duplicate content from file: %s\\n", contentURL)
 				continue
 			}
 
 			links = append(links, core.Link{
 				ID:        uuid.NewString(),
-				URL:       textURL,
+				URL:       contentURL,
 				DateAdded: time.Now().UTC(),   // Use UTC for consistency
 				Source:    "file:" + filePath, // More specific source
 			})
