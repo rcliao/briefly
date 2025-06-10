@@ -172,13 +172,35 @@ func (c *DALLEClient) DownloadImage(ctx context.Context, imageURL, outputPath st
 
 // GetImageSize maps banner config size to DALL-E API size format
 func GetImageSize(width, height int) string {
-	// DALL-E API supports: '1024x1024', '1024x1536', '1536x1024', and 'auto'
-	// Choose best fit based on aspect ratio
-	if width > height {
-		return "1536x1024"  // Landscape (3:2 ratio)
-	} else if height > width {
-		return "1024x1536"  // Portrait (2:3 ratio)
+	// DALL-E API supports: '1024x1024', '1024x1536', '1536x1024', '1792x1024', '1024x1792'
+	// Choose best fit based on requested dimensions and aspect ratio
+	
+	// Check for exact matches first
+	sizeStr := fmt.Sprintf("%dx%d", width, height)
+	switch sizeStr {
+	case "1024x1024", "1024x1536", "1536x1024", "1792x1024", "1024x1792":
+		return sizeStr
 	}
-	return "1024x1024"      // Square
+	
+	// For non-exact matches, find the closest supported size
+	if width == height {
+		return "1024x1024" // Square
+	}
+	
+	if width > height {
+		// Landscape orientation
+		aspectRatio := float64(width) / float64(height)
+		if aspectRatio >= 1.7 { // Wide landscape (16:9 or wider)
+			return "1792x1024" // 1.75 aspect ratio
+		}
+		return "1536x1024" // 1.5 aspect ratio
+	} else {
+		// Portrait orientation
+		aspectRatio := float64(height) / float64(width)
+		if aspectRatio >= 1.7 { // Tall portrait
+			return "1024x1792" // 1:1.75 aspect ratio
+		}
+		return "1024x1536" // 1:1.5 aspect ratio
+	}
 }
 
