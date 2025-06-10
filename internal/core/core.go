@@ -10,18 +10,34 @@ type Link struct {
 	Source    string    `json:"source"`     // Source of the link (e.g., "file", "rss", "deep_research")
 }
 
+// ContentType represents the type of content being processed
+type ContentType string
+
+const (
+	ContentTypeHTML    ContentType = "html"
+	ContentTypePDF     ContentType = "pdf"
+	ContentTypeYouTube ContentType = "youtube"
+)
+
 // Article represents the content fetched and processed from a Link.
 type Article struct {
-	ID              string    `json:"id"`               // Unique identifier for the article
-	LinkID          string    `json:"link_id"`          // Identifier of the source Link
-	Title           string    `json:"title"`            // Title of the article
-	FetchedHTML     string    `json:"fetched_html"`     // Raw HTML content fetched
-	CleanedText     string    `json:"cleaned_text"`     // Cleaned and parsed text content
-	DateFetched     time.Time `json:"date_fetched"`     // Timestamp when the article was fetched
-	MyTake          string    `json:"my_take"`          // Optional user's note on the article (can be empty)
-	Embedding       []float64 `json:"embedding"`        // Vector embedding of the article content
-	TopicCluster    string    `json:"topic_cluster"`    // Assigned topic cluster label
-	TopicConfidence float64   `json:"topic_confidence"` // Confidence score for topic assignment
+	ID              string      `json:"id"`               // Unique identifier for the article
+	LinkID          string      `json:"link_id"`          // Identifier of the source Link
+	Title           string      `json:"title"`            // Title of the article
+	ContentType     ContentType `json:"content_type"`     // Type of content (html, pdf, youtube)
+	FetchedHTML     string      `json:"fetched_html"`     // Raw HTML content fetched
+	RawContent      string      `json:"raw_content"`      // Raw content for non-HTML types (PDF text, YouTube transcript)
+	CleanedText     string      `json:"cleaned_text"`     // Cleaned and parsed text content
+	DateFetched     time.Time   `json:"date_fetched"`     // Timestamp when the article was fetched
+	MyTake          string      `json:"my_take"`          // Optional user's note on the article (can be empty)
+	Embedding       []float64   `json:"embedding"`        // Vector embedding of the article content
+	TopicCluster    string      `json:"topic_cluster"`    // Assigned topic cluster label
+	TopicConfidence float64     `json:"topic_confidence"` // Confidence score for topic assignment
+	// Content-specific metadata
+	Duration        int    `json:"duration,omitempty"`        // Video duration in seconds (YouTube only)
+	Channel         string `json:"channel,omitempty"`         // Channel name (YouTube only)
+	FileSize        int64  `json:"file_size,omitempty"`       // File size in bytes (PDF only)
+	PageCount       int    `json:"page_count,omitempty"`      // Number of pages (PDF only)
 	// v0.4 Insights fields
 	SentimentScore  float64  `json:"sentiment_score"`  // Sentiment analysis score (-1.0 to 1.0)
 	SentimentLabel  string   `json:"sentiment_label"`  // Sentiment label (positive, negative, neutral)

@@ -15,6 +15,7 @@ import (
 	"briefly/internal/templates"
 	"briefly/internal/tts"
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -319,24 +320,19 @@ func processArticles(links []core.Link, format string) ([]render.DigestData, []c
 			}
 		}
 
-		// Fetch article if not in cache
+		// Fetch and process article if not in cache
 		if !usedCache {
-			fetchedArticle, err := fetch.FetchArticle(link)
+			// Use new ContentProcessor for multi-format support
+			processor := fetch.NewContentProcessor()
+			ctx := context.Background()
+			fetchedArticle, err := processor.ProcessArticle(ctx, link.URL)
 			if err != nil {
-				logger.Error("Failed to fetch article", err, "url", link.URL)
-				fmt.Printf("❌ Failed to fetch: %s\n", link.URL)
+				logger.Error("Failed to process content", err, "url", link.URL)
+				fmt.Printf("❌ Failed to process: %s\n", link.URL)
 				continue
 			}
-			article = fetchedArticle
+			article = *fetchedArticle
 			cacheMisses++
-
-			// Clean article content
-			err = fetch.CleanArticleHTML(&article)
-			if err != nil {
-				logger.Error("Failed to clean article HTML", err, "url", link.URL)
-				fmt.Printf("❌ Failed to parse: %s\n", link.URL)
-				continue
-			}
 
 			// Cache the cleaned article
 			if cacheStore != nil {
@@ -385,7 +381,7 @@ func processArticles(links []core.Link, format string) ([]render.DigestData, []c
 			}
 		}
 
-		// Create digest item
+		// Create digest item with content type information
 		digestItem := render.DigestData{
 			Title:           article.Title,
 			URL:             link.URL,
@@ -393,6 +389,14 @@ func processArticles(links []core.Link, format string) ([]render.DigestData, []c
 			MyTake:          article.MyTake,
 			TopicCluster:    "",  // Will be populated after clustering
 			TopicConfidence: 0.0, // Will be populated after clustering
+			// Multi-format content support
+			ContentType:     string(article.ContentType),
+			ContentIcon:     fetch.GetContentTypeIcon(article.ContentType),
+			ContentLabel:    fetch.GetContentTypeLabel(article.ContentType),
+			Duration:        article.Duration,
+			Channel:         article.Channel,
+			FileSize:        article.FileSize,
+			PageCount:       article.PageCount,
 		}
 
 		digestItems = append(digestItems, digestItem)
