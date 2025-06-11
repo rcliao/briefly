@@ -79,14 +79,14 @@ func (d *DuckDuckGoProvider) Search(ctx context.Context, query string, config Co
 	// Debug: Save response body to inspect HTML structure
 	bodyStr := string(body)
 	if len(bodyStr) < 1000 {
-		logger.Info("DuckDuckGo response too short", "query", query, "response_length", len(bodyStr), "response_preview", bodyStr[:min(200, len(bodyStr))])
+		logger.Debug("DuckDuckGo response too short", "query", query, "response_length", len(bodyStr), "response_preview", bodyStr[:min(200, len(bodyStr))])
 	} else {
-		logger.Info("DuckDuckGo response received", "query", query, "response_length", len(bodyStr))
+		logger.Debug("DuckDuckGo response received", "query", query, "response_length", len(bodyStr))
 	}
 
 	// Check for CAPTCHA or blocking
 	if strings.Contains(bodyStr, "captcha") || strings.Contains(bodyStr, "Captcha") || strings.Contains(bodyStr, "blocked") {
-		logger.Info("DuckDuckGo CAPTCHA detected", "query", query)
+		logger.Debug("DuckDuckGo CAPTCHA detected", "query", query)
 		return nil, fmt.Errorf("DuckDuckGo search blocked by CAPTCHA - try again later or use Google Custom Search")
 	}
 
