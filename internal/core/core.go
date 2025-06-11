@@ -34,10 +34,10 @@ type Article struct {
 	TopicCluster    string      `json:"topic_cluster"`    // Assigned topic cluster label
 	TopicConfidence float64     `json:"topic_confidence"` // Confidence score for topic assignment
 	// Content-specific metadata
-	Duration        int    `json:"duration,omitempty"`        // Video duration in seconds (YouTube only)
-	Channel         string `json:"channel,omitempty"`         // Channel name (YouTube only)
-	FileSize        int64  `json:"file_size,omitempty"`       // File size in bytes (PDF only)
-	PageCount       int    `json:"page_count,omitempty"`      // Number of pages (PDF only)
+	Duration  int    `json:"duration,omitempty"`   // Video duration in seconds (YouTube only)
+	Channel   string `json:"channel,omitempty"`    // Channel name (YouTube only)
+	FileSize  int64  `json:"file_size,omitempty"`  // File size in bytes (PDF only)
+	PageCount int    `json:"page_count,omitempty"` // Number of pages (PDF only)
 	// v0.4 Insights fields
 	SentimentScore  float64  `json:"sentiment_score"`  // Sentiment analysis score (-1.0 to 1.0)
 	SentimentLabel  string   `json:"sentiment_label"`  // Sentiment label (positive, negative, neutral)
@@ -141,56 +141,56 @@ type CacheStats struct {
 
 // ResearchReport represents the results of a research operation
 type ResearchReport struct {
-	ID              string    `json:"id"`               // Unique identifier for the research report
-	Query           string    `json:"query"`            // Original research query
-	Depth           int       `json:"depth"`            // Research depth level
-	GeneratedQueries []string `json:"generated_queries"` // AI-generated search queries
-	Results         []ResearchResult `json:"results"`  // Research results
-	Summary         string    `json:"summary"`          // Summary of findings
-	DateGenerated   time.Time `json:"date_generated"`   // When the research was conducted
-	TotalResults    int       `json:"total_results"`    // Total number of results found
-	RelevanceScore  float64   `json:"relevance_score"`  // Overall relevance score
+	ID               string           `json:"id"`                // Unique identifier for the research report
+	Query            string           `json:"query"`             // Original research query
+	Depth            int              `json:"depth"`             // Research depth level
+	GeneratedQueries []string         `json:"generated_queries"` // AI-generated search queries
+	Results          []ResearchResult `json:"results"`           // Research results
+	Summary          string           `json:"summary"`           // Summary of findings
+	DateGenerated    time.Time        `json:"date_generated"`    // When the research was conducted
+	TotalResults     int              `json:"total_results"`     // Total number of results found
+	RelevanceScore   float64          `json:"relevance_score"`   // Overall relevance score
 }
 
 // ResearchResult represents a single research result
 type ResearchResult struct {
-	ID          string    `json:"id"`           // Unique identifier
-	Title       string    `json:"title"`        // Result title
-	URL         string    `json:"url"`          // Result URL
-	Snippet     string    `json:"snippet"`      // Result snippet/description
-	Source      string    `json:"source"`       // Source (Google, DuckDuckGo, etc.)
-	Relevance   float64   `json:"relevance"`    // Relevance score (0-1)
-	DateFound   time.Time `json:"date_found"`   // When this result was found
-	Keywords    []string  `json:"keywords"`     // Extracted keywords
+	ID        string    `json:"id"`         // Unique identifier
+	Title     string    `json:"title"`      // Result title
+	URL       string    `json:"url"`        // Result URL
+	Snippet   string    `json:"snippet"`    // Result snippet/description
+	Source    string    `json:"source"`     // Source (Google, DuckDuckGo, etc.)
+	Relevance float64   `json:"relevance"`  // Relevance score (0-1)
+	DateFound time.Time `json:"date_found"` // When this result was found
+	Keywords  []string  `json:"keywords"`   // Extracted keywords
 }
 
 // FeedAnalysisReport represents analysis of RSS feed content
 type FeedAnalysisReport struct {
-	ID                string    `json:"id"`                 // Unique identifier for the report
-	DateGenerated     time.Time `json:"date_generated"`     // When the analysis was performed
-	FeedsAnalyzed     int       `json:"feeds_analyzed"`     // Number of feeds analyzed
-	ItemsAnalyzed     int       `json:"items_analyzed"`     // Number of feed items analyzed
-	TopTopics         []string  `json:"top_topics"`         // Most common topics
-	TrendingKeywords  []string  `json:"trending_keywords"`  // Trending keywords
-	RecommendedItems  []FeedItem `json:"recommended_items"` // Recommended items for digest
-	QualityScore      float64   `json:"quality_score"`      // Overall quality score
-	Summary           string    `json:"summary"`            // Summary of analysis
+	ID               string     `json:"id"`                // Unique identifier for the report
+	DateGenerated    time.Time  `json:"date_generated"`    // When the analysis was performed
+	FeedsAnalyzed    int        `json:"feeds_analyzed"`    // Number of feeds analyzed
+	ItemsAnalyzed    int        `json:"items_analyzed"`    // Number of feed items analyzed
+	TopTopics        []string   `json:"top_topics"`        // Most common topics
+	TrendingKeywords []string   `json:"trending_keywords"` // Trending keywords
+	RecommendedItems []FeedItem `json:"recommended_items"` // Recommended items for digest
+	QualityScore     float64    `json:"quality_score"`     // Overall quality score
+	Summary          string     `json:"summary"`           // Summary of analysis
 }
 
 // BannerImage represents a generated banner image for a digest
 type BannerImage struct {
-	ID              string    `json:"id"`               // Unique identifier for the banner
-	DigestID        string    `json:"digest_id"`        // Associated digest ID
-	ImageURL        string    `json:"image_url"`        // URL/path to generated image
-	PromptUsed      string    `json:"prompt_used"`      // DALL-E prompt used for generation
-	Style           string    `json:"style"`            // Banner style (minimalist, tech, etc.)
-	Themes          []string  `json:"themes"`           // Identified content themes
-	GeneratedAt     time.Time `json:"generated_at"`     // When the banner was generated
-	FileSize        int64     `json:"file_size"`        // File size in bytes
-	Width           int       `json:"width"`            // Image width in pixels
-	Height          int       `json:"height"`           // Image height in pixels
-	Format          string    `json:"format"`           // Image format (JPEG, PNG)
-	AltText         string    `json:"alt_text"`         // Accessibility alt text
+	ID          string    `json:"id"`           // Unique identifier for the banner
+	DigestID    string    `json:"digest_id"`    // Associated digest ID
+	ImageURL    string    `json:"image_url"`    // URL/path to generated image
+	PromptUsed  string    `json:"prompt_used"`  // DALL-E prompt used for generation
+	Style       string    `json:"style"`        // Banner style (minimalist, tech, etc.)
+	Themes      []string  `json:"themes"`       // Identified content themes
+	GeneratedAt time.Time `json:"generated_at"` // When the banner was generated
+	FileSize    int64     `json:"file_size"`    // File size in bytes
+	Width       int       `json:"width"`        // Image width in pixels
+	Height      int       `json:"height"`       // Image height in pixels
+	Format      string    `json:"format"`       // Image format (JPEG, PNG)
+	AltText     string    `json:"alt_text"`     // Accessibility alt text
 }
 
 // ContentTheme represents a thematic analysis of digest content

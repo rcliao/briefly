@@ -27,7 +27,7 @@ func NewService(llmService services.LLMService, dalleAPIKey string, outputDir st
 	if dalleAPIKey != "" {
 		dalleClient = NewDALLEClient(dalleAPIKey)
 	}
-	
+
 	return &Service{
 		llmService:  llmService,
 		dalleClient: dalleClient,
@@ -41,40 +41,40 @@ func (s *Service) AnalyzeContentThemes(ctx context.Context, digest *core.Digest)
 	if s.llmService == nil {
 		return s.analyzeThemesSimple(digest), nil
 	}
-	
+
 	// Collect all article content and titles from the digest
-	contentText := fmt.Sprintf("Digest Title: %s\n\nDigest Summary: %s\n\nContent: %s", 
+	contentText := fmt.Sprintf("Digest Title: %s\n\nDigest Summary: %s\n\nContent: %s",
 		digest.Title, digest.DigestSummary, digest.Content)
-	
+
 	// Create prompt for theme analysis
 	themePrompt := buildThemeAnalysisPrompt(contentText)
-	
+
 	// Use LLM to analyze themes
 	themeResponse, err := s.llmService.SummarizeArticle(ctx, core.Article{
 		CleanedText: themePrompt,
 		Title:       "Theme Analysis Request",
 	}, "theme_analysis")
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze content themes: %w", err)
 	}
-	
+
 	// Parse theme response into structured themes
 	themes := parseThemeResponse(themeResponse.SummaryText)
-	
+
 	return themes, nil
 }
 
 // analyzeThemesSimple provides basic theme analysis without LLM
 func (s *Service) analyzeThemesSimple(digest *core.Digest) []core.ContentTheme {
 	content := strings.ToLower(digest.Content + " " + digest.DigestSummary)
-	
+
 	// Simple keyword-based theme detection
 	var themes []core.ContentTheme
-	
+
 	// AI/ML theme
-	if strings.Contains(content, "ai") || strings.Contains(content, "artificial intelligence") || 
-	   strings.Contains(content, "machine learning") || strings.Contains(content, "neural") {
+	if strings.Contains(content, "ai") || strings.Contains(content, "artificial intelligence") ||
+		strings.Contains(content, "machine learning") || strings.Contains(content, "neural") {
 		themes = append(themes, core.ContentTheme{
 			Theme:       "AI & Machine Learning",
 			Keywords:    []string{"ai", "machine learning", "neural networks"},
@@ -83,10 +83,10 @@ func (s *Service) analyzeThemesSimple(digest *core.Digest) []core.ContentTheme {
 			Description: "Artificial intelligence and machine learning developments",
 		})
 	}
-	
+
 	// Development theme
-	if strings.Contains(content, "code") || strings.Contains(content, "programming") || 
-	   strings.Contains(content, "software") || strings.Contains(content, "development") {
+	if strings.Contains(content, "code") || strings.Contains(content, "programming") ||
+		strings.Contains(content, "software") || strings.Contains(content, "development") {
 		themes = append(themes, core.ContentTheme{
 			Theme:       "Software Development",
 			Keywords:    []string{"code", "programming", "software"},
@@ -95,10 +95,10 @@ func (s *Service) analyzeThemesSimple(digest *core.Digest) []core.ContentTheme {
 			Description: "Software development and programming topics",
 		})
 	}
-	
+
 	// Security theme
-	if strings.Contains(content, "security") || strings.Contains(content, "privacy") || 
-	   strings.Contains(content, "cyber") || strings.Contains(content, "vulnerability") {
+	if strings.Contains(content, "security") || strings.Contains(content, "privacy") ||
+		strings.Contains(content, "cyber") || strings.Contains(content, "vulnerability") {
 		themes = append(themes, core.ContentTheme{
 			Theme:       "Security & Privacy",
 			Keywords:    []string{"security", "privacy", "cybersecurity"},
@@ -107,7 +107,7 @@ func (s *Service) analyzeThemesSimple(digest *core.Digest) []core.ContentTheme {
 			Description: "Security and privacy related topics",
 		})
 	}
-	
+
 	// Default to general tech if no specific themes found
 	if len(themes) == 0 {
 		themes = append(themes, core.ContentTheme{
@@ -118,7 +118,7 @@ func (s *Service) analyzeThemesSimple(digest *core.Digest) []core.ContentTheme {
 			Description: "General technology and innovation topics",
 		})
 	}
-	
+
 	return themes
 }
 
@@ -127,24 +127,24 @@ func (s *Service) GenerateBannerPrompt(ctx context.Context, themes []core.Conten
 	if len(themes) == 0 {
 		return "", fmt.Errorf("no themes provided for prompt generation")
 	}
-	
+
 	// Build prompt based on dominant themes
 	var themeDescriptions []string
-	
+
 	for _, theme := range themes {
 		if theme.Confidence > 0.5 { // Only include confident themes
 			themeDescriptions = append(themeDescriptions, theme.Description)
 		}
 	}
-	
+
 	if len(themeDescriptions) == 0 {
 		// Fallback to generic tech illustration
 		return generateGenericPrompt(style), nil
 	}
-	
+
 	// Generate specific prompt based on themes
 	prompt := generateThemeBasedPrompt(themeDescriptions, style)
-	
+
 	return prompt, nil
 }
 
@@ -152,7 +152,7 @@ func (s *Service) GenerateBannerPrompt(ctx context.Context, themes []core.Conten
 func (s *Service) GenerateBannerImage(ctx context.Context, prompt string, config services.BannerConfig) (*core.BannerImage, error) {
 	// Generate unique ID for the banner
 	bannerID := generateID()
-	
+
 	// Set defaults for config
 	if config.Width == 0 {
 		config.Width = 1920
@@ -166,10 +166,10 @@ func (s *Service) GenerateBannerImage(ctx context.Context, prompt string, config
 	if config.OutputDir == "" {
 		config.OutputDir = s.outputDir
 	}
-	
+
 	fileName := fmt.Sprintf("banner_%s.jpg", bannerID)
 	imagePath := filepath.Join(config.OutputDir, fileName)
-	
+
 	banner := &core.BannerImage{
 		ID:          bannerID,
 		ImageURL:    imagePath,
@@ -180,47 +180,47 @@ func (s *Service) GenerateBannerImage(ctx context.Context, prompt string, config
 		Height:      config.Height,
 		Format:      config.Format,
 	}
-	
+
 	// If DALL-E client is available, generate actual image
 	if s.dalleClient != nil {
 		size := GetImageSize(config.Width, config.Height)
-		
+
 		resp, err := s.dalleClient.GenerateImage(ctx, prompt, size, "")
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate image with DALL-E: %w", err)
 		}
-		
+
 		if len(resp.Data) == 0 {
 			return nil, fmt.Errorf("no image generated by DALL-E")
 		}
-		
+
 		// Save the base64 encoded image
 		imageData := resp.Data[0].B64JSON
 		if imageData == "" {
 			return nil, fmt.Errorf("no image data received from DALL-E")
 		}
-		
+
 		if err := s.dalleClient.SaveBase64Image(ctx, imageData, imagePath); err != nil {
 			return nil, fmt.Errorf("failed to save generated image: %w", err)
 		}
-		
+
 		// Get file size
 		if fileInfo, err := os.Stat(imagePath); err == nil {
 			banner.FileSize = fileInfo.Size()
 		}
-		
+
 		// Use revised prompt if available
 		if resp.Data[0].RevisedPrompt != "" {
 			banner.PromptUsed = resp.Data[0].RevisedPrompt
 		}
-		
+
 		// Log usage statistics if available
 		if resp.Usage != nil {
-			fmt.Printf("DALL-E API Usage: %d total tokens (%d input, %d output)\n", 
+			fmt.Printf("DALL-E API Usage: %d total tokens (%d input, %d output)\n",
 				resp.Usage.TotalTokens, resp.Usage.InputTokens, resp.Usage.OutputTokens)
 		}
 	}
-	
+
 	return banner, nil
 }
 
@@ -236,18 +236,18 @@ func (s *Service) GenerateAltText(ctx context.Context, themes []core.ContentThem
 	if len(themes) == 0 {
 		return "AI-generated banner image for technology digest", nil
 	}
-	
+
 	var themeNames []string
 	for _, theme := range themes {
 		if theme.Confidence > 0.5 {
 			themeNames = append(themeNames, strings.ToLower(theme.Theme))
 		}
 	}
-	
+
 	if len(themeNames) == 0 {
 		return "AI-generated banner image for technology digest", nil
 	}
-	
+
 	altText := fmt.Sprintf("AI-generated banner image featuring %s themes", strings.Join(themeNames, ", "))
 	return altText, nil
 }
@@ -272,12 +272,12 @@ Focus on themes that would translate well to visual banner images.`, content)
 
 func parseThemeResponse(response string) []core.ContentTheme {
 	var themes []core.ContentTheme
-	
+
 	// Simple regex-based parsing (could be improved with more sophisticated NLP)
 	themeRegex := regexp.MustCompile(`Theme:\s*([^\n]+)\nKeywords:\s*([^\n]+)\nCategory:\s*([^\n]+)\nConfidence:\s*([0-9.]+)\nDescription:\s*([^\n]+)`)
-	
+
 	matches := themeRegex.FindAllStringSubmatch(response, -1)
-	
+
 	for _, match := range matches {
 		if len(match) >= 6 {
 			theme := core.ContentTheme{
@@ -286,18 +286,18 @@ func parseThemeResponse(response string) []core.ContentTheme {
 				Category:    strings.TrimSpace(match[3]),
 				Description: strings.TrimSpace(match[5]),
 			}
-			
+
 			// Parse confidence score
 			if conf := parseFloat(match[4]); conf > 0 {
 				theme.Confidence = conf
 			} else {
 				theme.Confidence = 0.7 // Default confidence
 			}
-			
+
 			themes = append(themes, theme)
 		}
 	}
-	
+
 	// If parsing failed, create fallback themes
 	if len(themes) == 0 {
 		themes = append(themes, core.ContentTheme{
@@ -308,7 +308,7 @@ func parseThemeResponse(response string) []core.ContentTheme {
 			Description: "General technology and development content",
 		})
 	}
-	
+
 	return themes
 }
 
@@ -336,9 +336,9 @@ func parseFloat(str string) float64 {
 
 func generateThemeBasedPrompt(themes []string, style string) string {
 	themeStr := strings.Join(themes, " and ")
-	
+
 	basePrompt := fmt.Sprintf("A %s illustration representing %s", style, themeStr)
-	
+
 	// Add style-specific details
 	switch style {
 	case "minimalist":

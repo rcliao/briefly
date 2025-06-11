@@ -397,13 +397,13 @@ func processArticles(links []core.Link, format string) ([]render.DigestData, []c
 			TopicCluster:    "",  // Will be populated after clustering
 			TopicConfidence: 0.0, // Will be populated after clustering
 			// Multi-format content support
-			ContentType:     string(article.ContentType),
-			ContentIcon:     fetch.GetContentTypeIcon(article.ContentType),
-			ContentLabel:    fetch.GetContentTypeLabel(article.ContentType),
-			Duration:        article.Duration,
-			Channel:         article.Channel,
-			FileSize:        article.FileSize,
-			PageCount:       article.PageCount,
+			ContentType:  string(article.ContentType),
+			ContentIcon:  fetch.GetContentTypeIcon(article.ContentType),
+			ContentLabel: fetch.GetContentTypeLabel(article.ContentType),
+			Duration:     article.Duration,
+			Channel:      article.Channel,
+			FileSize:     article.FileSize,
+			PageCount:    article.PageCount,
 		}
 
 		digestItems = append(digestItems, digestItem)
@@ -1185,7 +1185,7 @@ func generateBannerImage(digestContent, outputDir, format string) *core.BannerIm
 	// Get configuration values with defaults
 	width := viper.GetInt("visual.banners.width")
 	if width == 0 {
-		width = 1792  // Default to DALL-E's 16:9-ish ratio
+		width = 1792 // Default to DALL-E's 16:9-ish ratio
 	}
 	height := viper.GetInt("visual.banners.height")
 	if height == 0 {

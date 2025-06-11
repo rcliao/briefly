@@ -1469,3 +1469,74 @@ func (s *Store) GetArticlesByDateRange(startDate, endDate time.Time) ([]core.Art
 
 	return articles, nil
 }
+
+// FeedItemExists checks if a feed item exists in the database
+func (s *Store) FeedItemExists(itemID string) (bool, error) {
+	query := `SELECT COUNT(*) FROM feed_items WHERE id = ?`
+	var count int
+	err := s.db.QueryRow(query, itemID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check feed item existence: %w", err)
+	}
+	return count > 0, nil
+}
+
+// SaveFeedItem saves a feed item to the database (alias for AddFeedItem)
+func (s *Store) SaveFeedItem(item core.FeedItem) error {
+	return s.AddFeedItem(item)
+}
+
+// GetRecentFeedItems retrieves feed items published since the given time
+func (s *Store) GetRecentFeedItems(since time.Time) ([]core.FeedItem, error) {
+	query := `
+	SELECT id, feed_id, title, link, description, published, guid, processed, date_discovered
+	FROM feed_items 
+	WHERE published >= ? OR (published IS NULL AND date_discovered >= ?)
+	ORDER BY COALESCE(published, date_discovered) DESC`
+
+	rows, err := s.db.Query(query, since, since)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent feed items: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var items []core.FeedItem
+	for rows.Next() {
+		var item core.FeedItem
+		var published sql.NullTime
+		var title, description, guid sql.NullString
+
+		err := rows.Scan(
+			&item.ID,
+			&item.FeedID,
+			&title,
+			&item.Link,
+			&description,
+			&published,
+			&guid,
+			&item.Processed,
+			&item.DateDiscovered,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan recent feed item row: %w", err)
+		}
+
+		// Handle nullable fields
+		if title.Valid {
+			item.Title = title.String
+		}
+		if description.Valid {
+			item.Description = description.String
+		}
+		if published.Valid {
+			item.Published = published.Time
+		}
+		if guid.Valid {
+			item.GUID = guid.String
+		}
+
+		items = append(items, item)
+	}
+
+	return items, nil
+}
