@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"briefly/internal/llm"
+	"briefly/internal/logger"
 	"github.com/google/generative-ai-go/genai"
 )
 
@@ -74,9 +75,9 @@ func (p *LLMPlanner) DecomposeTopicSubQueries(ctx context.Context, topic string)
 		if len(cleanedResponse) < maxLen {
 			maxLen = len(cleanedResponse)
 		}
-		log.Printf("JSON parsing failed for response: %s\n", cleanedResponse[:maxLen])
+		logger.Warn("JSON parsing failed for response", "response", cleanedResponse[:maxLen])
 		queries := p.extractQueriesFromText(response)
-		log.Printf("JSON parsing failed, extracted %d queries from text: %v\n", len(queries), queries)
+		logger.Info("JSON parsing failed, extracted queries from text", "count", len(queries), "queries", queries)
 		return queries, nil
 	}
 
