@@ -74,9 +74,9 @@ func (p *LLMPlanner) DecomposeTopicSubQueries(ctx context.Context, topic string)
 		if len(cleanedResponse) < maxLen {
 			maxLen = len(cleanedResponse)
 		}
-		fmt.Printf("JSON parsing failed for response: %s\n", cleanedResponse[:maxLen])
+		log.Printf("JSON parsing failed for response: %s\n", cleanedResponse[:maxLen])
 		queries := p.extractQueriesFromText(response)
-		fmt.Printf("JSON parsing failed, extracted %d queries from text: %v\n", len(queries), queries)
+		log.Printf("JSON parsing failed, extracted %d queries from text: %v\n", len(queries), queries)
 		return queries, nil
 	}
 
