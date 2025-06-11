@@ -4,6 +4,7 @@ import (
 	"briefly/internal/core"
 	"briefly/internal/feeds"
 	"briefly/internal/llm"
+	"briefly/internal/logger"
 	"briefly/internal/store"
 	"context"
 	"fmt"
@@ -123,13 +124,13 @@ func (f *FeedServiceImpl) RefreshFeeds(ctx context.Context) error {
 		// Update feed error info
 		if feed.ErrorCount > 0 || feed.LastError != "" {
 			if err := f.store.UpdateFeedError(feed.ID, feed.LastError); err != nil {
-				// Log error but continue
+				logger.Error("Failed to update feed error info", err, "feedID", feed.ID)
 			}
 		}
 
 		// Update feed status
 		if err := f.store.SetFeedActive(feed.ID, feed.Active); err != nil {
-			// Log error but continue
+			logger.Error("Failed to update feed active status", err, "feedID", feed.ID)
 		}
 	}
 

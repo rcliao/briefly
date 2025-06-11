@@ -69,7 +69,7 @@ func NewClient(modelName string) (*Client, error) {
 		}
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("Gemini API key is required. Set GEMINI_API_KEY environment variable or gemini.api_key in config file.\nGet your API key from: https://makersuite.google.com/app/apikey")
+		return nil, fmt.Errorf("gemini API key is required. Set GEMINI_API_KEY environment variable or gemini.api_key in config file.\nGet your API key from: https://makersuite.google.com/app/apikey")
 	}
 
 	// Get model name from parameter, viper config, or default
