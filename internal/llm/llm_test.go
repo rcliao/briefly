@@ -53,7 +53,7 @@ func TestNewClient_NoAPIKey(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when no API key is available")
 	}
-	if !strings.Contains(err.Error(), "Gemini API key is required") {
+	if !strings.Contains(err.Error(), "gemini API key is required") {
 		t.Errorf("Expected API key error, got: %v", err)
 	}
 }
