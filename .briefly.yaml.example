@@ -1,150 +1,146 @@
-# Briefly Configuration Example
-# Copy this file to ~/.briefly.yaml or .briefly.yaml in your project directory
+# Briefly YAML Configuration Example
+# Copy this file to .briefly.yaml and customize as needed
 
-# Gemini AI Configuration
-gemini:
-  # Your Google Gemini API key (can also be set via GEMINI_API_KEY environment variable)
-  api_key: "your-gemini-api-key-here"
+# Application Configuration
+app:
+  debug: false
+  log_level: "info"           # debug, info, warn, error
+  data_dir: ".briefly-cache"
+
+# AI/LLM Configuration  
+ai:
+  gemini:
+    # api_key: ""               # Better to set GEMINI_API_KEY env var
+    model: "gemini-2.5-flash-preview-05-20"  # or gemini-1.5-flash, gemini-1.5-pro
+    timeout: "30s"
+    max_tokens: 8192
+    temperature: 0.7
+    embedding_model: "text-embedding-004"
   
-  # Default Gemini model to use for text generation
-  # Available models: gemini-1.5-pro, gemini-1.5-flash, gemini-2.5-flash-preview-05-20
-  model: "gemini-2.5-flash-preview-05-20"
-
-# Output Configuration  
-output:
-  # Default directory for generated digests and research briefs
-  directory: "digests"
-
-# Search Provider Configuration (Optional - can use environment variables instead)
-search:
-  # Google Custom Search Configuration
-  google:
-    # Google Custom Search API key (can also be set via GOOGLE_CSE_API_KEY)
-    api_key: "your-google-cse-api-key-here"
-    
-    # Google Custom Search Engine ID (can also be set via GOOGLE_CSE_ID)
-    search_id: "your-custom-search-engine-id"
-  
-  # SerpAPI Configuration  
-  serpapi:
-    # SerpAPI key (can also be set via SERPAPI_KEY)
-    api_key: "your-serpapi-key-here"
-
-# Multi-Channel Output Configuration
-channels:
-  # Slack Integration
-  slack:
-    # Slack webhook URL (can also be set via SLACK_WEBHOOK_URL)
-    webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
-  
-  # Discord Integration
-  discord:
-    # Discord webhook URL (can also be set via DISCORD_WEBHOOK_URL)  
-    webhook_url: "https://discord.com/api/webhooks/YOUR/DISCORD/WEBHOOK"
-
-# Text-to-Speech Configuration
-tts:
-  # OpenAI TTS Configuration
   openai:
-    # OpenAI API key (can also be set via OPENAI_API_KEY)
-    api_key: "your-openai-api-key-here"
-    
-    # Default voice for OpenAI TTS
-    # Available voices: alloy, echo, fable, onyx, nova, shimmer
-    voice: "alloy"
-    
-    # Speech speed (0.25 to 4.0)
-    speed: 1.0
-  
-  # ElevenLabs Configuration
-  elevenlabs:
-    # ElevenLabs API key (can also be set via ELEVENLABS_API_KEY)
-    api_key: "your-elevenlabs-api-key-here"
-    
-    # Voice ID from ElevenLabs
-    voice_id: "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
-
-# AI Banner Image Configuration
-visual:
-  # OpenAI Image Generation Configuration for banner generation
-  openai:
-    # OpenAI API key for image generation (can also be set via OPENAI_API_KEY)
-    api_key: "your-openai-api-key-here"
-    
-    # Image generation model (latest API)
-    # Model: gpt-image-1 (latest image generation model)
+    # api_key: ""               # Better to set OPENAI_API_KEY env var
     model: "gpt-image-1"
-  
-  # Banner Generation Settings
-  banners:
-    # Default banner style
-    # Options: minimalist, tech, professional
-    default_style: "tech"
-    
-    # Enable banner generation by default for newsletter and email formats
-    auto_generate: false
-    
-    # Banner image dimensions (gpt-image-1 supports 1024x1024, 1792x1024, 1024x1792)
-    width: 1792   # Landscape format for presentation (16:9-ish ratio)
-    height: 1024
-    
-    # Output directory for banner images (relative to digest output directory)
-    output_directory: "banners"
+    base_url: "https://api.openai.com/v1"
+    timeout: "30s"
 
-# Research Configuration
-research:
-  # Default search provider for research commands
-  # Options: duckduckgo, google, serpapi, mock
-  default_provider: "duckduckgo"
+# Search Configuration
+search:
+  default_provider: "duckduckgo"  # google, serpapi, duckduckgo, mock
+  max_results: 10
+  timeout: "15s"
+  language: "en"
   
-  # Default maximum results per search query
-  max_results_per_query: 10
-  
-  # Default research depth for iterative research
-  default_depth: 2
+  providers:
+    google:
+      # api_key: ""             # Better to set GOOGLE_CUSTOM_SEARCH_API_KEY env var
+      # search_id: ""           # Better to set GOOGLE_CUSTOM_SEARCH_ID env var
+    
+    serpapi:
+      # api_key: ""             # Better to set SERPAPI_API_KEY env var
+    
+    duckduckgo:
+      rate_limit: "1s"
 
-# Deep Research Configuration  
-deep_research:
-  # Default search provider for deep research
-  # Options: duckduckgo, google, serpapi, mock
-  default_provider: "duckduckgo"
-  
-  # Default maximum sources to include in research brief
-  max_sources: 25
-  
-  # Default time filter for search results
-  # Format: 1d, 7d, 30d (days), 1h, 24h (hours)
-  since: "21d"
-  
-  # Default LLM model for synthesis
-  model: "gemini-2.5-flash-preview-05-20"
+# Output Configuration
+output:
+  directory: "digests"
+  format: "standard"            # brief, standard, detailed, newsletter
+  templates_dir: "templates"
 
 # Cache Configuration
 cache:
-  # Cache directory (relative to current working directory)
   directory: ".briefly-cache"
+  database:
+    timeout: "5s"
+  ttl:
+    articles: "24h"             # Keep articles cached for 24 hours
+    summaries: "168h"           # Keep summaries cached for 7 days
+    digests: "720h"             # Keep digests cached for 30 days
+    feeds: "1h"                 # Keep feed data for 1 hour
+
+# Visual/Banner Configuration
+visual:
+  banners:
+    default_style: "tech"       # tech, minimalist, professional
+    width: 1792
+    height: 1024
+    output_directory: "banners"
+    quality: "high"
+    format: "PNG"
+
+# Text-to-Speech Configuration
+tts:
+  default_provider: "openai"    # openai, elevenlabs, google
+  default_voice: "alloy"
+  default_speed: 1.0
+  output_directory: "audio"
+  timeout: "60s"
   
-  # Article cache duration (how long to keep fetched articles)
-  article_ttl: "24h"
+  providers:
+    openai:
+      # api_key: ""             # Uses same OPENAI_API_KEY as ai.openai
+      model: "tts-1"
+    
+    elevenlabs:
+      # api_key: ""             # Better to set ELEVENLABS_API_KEY env var
+    
+    google:
+      # api_key: ""             # Better to set GOOGLE_TTS_API_KEY env var
+
+# Messaging Configuration
+messaging:
+  default_format: "summary"     # summary, bullets, highlights
+  timeout: "10s"
   
-  # Summary cache duration (how long to keep generated summaries)  
-  summary_ttl: "168h"  # 7 days
+  slack:
+    # webhook_url: ""           # Better to set SLACK_WEBHOOK_URL env var
+    username: "Briefly"
+    icon_emoji: ":newspaper:"
+    # default_channel: ""
+  
+  discord:
+    # webhook_url: ""           # Better to set DISCORD_WEBHOOK_URL env var
+    username: "Briefly"
+    # avatar_url: ""
+
+# Email Configuration
+email:
+  smtp:
+    # host: ""                  # Better to set SMTP_HOST env var
+    port: 587
+    # username: ""              # Better to set SMTP_USERNAME env var
+    # password: ""              # Better to set SMTP_PASSWORD env var
+    tls_enabled: true
+  
+  default_template: "default"
+  # from_address: ""
+  from_name: "Briefly"
+
+# RSS/Feed Configuration
+feeds:
+  fetch_interval: "1h"
+  user_agent: "Briefly/1.0"
+  timeout: "30s"
+  max_items_per_feed: 50
+  cleanup_interval: "24h"
+
+# Research Configuration
+research:
+  max_depth: 3
+  max_queries: 5
+  timeout: "60s"
+  concurrent_searches: 3
 
 # Logging Configuration
 logging:
-  # Log level: debug, info, warn, error
-  level: "info"
-  
-  # Log format: text, json
-  format: "text"
+  level: "info"                 # debug, info, warn, error
+  format: "text"                # text, json
+  output: "stdout"              # stdout, stderr, or file path
+  # file_path: ""               # If output is a file path
 
-# Feature Flags
-features:
-  # Enable JavaScript execution for content fetching (requires headless browser)
-  javascript_rendering: false
-  
-  # Enable experimental features
-  experimental: false
-  
-  # Enable cost estimation for API calls
-  cost_tracking: true
+# CLI Configuration
+cli:
+  # editor: ""                  # Uses $EDITOR environment variable by default
+  interactive: false
+  default_format: "standard"
+  # style_guide_path: ""

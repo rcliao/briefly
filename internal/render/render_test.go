@@ -239,7 +239,7 @@ func TestRenderMarkdownDigest_FilenameFormat(t *testing.T) {
 	}
 
 	filename := filepath.Base(filePath)
-	
+
 	// Check filename format: digest_YYYY-MM-DD.md
 	if !strings.HasPrefix(filename, "digest_") {
 		t.Error("Filename should start with 'digest_'")

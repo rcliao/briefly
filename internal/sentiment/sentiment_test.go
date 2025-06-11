@@ -165,7 +165,7 @@ func TestExtractKeyPhrases(t *testing.T) {
 
 	for _, tc := range testCases {
 		phrases := analyzer.extractKeyPhrases(tc.text, tc.classification)
-		
+
 		found := false
 		for _, phrase := range phrases {
 			if strings.Contains(phrase, tc.shouldContain) {
@@ -187,7 +187,7 @@ func TestExtractKeyPhrases(t *testing.T) {
 
 func TestAnalyzeArticle(t *testing.T) {
 	analyzer := NewSentimentAnalyzer()
-	
+
 	article := core.Article{
 		ID:          uuid.NewString(),
 		LinkID:      "https://example.com/article",
@@ -231,7 +231,7 @@ func TestAnalyzeArticle(t *testing.T) {
 
 func TestAnalyzeDigest_Success(t *testing.T) {
 	analyzer := NewSentimentAnalyzer()
-	
+
 	articles := []core.Article{
 		{
 			ID:          uuid.NewString(),
@@ -304,7 +304,7 @@ func TestAnalyzeDigest_Success(t *testing.T) {
 
 func TestAnalyzeDigest_EmptyArticles(t *testing.T) {
 	analyzer := NewSentimentAnalyzer()
-	
+
 	articles := []core.Article{}
 	digestID := uuid.NewString()
 
@@ -407,7 +407,7 @@ func TestFormatArticleSentiments(t *testing.T) {
 			KeyPhrases: []string{"excellent", "breakthrough"},
 		},
 		{
-			Title:      "Negative Article", 
+			Title:      "Negative Article",
 			Emoji:      "😞",
 			KeyPhrases: []string{"problem", "failure"},
 		},
@@ -470,7 +470,7 @@ func TestSentimentScore_Ranges(t *testing.T) {
 
 func TestAnalyzeArticle_EmptyContent(t *testing.T) {
 	analyzer := NewSentimentAnalyzer()
-	
+
 	article := core.Article{
 		ID:          uuid.NewString(),
 		LinkID:      "https://example.com/article",
@@ -495,7 +495,7 @@ func TestAnalyzeArticle_EmptyContent(t *testing.T) {
 
 func TestSentimentStructures(t *testing.T) {
 	// Test that all sentiment structures can be created and have expected fields
-	
+
 	score := SentimentScore{
 		Overall:    0.5,
 		Positive:   0.7,
@@ -570,7 +570,7 @@ func TestSentimentAnalyzer_Integration(t *testing.T) {
 			CleanedText: "A terrible security vulnerability led to catastrophic system failures, causing major problems for users and significant data loss.",
 		},
 		{
-			ID:          uuid.NewString(), 
+			ID:          uuid.NewString(),
 			LinkID:      "https://example.com/neutral",
 			Title:       "Quarterly Financial Report Released",
 			CleanedText: "The company released its quarterly financial report showing revenue data and market analysis for the period.",

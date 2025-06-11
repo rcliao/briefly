@@ -151,7 +151,7 @@ func TestGroupArticlesByTopic(t *testing.T) {
 			t.Errorf("Technology group should have 2 articles, got %d", len(techGroup.Articles))
 		}
 		expectedAvg := (0.9 + 0.8) / 2
-		if math.Abs(techGroup.AvgConfidence - expectedAvg) > 0.000001 {
+		if math.Abs(techGroup.AvgConfidence-expectedAvg) > 0.000001 {
 			t.Errorf("Technology group average confidence should be approximately %.6f, got %.6f", expectedAvg, techGroup.AvgConfidence)
 		}
 	}
@@ -352,10 +352,10 @@ func TestRenderHTMLEmail_MinimalTemplate(t *testing.T) {
 		Date:  "January 1, 2024",
 		DigestItems: []render.DigestData{
 			{
-				Title:           "Test Article",
-				TopicCluster:    "Technology",
-				SummaryText:     "Test summary.",
-				AlertTriggered:  true,
+				Title:          "Test Article",
+				TopicCluster:   "Technology",
+				SummaryText:    "Test summary.",
+				AlertTriggered: true,
 			},
 		},
 		OverallSentiment: "Positive",
@@ -521,7 +521,7 @@ func TestConvertDigestToEmail(t *testing.T) {
 	if emailData.Date == "" {
 		t.Error("Date should not be empty")
 	}
-	
+
 	// Date should be in a reasonable format
 	_, err := time.Parse("January 2, 2006", emailData.Date)
 	if err != nil {

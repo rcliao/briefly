@@ -59,7 +59,7 @@ func (cp *ContentProcessor) ProcessArticle(ctx context.Context, urlStr string) (
 // ProcessArticles processes multiple articles concurrently
 func (cp *ContentProcessor) ProcessArticles(ctx context.Context, urls []string) ([]core.Article, error) {
 	articles := make([]core.Article, 0, len(urls))
-	
+
 	for _, urlStr := range urls {
 		select {
 		case <-ctx.Done():
@@ -73,7 +73,7 @@ func (cp *ContentProcessor) ProcessArticles(ctx context.Context, urls []string) 
 			fmt.Printf("Warning: failed to process %s: %v\n", urlStr, err)
 			continue
 		}
-		
+
 		articles = append(articles, *article)
 	}
 
@@ -188,7 +188,7 @@ func ProcessLinksFromFile(filePath string) ([]core.Article, error) {
 			fmt.Printf("Warning: failed to process %s: %v\n", link.URL, err)
 			continue
 		}
-		
+
 		// Update LinkID to match the original link
 		article.LinkID = link.ID
 		articles = append(articles, *article)

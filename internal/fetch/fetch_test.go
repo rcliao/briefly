@@ -218,28 +218,28 @@ func TestExtractTitle(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Title tag",
-			html: `<html><head><title>Test Title</title></head><body></body></html>`,
+			name:     "Title tag",
+			html:     `<html><head><title>Test Title</title></head><body></body></html>`,
 			expected: "Test Title",
 		},
 		{
-			name: "OpenGraph title",
-			html: `<html><head><meta property="og:title" content="OG Title"></head><body></body></html>`,
+			name:     "OpenGraph title",
+			html:     `<html><head><meta property="og:title" content="OG Title"></head><body></body></html>`,
 			expected: "OG Title",
 		},
 		{
-			name: "H1 title",
-			html: `<html><head></head><body><h1>H1 Title</h1></body></html>`,
+			name:     "H1 title",
+			html:     `<html><head></head><body><h1>H1 Title</h1></body></html>`,
 			expected: "H1 Title",
 		},
 		{
-			name: "No title",
-			html: `<html><head></head><body><p>No title here</p></body></html>`,
+			name:     "No title",
+			html:     `<html><head></head><body><p>No title here</p></body></html>`,
 			expected: "",
 		},
 		{
-			name: "Title with whitespace",
-			html: `<html><head><title>  Spaced Title  </title></head><body></body></html>`,
+			name:     "Title with whitespace",
+			html:     `<html><head><title>  Spaced Title  </title></head><body></body></html>`,
 			expected: "Spaced Title",
 		},
 	}

@@ -109,10 +109,10 @@ func getYouTubeVideoInfo(videoID string) (*YouTubeVideoInfo, error) {
 	}
 
 	var oembed struct {
-		Title       string `json:"title"`
-		AuthorName  string `json:"author_name"`
-		Height      int    `json:"height"`
-		Width       int    `json:"width"`
+		Title      string `json:"title"`
+		AuthorName string `json:"author_name"`
+		Height     int    `json:"height"`
+		Width      int    `json:"width"`
 	}
 
 	if err := json.Unmarshal(body, &oembed); err != nil {
@@ -137,7 +137,7 @@ func getYouTubeTranscript(videoID string) (string, error) {
 	// Method 2: Try alternative approach (this is a simplified version)
 	// In a production environment, you might want to use a more robust solution
 	// or integrate with the YouTube Data API v3
-	
+
 	return "", fmt.Errorf("no transcript available for video %s", videoID)
 }
 
@@ -147,7 +147,7 @@ func getTranscriptFromYouTubeAPI(videoID string) (string, error) {
 	// 1. First get the video page to extract transcript track URLs
 	// 2. Parse the available transcript tracks
 	// 3. Fetch the transcript data
-	
+
 	// For now, return an error to indicate transcripts are not available
 	// This can be enhanced with proper YouTube Data API integration
 	return "", fmt.Errorf("transcript fetching not implemented - requires YouTube Data API key")
@@ -170,7 +170,7 @@ func cleanYouTubeTranscript(transcript string) string {
 			timestampRegex := regexp.MustCompile(`\[\d{2}:\d{2}:\d{2}\]`)
 			cleaned := timestampRegex.ReplaceAllString(trimmed, "")
 			cleaned = strings.TrimSpace(cleaned)
-			
+
 			if cleaned != "" {
 				cleanLines = append(cleanLines, cleaned)
 			}
@@ -179,11 +179,11 @@ func cleanYouTubeTranscript(transcript string) string {
 
 	// Join lines and clean up spacing
 	result := strings.Join(cleanLines, " ")
-	
+
 	// Replace multiple spaces with single spaces
 	spaceRegex := regexp.MustCompile(`\s+`)
 	result = spaceRegex.ReplaceAllString(result, " ")
-	
+
 	return strings.TrimSpace(result)
 }
 
@@ -208,6 +208,6 @@ func DetectYouTubeURL(urlStr string) bool {
 
 // CreateMockTranscript creates a mock transcript for testing (when API is not available)
 func CreateMockTranscript(videoInfo *YouTubeVideoInfo) string {
-	return fmt.Sprintf("This is a video titled '%s' by %s. Transcript is not available without YouTube Data API access. The video content cannot be processed for summarization.", 
+	return fmt.Sprintf("This is a video titled '%s' by %s. Transcript is not available without YouTube Data API access. The video content cannot be processed for summarization.",
 		videoInfo.Title, videoInfo.Channel)
 }

@@ -26,7 +26,7 @@ func ProcessPDFContent(link core.Link) (core.Article, error) {
 		if !strings.HasPrefix(link.URL, "file://") {
 			filePath = link.URL // Direct file path
 		}
-		
+
 		file, err := os.Open(filePath)
 		if err != nil {
 			return core.Article{}, fmt.Errorf("failed to open PDF file %s: %w", filePath, err)
@@ -41,7 +41,7 @@ func ProcessPDFContent(link core.Link) (core.Article, error) {
 		if err != nil {
 			return core.Article{}, fmt.Errorf("failed to stat PDF file %s: %w", filePath, err)
 		}
-		
+
 		reader = file
 		size = stat.Size()
 	} else {
@@ -85,7 +85,7 @@ func ProcessPDFContent(link core.Link) (core.Article, error) {
 	// Extract text from all pages
 	var textBuilder strings.Builder
 	pageCount := pdfReader.NumPage()
-	
+
 	for i := 1; i <= pageCount; i++ {
 		page := pdfReader.Page(i)
 		if page.V.IsNull() {
@@ -130,19 +130,19 @@ func cleanPDFText(rawText string) string {
 	// Remove excessive whitespace and line breaks
 	lines := strings.Split(rawText, "\n")
 	var cleanLines []string
-	
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed != "" && len(trimmed) > 2 { // Skip very short lines that are likely noise
 			cleanLines = append(cleanLines, trimmed)
 		}
 	}
-	
+
 	cleanText := strings.Join(cleanLines, "\n")
-	
+
 	// Replace multiple consecutive newlines with double newlines
 	cleanText = strings.ReplaceAll(cleanText, "\n\n\n", "\n\n")
-	
+
 	return strings.TrimSpace(cleanText)
 }
 
@@ -151,27 +151,27 @@ func extractPDFTitle(content string, sourceURL string) string {
 	if content == "" {
 		return fmt.Sprintf("PDF Document (%s)", sourceURL)
 	}
-	
+
 	lines := strings.Split(content, "\n")
-	
+
 	// Look for the first substantial line as title
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if len(trimmed) > 10 && len(trimmed) < 200 {
 			// Check if it looks like a title (not a URL, not all caps unless short)
-			if !strings.Contains(trimmed, "http") && 
-			   (len(trimmed) < 50 || !isAllUpperCase(trimmed)) {
+			if !strings.Contains(trimmed, "http") &&
+				(len(trimmed) < 50 || !isAllUpperCase(trimmed)) {
 				return trimmed
 			}
 		}
 	}
-	
+
 	// Fallback: use first few words
 	words := strings.Fields(content)
 	if len(words) > 3 {
 		return strings.Join(words[:3], " ") + "..."
 	}
-	
+
 	return fmt.Sprintf("PDF Document (%s)", sourceURL)
 }
 
@@ -186,14 +186,14 @@ func DetectPDFURL(url string) bool {
 	if strings.HasSuffix(strings.ToLower(url), ".pdf") {
 		return true
 	}
-	
+
 	// Check for local file paths
 	if strings.HasPrefix(url, "file://") && strings.HasSuffix(strings.ToLower(url), ".pdf") {
 		return true
 	}
-	
+
 	// For HTTP URLs without .pdf extension, we'll need to check Content-Type header
 	// This will be handled in the HTTP request phase
-	
+
 	return false
 }

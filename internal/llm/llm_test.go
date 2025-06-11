@@ -53,7 +53,7 @@ func TestNewClient_NoAPIKey(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when no API key is available")
 	}
-	if !strings.Contains(err.Error(), "API key not found") {
+	if !strings.Contains(err.Error(), "gemini API key is required") {
 		t.Errorf("Expected API key error, got: %v", err)
 	}
 }
@@ -479,7 +479,7 @@ func TestGetGenaiModel(t *testing.T) {
 // Mock tests for functions that require API calls
 func TestSummaryStructure(t *testing.T) {
 	// Test that the Summary struct is properly populated (without making API calls)
-	
+
 	// Skip if no API key available
 	if os.Getenv("GEMINI_API_KEY") == "" {
 		t.Skip("GEMINI_API_KEY not set, skipping integration test")
@@ -591,7 +591,7 @@ func TestLiveAPIIntegration(t *testing.T) {
 	if len(embedding) == 0 {
 		t.Error("Live API should return non-empty embedding")
 	}
-	
+
 	// text-embedding-004 typically returns 768-dimensional embeddings
 	if len(embedding) < 100 {
 		t.Error("Embedding dimension seems too small")

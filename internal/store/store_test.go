@@ -13,7 +13,7 @@ import (
 
 func TestNewStore(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	store, err := NewStore(tmpDir)
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
@@ -53,22 +53,22 @@ func TestCacheArticle_GetCachedArticle(t *testing.T) {
 
 	// Create test article
 	article := core.Article{
-		ID:               uuid.NewString(),
-		LinkID:           "test-link-id",
-		Title:            "Test Article",
-		CleanedText:      "This is a test article content.",
-		FetchedHTML:      "<html><body>Test content</body></html>",
-		MyTake:           "My personal thoughts",
-		DateFetched:      time.Now().UTC(),
-		Embedding:        []float64{0.1, 0.2, 0.3},
-		TopicCluster:     "Technology",
-		TopicConfidence:  0.95,
-		SentimentScore:   0.7,
-		SentimentLabel:   "positive",
-		SentimentEmoji:   "😊",
-		AlertTriggered:   true,
-		AlertConditions:  []string{"condition1", "condition2"},
-		ResearchQueries:  []string{"query1", "query2"},
+		ID:              uuid.NewString(),
+		LinkID:          "test-link-id",
+		Title:           "Test Article",
+		CleanedText:     "This is a test article content.",
+		FetchedHTML:     "<html><body>Test content</body></html>",
+		MyTake:          "My personal thoughts",
+		DateFetched:     time.Now().UTC(),
+		Embedding:       []float64{0.1, 0.2, 0.3},
+		TopicCluster:    "Technology",
+		TopicConfidence: 0.95,
+		SentimentScore:  0.7,
+		SentimentLabel:  "positive",
+		SentimentEmoji:  "😊",
+		AlertTriggered:  true,
+		AlertConditions: []string{"condition1", "condition2"},
+		ResearchQueries: []string{"query1", "query2"},
 	}
 
 	// Cache the article
@@ -199,15 +199,15 @@ func TestCacheSummary_GetCachedSummary(t *testing.T) {
 
 	// Create test summary
 	summary := core.Summary{
-		ID:               uuid.NewString(),
-		ArticleIDs:       []string{"article1", "article2"},
-		SummaryText:      "This is a test summary.",
-		ModelUsed:        "test-model",
-		Instructions:     "Test instructions",
-		DateGenerated:    time.Now().UTC(),
-		Embedding:        []float64{0.4, 0.5, 0.6},
-		TopicCluster:     "Technology",
-		TopicConfidence:  0.88,
+		ID:              uuid.NewString(),
+		ArticleIDs:      []string{"article1", "article2"},
+		SummaryText:     "This is a test summary.",
+		ModelUsed:       "test-model",
+		Instructions:    "Test instructions",
+		DateGenerated:   time.Now().UTC(),
+		Embedding:       []float64{0.4, 0.5, 0.6},
+		TopicCluster:    "Technology",
+		TopicConfidence: 0.88,
 	}
 
 	articleURL := "test-article-url"
@@ -676,7 +676,7 @@ func TestGetRecentArticles(t *testing.T) {
 
 	// Add articles from different dates
 	now := time.Now().UTC()
-	
+
 	// Recent article (1 day ago)
 	recentArticle := core.Article{
 		ID:          uuid.NewString(),

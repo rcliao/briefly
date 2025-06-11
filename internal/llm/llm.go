@@ -46,18 +46,30 @@ type Client struct {
 	genaiModel *genai.GenerativeModel // Store the model for reuse
 }
 
+// TextGenerationOptions contains options for text generation
+type TextGenerationOptions struct {
+	MaxTokens   int32   // Maximum number of tokens to generate
+	Temperature float32 // Temperature for randomness (0.0 to 1.0)
+	Model       string  // Model to use (optional, defaults to client's model)
+}
+
 // NewClient creates a new LLM client.
 // It supports multiple ways to get the API key (in order of preference):
-// 1. Environment variable: GEMINI_API_KEY
+// 1. Environment variable: GEMINI_API_KEY (or alternatives)
 // 2. Viper configuration: gemini.api_key
 func NewClient(modelName string) (*Client, error) {
-	// Try to get API key from multiple sources
+	// Try to get API key from multiple sources for backward compatibility
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		apiKey = viper.GetString("gemini.api_key")
+		// Try alternative environment variable names
+		if apiKey = os.Getenv("GOOGLE_GEMINI_API_KEY"); apiKey == "" {
+			if apiKey = os.Getenv("GOOGLE_AI_API_KEY"); apiKey == "" {
+				apiKey = viper.GetString("gemini.api_key")
+			}
+		}
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("gemini API key not found. Set GEMINI_API_KEY environment variable or configure gemini.api_key in config file")
+		return nil, fmt.Errorf("gemini API key is required. Set GEMINI_API_KEY environment variable or gemini.api_key in config file.\nGet your API key from: https://makersuite.google.com/app/apikey")
 	}
 
 	// Get model name from parameter, viper config, or default
@@ -249,6 +261,54 @@ func (c *Client) Close() {
 // GetGenaiModel returns the underlying genai model for direct use by other packages
 func (c *Client) GetGenaiModel() *genai.GenerativeModel {
 	return c.genaiModel
+}
+
+// GenerateText generates text using the LLM with specified options
+func (c *Client) GenerateText(ctx context.Context, prompt string, options TextGenerationOptions) (string, error) {
+	if prompt == "" {
+		return "", fmt.Errorf("prompt cannot be empty")
+	}
+
+	// Create a model instance with options
+	model := c.genaiModel
+	if options.Model != "" && options.Model != c.modelName {
+		// Create a new model instance for different model
+		var err error
+		model = c.gClient.GenerativeModel(options.Model)
+		if err != nil {
+			return "", fmt.Errorf("failed to create model %s: %w", options.Model, err)
+		}
+	}
+
+	// Set generation config if options are provided
+	if options.MaxTokens > 0 || options.Temperature > 0 {
+		config := &genai.GenerationConfig{}
+		if options.MaxTokens > 0 {
+			config.MaxOutputTokens = &options.MaxTokens
+		}
+		if options.Temperature > 0 {
+			config.Temperature = &options.Temperature
+		}
+		model.GenerationConfig = *config
+	}
+
+	// Generate content
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", fmt.Errorf("failed to generate text: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("empty response from LLM")
+	}
+
+	contentPart := resp.Candidates[0].Content.Parts[0]
+	content, ok := contentPart.(genai.Text)
+	if !ok {
+		return "", fmt.Errorf("unexpected response format from API, expected genai.Text")
+	}
+
+	return string(content), nil
 }
 
 // GenerateSummary is a simpler function, more aligned with the original request,

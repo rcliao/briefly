@@ -19,9 +19,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/joho/godotenv"
+	"briefly/internal/config"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var cfgFile string
@@ -69,39 +68,15 @@ func Execute() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	// Load .env file if it exists (for local development)
-	envFile := ".env"
-	if _, err := os.Stat(envFile); err == nil {
-		if err := godotenv.Load(envFile); err != nil {
-			fmt.Printf("Warning: Error loading .env file: %v\n", err)
-		}
+	// Load configuration using the centralized config module
+	_, err := config.Load(cfgFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
+		os.Exit(1)
 	}
 
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory.
-		home, err := os.UserHomeDir()
-		cobra.CheckErr(err)
-
-		// Search config in current directory and home directory
-		viper.AddConfigPath(".")  // Current directory
-		viper.AddConfigPath(home) // Home directory
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".briefly")
-	}
-
-	// Automatically bind environment variables
-	viper.AutomaticEnv()
-
-	// Set defaults for configuration
-	viper.SetDefault("gemini.api_key", "")
-	viper.SetDefault("gemini.model", "gemini-2.5-flash-preview-05-20")
-	viper.SetDefault("output.directory", "digests")
-
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	// Show which config file is being used (if any)
+	if config.Get().App.ConfigFile != "" {
+		fmt.Fprintf(os.Stderr, "Using config file: %s\n", config.Get().App.ConfigFile)
 	}
 }

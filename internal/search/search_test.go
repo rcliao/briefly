@@ -348,7 +348,7 @@ func (m *mockLegacyProvider) Search(query string, maxResults int) ([]LegacySearc
 			},
 		}, nil
 	}
-	
+
 	// Return limited results based on maxResults
 	if maxResults < len(m.results) {
 		return m.results[:maxResults], nil

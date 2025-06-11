@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"briefly/internal/llm"
+	"briefly/internal/logger"
 	"github.com/google/generative-ai-go/genai"
 )
 
@@ -70,8 +71,13 @@ func (p *LLMPlanner) DecomposeTopicSubQueries(ctx context.Context, topic string)
 	var plannerResp PlannerResponse
 	if err := json.Unmarshal([]byte(cleanedResponse), &plannerResp); err != nil {
 		// Fallback: try to extract queries as plain text if JSON parsing fails
+		maxLen := 200
+		if len(cleanedResponse) < maxLen {
+			maxLen = len(cleanedResponse)
+		}
+		logger.Warn("JSON parsing failed for response", "response", cleanedResponse[:maxLen])
 		queries := p.extractQueriesFromText(response)
-		fmt.Printf("JSON parsing failed, extracted %d queries from text: %v\n", len(queries), queries)
+		logger.Info("JSON parsing failed, extracted queries from text", "count", len(queries), "queries", queries)
 		return queries, nil
 	}
 
@@ -101,40 +107,46 @@ func (p *LLMPlanner) DecomposeTopicSubQueries(ctx context.Context, topic string)
 
 // buildPlannerPrompt creates the prompt for topic decomposition
 func (p *LLMPlanner) buildPlannerPrompt(topic string) string {
-	return fmt.Sprintf(`You are a research planning assistant. Your task is to decompose a broad research topic into 3-7 specific, actionable sub-questions that will guide comprehensive research.
+	return fmt.Sprintf(`You are a research planning assistant. Your task is to decompose a broad research topic into 3-7 simple, effective search queries.
 
 Topic: "%s"
 
-Decompose this topic into sub-questions that:
-1. Cover different aspects and perspectives of the topic
-2. Are specific enough to yield focused search results  
-3. Include both recent developments and foundational knowledge
-4. Consider multiple viewpoints and potential controversies
-5. Are searchable using web search engines
+Create search queries that:
+1. Are short and simple (3-8 words each)
+2. Use common terminology that search engines understand
+3. Cover different aspects of the topic
+4. Will find current, relevant information
+5. Avoid overly complex language
 
 Respond with a JSON object in this exact format:
 {
   "sub_queries": [
     {
-      "query": "specific search query here",
-      "rationale": "why this question is important for understanding the topic",
-      "keywords": ["key", "terms", "for", "search"],
+      "query": "simple search query",
+      "rationale": "why this is important",
+      "keywords": ["key", "terms"],
       "priority": 5,
       "search_type": "recent"
     }
   ],
-  "reasoning": "overall strategy for researching this topic"
+  "reasoning": "research strategy"
 }
 
-Guidelines:
-- Priority: 1-5 (5 = highest priority, must research; 1 = nice to have)
-- Search type: "recent" (last few weeks), "academic" (papers/studies), "general" (broader web)
-- Aim for 4-6 sub-queries total
-- Each query should be 3-15 words
-- Include diverse perspectives and potential counterarguments
-- Balance breadth and depth
+Examples of good queries:
+- "AI testing tools 2024"
+- "machine learning model validation"
+- "automated software testing"
+- "AI testing frameworks"
 
-Focus on creating queries that will find high-quality, authoritative sources.`, topic)
+Guidelines:
+- Priority: 1-5 (5 = highest priority)
+- Search type: "recent", "academic", or "general"  
+- Aim for 4-6 sub-queries total
+- Each query should be 3-8 words maximum
+- Use simple, searchable terms
+- Avoid quotes, special characters, or overly academic language
+
+Focus on queries that real people would search for on Google.`, topic)
 }
 
 // extractQueriesFromText extracts search queries from plain text as a fallback
@@ -166,15 +178,15 @@ func (p *LLMPlanner) extractQueriesFromText(text string) []string {
 			continue
 		}
 
-		// Skip JSON fragments and metadata lines
+		// Skip JSON fragments and metadata lines (but not query lines which are handled above)
 		if strings.Contains(line, `"keywords":`) ||
 			strings.Contains(line, `"rationale":`) ||
 			strings.Contains(line, `"priority":`) ||
 			strings.Contains(line, `"search_type":`) ||
-			strings.Contains(line, `":`) || // Any JSON key-value pair
+			strings.Contains(line, `"reasoning"`) ||
 			strings.HasPrefix(line, `"`) && strings.HasSuffix(line, `",`) ||
 			strings.HasPrefix(line, `[`) || strings.HasSuffix(line, `]`) ||
-			strings.Contains(line, `"reasoning"`) {
+			(strings.Contains(line, `":`) && !strings.Contains(line, `"query":`)) { // Skip other JSON key-value pairs but not query lines
 			continue
 		}
 

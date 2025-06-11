@@ -128,7 +128,7 @@ func TestPDFContentExtraction(t *testing.T) {
 		if fetch.GetContentTypeLabel(core.ContentTypePDF) != "PDF Document" {
 			t.Error("PDF content type not properly configured")
 		}
-		
+
 		if fetch.GetContentTypeIcon(core.ContentTypePDF) != "📄" {
 			t.Error("PDF icon not properly configured")
 		}
@@ -138,7 +138,7 @@ func TestPDFContentExtraction(t *testing.T) {
 func TestYouTubeContentProcessing(t *testing.T) {
 	t.Run("YouTubeURLExtraction", func(t *testing.T) {
 		tests := []struct {
-			url       string
+			url         string
 			shouldMatch bool
 		}{
 			{"https://youtube.com/watch?v=abc123def", true},
@@ -162,7 +162,7 @@ func TestYouTubeContentProcessing(t *testing.T) {
 		if fetch.GetContentTypeLabel(core.ContentTypeYouTube) != "YouTube Video" {
 			t.Error("YouTube content type not properly configured")
 		}
-		
+
 		if fetch.GetContentTypeIcon(core.ContentTypeYouTube) != "🎥" {
 			t.Error("YouTube icon not properly configured")
 		}

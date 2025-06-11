@@ -74,8 +74,8 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeActionItems:        false,
 			IncludeSourceLinks:        true,
 			IncludePromptCorner:       false,
-			IncludeIndividualArticles: true, // Enable to showcase topic clustering
-			IncludeTopicClustering:    true, // Enable topic clustering for better organization
+			IncludeIndividualArticles: true,  // Enable to showcase topic clustering
+			IncludeTopicClustering:    true,  // Enable topic clustering for better organization
 			IncludeBanner:             false, // Standard format keeps simple
 			MaxSummaryLength:          300,
 			IntroductionText:          "Here's what's worth knowing from today's articles:",
@@ -91,10 +91,10 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeActionItems:        true,
 			IncludeSourceLinks:        true,
 			IncludePromptCorner:       false,
-			IncludeIndividualArticles: true, // Enable to showcase topic clustering
-			IncludeTopicClustering:    true, // Enable topic clustering for detailed analysis
+			IncludeIndividualArticles: true,  // Enable to showcase topic clustering
+			IncludeTopicClustering:    true,  // Enable topic clustering for detailed analysis
 			IncludeBanner:             false, // Detailed format focuses on content
-			MaxSummaryLength:          0,    // No limit
+			MaxSummaryLength:          0,     // No limit
 			IntroductionText:          "In-depth analysis of today's key articles:",
 			ConclusionText:            "These insights provide a comprehensive view of current developments in the field.",
 			SectionSeparator:          "\n\n---\n\n",
@@ -233,7 +233,7 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 				} else {
 					content.WriteString(fmt.Sprintf("#### %s\n\n", title))
 				}
-				
+
 				// Content type metadata (for non-HTML content)
 				if item.ContentType != "html" && item.ContentType != "" {
 					var metadata []string
@@ -298,13 +298,13 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 			if item.ContentIcon != "" {
 				titleWithIcon = fmt.Sprintf("%s %s", item.ContentIcon, item.Title)
 			}
-			
+
 			if template.IncludeSourceLinks {
 				content.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, titleWithIcon))
 			} else {
 				content.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, titleWithIcon))
 			}
-			
+
 			// Content type metadata (for non-HTML content)
 			if item.ContentType != "html" && item.ContentType != "" {
 				var metadata []string
@@ -463,9 +463,9 @@ func renderBannerSection(banner *core.BannerImage, template *DigestTemplate, for
 	if banner == nil || !template.IncludeBanner {
 		return ""
 	}
-	
+
 	var content strings.Builder
-	
+
 	switch format {
 	case "markdown":
 		// Markdown format with image and alt text
@@ -474,18 +474,18 @@ func renderBannerSection(banner *core.BannerImage, template *DigestTemplate, for
 		} else {
 			content.WriteString(fmt.Sprintf("![AI-generated banner](%s)\n\n", banner.ImageURL))
 		}
-		
+
 		// Optional: Add themes as subtle text
 		if len(banner.Themes) > 0 {
 			content.WriteString(fmt.Sprintf("*Featured themes: %s*\n\n", strings.Join(banner.Themes, ", ")))
 		}
-		
+
 	case "html":
 		// HTML format for email templates
-		content.WriteString(fmt.Sprintf(`<img src="%s" alt="%s" style="width: 100%%; max-width: 600px; height: auto; border-radius: 8px; margin-bottom: 20px;" />`, 
+		content.WriteString(fmt.Sprintf(`<img src="%s" alt="%s" style="width: 100%%; max-width: 600px; height: auto; border-radius: 8px; margin-bottom: 20px;" />`,
 			banner.ImageURL, banner.AltText))
 		content.WriteString("\n\n")
-		
+
 	case "plain":
 		// Plain text fallback
 		content.WriteString("🎨 **Banner Image Available**\n")
@@ -493,12 +493,12 @@ func renderBannerSection(banner *core.BannerImage, template *DigestTemplate, for
 			content.WriteString(fmt.Sprintf("Themes: %s\n", strings.Join(banner.Themes, ", ")))
 		}
 		content.WriteString(fmt.Sprintf("View at: %s\n\n", banner.ImageURL))
-		
+
 	default:
 		// Default to markdown format
 		return renderBannerSection(banner, template, "markdown")
 	}
-	
+
 	return content.String()
 }
 
@@ -507,10 +507,10 @@ func renderReferencesSection(digestItems []render.DigestData) string {
 	if len(digestItems) == 0 {
 		return ""
 	}
-	
+
 	var content strings.Builder
 	content.WriteString("## References\n\n")
-	
+
 	for i, item := range digestItems {
 		content.WriteString(fmt.Sprintf("[%d] %s\n", i+1, item.URL))
 		if item.Title != "" {
@@ -518,7 +518,7 @@ func renderReferencesSection(digestItems []render.DigestData) string {
 		}
 		content.WriteString("\n")
 	}
-	
+
 	return content.String()
 }
 
