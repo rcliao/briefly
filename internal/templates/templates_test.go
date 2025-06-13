@@ -41,8 +41,8 @@ func TestGetTemplateBrief(t *testing.T) {
 	if template.IncludeIndividualArticles {
 		t.Error("Expected IncludeIndividualArticles to be false for brief format")
 	}
-	if template.MaxSummaryLength != 150 {
-		t.Errorf("Expected MaxSummaryLength to be 150, got %d", template.MaxSummaryLength)
+	if template.MaxSummaryLength != 25 {
+		t.Errorf("Expected MaxSummaryLength to be 25 (v2.0 word-based), got %d", template.MaxSummaryLength)
 	}
 }
 
@@ -67,8 +67,8 @@ func TestGetTemplateStandard(t *testing.T) {
 	if !template.IncludeTopicClustering {
 		t.Error("Expected IncludeTopicClustering to be true for standard format")
 	}
-	if template.MaxSummaryLength != 300 {
-		t.Errorf("Expected MaxSummaryLength to be 300, got %d", template.MaxSummaryLength)
+	if template.MaxSummaryLength != 25 {
+		t.Errorf("Expected MaxSummaryLength to be 25 (v2.0 word-based), got %d", template.MaxSummaryLength)
 	}
 }
 
@@ -84,8 +84,8 @@ func TestGetTemplateDetailed(t *testing.T) {
 	if !template.IncludeActionItems {
 		t.Error("Expected IncludeActionItems to be true for detailed format")
 	}
-	if template.MaxSummaryLength != 0 {
-		t.Errorf("Expected MaxSummaryLength to be 0 (no limit), got %d", template.MaxSummaryLength)
+	if template.MaxSummaryLength != 50 {
+		t.Errorf("Expected MaxSummaryLength to be 50 (v2.0 controlled detailed), got %d", template.MaxSummaryLength)
 	}
 }
 

@@ -24,6 +24,7 @@ type Config struct {
 	Email     Email     `mapstructure:"email"`
 	Feeds     Feeds     `mapstructure:"feeds"`
 	Research  Research  `mapstructure:"research"`
+	Filtering Filtering `mapstructure:"filtering"`
 	Logging   Logging   `mapstructure:"logging"`
 	CLI       CLI       `mapstructure:"cli"`
 }
@@ -224,6 +225,40 @@ type Research struct {
 	ConcurrentSearches int    `mapstructure:"concurrent_searches"`
 }
 
+// Filtering holds relevance filtering configuration
+type Filtering struct {
+	Enabled       bool              `mapstructure:"enabled"`        // Enable/disable relevance filtering
+	MinRelevance  float64           `mapstructure:"min_relevance"`  // Minimum relevance threshold (0.0-1.0)
+	Method        string            `mapstructure:"method"`         // Scoring method: keyword, embedding, hybrid
+	Weights       FilteringWeights  `mapstructure:"weights"`        // Scoring weights configuration
+	Templates     TemplateFiltering `mapstructure:"templates"`      // Per-template filtering settings
+}
+
+// FilteringWeights holds scoring weight configuration
+type FilteringWeights struct {
+	ContentRelevance float64 `mapstructure:"content_relevance"` // Weight for content match (0.0-1.0)
+	TitleRelevance   float64 `mapstructure:"title_relevance"`   // Weight for title match (0.0-1.0)
+	Authority        float64 `mapstructure:"authority"`         // Weight for source authority (0.0-1.0)
+	Recency          float64 `mapstructure:"recency"`           // Weight for content freshness (0.0-1.0)
+	Quality          float64 `mapstructure:"quality"`           // Weight for content quality (0.0-1.0)
+}
+
+// TemplateFiltering holds per-template filtering configuration
+type TemplateFiltering struct {
+	Brief      TemplateFilter `mapstructure:"brief"`
+	Standard   TemplateFilter `mapstructure:"standard"`
+	Detailed   TemplateFilter `mapstructure:"detailed"`
+	Newsletter TemplateFilter `mapstructure:"newsletter"`
+	Email      TemplateFilter `mapstructure:"email"`
+}
+
+// TemplateFilter holds filtering settings for a specific template
+type TemplateFilter struct {
+	MinRelevance float64 `mapstructure:"min_relevance"` // Override global min_relevance for this template
+	MaxWords     int     `mapstructure:"max_words"`     // Maximum words for this template (0 for template default)
+	MaxArticles  int     `mapstructure:"max_articles"`  // Maximum number of articles (0 for no limit)
+}
+
 // Logging holds logging configuration
 type Logging struct {
 	Level    string `mapstructure:"level"`
@@ -392,6 +427,39 @@ func setDefaults() {
 	viper.SetDefault("research.max_queries", 5)
 	viper.SetDefault("research.timeout", "60s")
 	viper.SetDefault("research.concurrent_searches", 3)
+
+	// Filtering defaults
+	viper.SetDefault("filtering.enabled", true)
+	viper.SetDefault("filtering.min_relevance", 0.4)
+	viper.SetDefault("filtering.method", "keyword")
+	
+	// Filtering weights defaults (digest profile)
+	viper.SetDefault("filtering.weights.content_relevance", 0.6)
+	viper.SetDefault("filtering.weights.title_relevance", 0.3)
+	viper.SetDefault("filtering.weights.authority", 0.1)
+	viper.SetDefault("filtering.weights.recency", 0.0)
+	viper.SetDefault("filtering.weights.quality", 0.0)
+
+	// Template-specific filtering defaults
+	viper.SetDefault("filtering.templates.brief.min_relevance", 0.6)     // Stricter for brief
+	viper.SetDefault("filtering.templates.brief.max_words", 200)
+	viper.SetDefault("filtering.templates.brief.max_articles", 3)
+	
+	viper.SetDefault("filtering.templates.standard.min_relevance", 0.4)   // Balanced
+	viper.SetDefault("filtering.templates.standard.max_words", 400)
+	viper.SetDefault("filtering.templates.standard.max_articles", 5)
+	
+	viper.SetDefault("filtering.templates.detailed.min_relevance", 0.2)   // Most inclusive
+	viper.SetDefault("filtering.templates.detailed.max_words", 0)         // No limit
+	viper.SetDefault("filtering.templates.detailed.max_articles", 0)      // No limit
+	
+	viper.SetDefault("filtering.templates.newsletter.min_relevance", 0.4) // Balanced
+	viper.SetDefault("filtering.templates.newsletter.max_words", 800)
+	viper.SetDefault("filtering.templates.newsletter.max_articles", 6)
+	
+	viper.SetDefault("filtering.templates.email.min_relevance", 0.4)      // Balanced
+	viper.SetDefault("filtering.templates.email.max_words", 400)
+	viper.SetDefault("filtering.templates.email.max_articles", 5)
 
 	// Logging defaults
 	viper.SetDefault("logging.level", "info")
@@ -622,6 +690,7 @@ func GetMessaging() Messaging { return Get().Messaging }
 func GetEmail() Email         { return Get().Email }
 func GetFeeds() Feeds         { return Get().Feeds }
 func GetResearch() Research   { return Get().Research }
+func GetFiltering() Filtering { return Get().Filtering }
 func GetLogging() Logging     { return Get().Logging }
 func GetCLI() CLI             { return Get().CLI }
 
@@ -638,6 +707,31 @@ func GetSerpAPIKey() string      { return Get().Search.Providers.SerpAPI.APIKey 
 func GetOutputDirectory() string { return Get().Output.Directory }
 func GetCacheDirectory() string  { return Get().Cache.Directory }
 func IsDebugMode() bool          { return Get().App.Debug }
+
+// Filtering convenience getters
+func IsFilteringEnabled() bool              { return Get().Filtering.Enabled }
+func GetFilteringMinRelevance() float64     { return Get().Filtering.MinRelevance }
+func GetFilteringMethod() string            { return Get().Filtering.Method }
+func GetFilteringWeights() FilteringWeights { return Get().Filtering.Weights }
+
+// Get template-specific filtering settings
+func GetTemplateFilter(format string) TemplateFilter {
+	templates := Get().Filtering.Templates
+	switch format {
+	case "brief":
+		return templates.Brief
+	case "standard":
+		return templates.Standard
+	case "detailed":
+		return templates.Detailed
+	case "newsletter":
+		return templates.Newsletter
+	case "email":
+		return templates.Email
+	default:
+		return templates.Standard // Default fallback
+	}
+}
 
 // HasValidGoogleSearch returns true if Google Custom Search is properly configured
 func HasValidGoogleSearch() bool {
