@@ -28,15 +28,18 @@ func NewResearchService(llmClient *llm.Client, searchProvider search.Provider) *
 
 // PerformResearch conducts comprehensive research on a given topic
 func (r *ResearchServiceImpl) PerformResearch(ctx context.Context, query string, depth int) (*core.ResearchReport, error) {
-	// Generate search queries using LLM
-	queries, err := r.generateSearchQueries(ctx, query, depth)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate search queries: %w", err)
-	}
-
-	// Execute searches for each query
+	var allQueries []string
 	var allResults []core.ResearchResult
-	for _, searchQuery := range queries {
+
+	// Phase 1: Initial query generation
+	initialQueries, err := r.generateSearchQueries(ctx, query, depth)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate initial queries: %w", err)
+	}
+	allQueries = append(allQueries, initialQueries...)
+
+	// Execute initial searches
+	for _, searchQuery := range initialQueries {
 		results, err := r.executeSearch(ctx, searchQuery)
 		if err != nil {
 			// Log error but continue with other queries
@@ -45,8 +48,31 @@ func (r *ResearchServiceImpl) PerformResearch(ctx context.Context, query string,
 		allResults = append(allResults, results...)
 	}
 
-	// Score and rank results
+	// Score and rank initial results
 	rankedResults := r.rankResults(allResults, query)
+
+	// Phase 2: Iterative refinement (for depth 3+)
+	if depth >= 3 && len(rankedResults) > 0 {
+		refinedQueries, err := r.generateRefinedQueries(ctx, query, rankedResults, depth)
+		if err != nil {
+			// Log error but continue
+			fmt.Printf("Warning: failed to generate refined queries: %v\n", err)
+		} else {
+			allQueries = append(allQueries, refinedQueries...)
+
+			// Execute refined searches
+			for _, searchQuery := range refinedQueries {
+				results, err := r.executeSearch(ctx, searchQuery)
+				if err != nil {
+					continue
+				}
+				allResults = append(allResults, results...)
+			}
+
+			// Re-rank all results
+			rankedResults = r.rankResults(allResults, query)
+		}
+	}
 
 	// Generate summary using LLM
 	summary, err := r.generateSummary(ctx, query, rankedResults)
@@ -59,7 +85,7 @@ func (r *ResearchServiceImpl) PerformResearch(ctx context.Context, query string,
 		ID:               uuid.New().String(),
 		Query:            query,
 		Depth:            depth,
-		GeneratedQueries: queries,
+		GeneratedQueries: allQueries,
 		Results:          rankedResults,
 		Summary:          summary,
 		DateGenerated:    time.Now().UTC(),
@@ -145,73 +171,292 @@ Format: Return as "Topic Name: Description", one per line.`, content.String())
 	return cleanTopics, nil
 }
 
+// ResearchIntent defines the type of research being conducted
+type ResearchIntent string
+
+const (
+	IntentGeneral     ResearchIntent = "general"
+	IntentCompetitive ResearchIntent = "competitive"
+	IntentTechnical   ResearchIntent = "technical"
+)
+
 // generateSearchQueries creates search queries using LLM based on the topic and depth
 func (r *ResearchServiceImpl) generateSearchQueries(ctx context.Context, topic string, depth int) ([]string, error) {
+	// Generate queries for different research intents
+	var allQueries []string
+
+	// General research queries (always included)
+	generalQueries, err := r.generateQueriesForIntent(ctx, topic, depth, IntentGeneral)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate general queries: %w", err)
+	}
+	allQueries = append(allQueries, generalQueries...)
+
+	// Competitive analysis queries (depth 2+)
+	if depth >= 2 {
+		competitiveQueries, err := r.generateQueriesForIntent(ctx, topic, depth, IntentCompetitive)
+		if err != nil {
+			// Log error but continue
+			fmt.Printf("Warning: failed to generate competitive queries: %v\n", err)
+		} else {
+			allQueries = append(allQueries, competitiveQueries...)
+		}
+	}
+
+	// Technical deep-dive queries (depth 3+)
+	if depth >= 3 {
+		technicalQueries, err := r.generateQueriesForIntent(ctx, topic, depth, IntentTechnical)
+		if err != nil {
+			// Log error but continue
+			fmt.Printf("Warning: failed to generate technical queries: %v\n", err)
+		} else {
+			allQueries = append(allQueries, technicalQueries...)
+		}
+	}
+
+	return allQueries, nil
+}
+
+// generateQueriesForIntent generates queries for a specific research intent
+func (r *ResearchServiceImpl) generateQueriesForIntent(ctx context.Context, topic string, depth int, intent ResearchIntent) ([]string, error) {
 	var prompt string
-	switch depth {
-	case 1:
-		prompt = fmt.Sprintf(`Generate 3 simple search queries for basic research on: %s
 
-Create short search queries (3-6 words each) covering:
-1. Basic overview
-2. Recent developments 2024
-3. Key examples
-
-Examples: "AI testing", "machine learning validation", "automated testing tools"
-
-Format: Return only the search queries, one per line.`, topic)
-	case 2:
-		prompt = fmt.Sprintf(`Generate 5 simple search queries for moderate research on: %s
-
-Create short search queries (3-7 words each) covering:
-1. Overview and definition
-2. Current tools and trends
-3. Case studies examples
-4. Common challenges
-5. Best practices
-
-Examples: "AI testing frameworks", "ML model validation tools", "testing challenges AI"
-
-Format: Return only the search queries, one per line.`, topic)
-	default: // depth 3+
-		prompt = fmt.Sprintf(`Generate 7 simple search queries for comprehensive research on: %s
-
-Create short, effective search queries (3-8 words each) covering:
-1. Basic overview and definition
-2. Current tools and frameworks
-3. Recent developments 2024
-4. Industry case studies
-5. Common challenges
-6. Future trends
-7. Best practices
-
-Examples of good queries:
-- "AI testing tools 2024"
-- "machine learning model validation"
-- "automated testing frameworks"
-
-Format: Return only the search queries, one per line. Keep each query short and simple.`, topic)
+	switch intent {
+	case IntentGeneral:
+		prompt = r.buildGeneralResearchPrompt(topic, depth)
+	case IntentCompetitive:
+		prompt = r.buildCompetitiveAnalysisPrompt(topic, depth)
+	case IntentTechnical:
+		prompt = r.buildTechnicalDeepDivePrompt(topic, depth)
 	}
 
 	response, err := r.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
-		MaxTokens:   500,
+		MaxTokens:   600,
 		Temperature: 0.7,
 		Model:       "gemini-1.5-flash",
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate search queries: %w", err)
+		return nil, fmt.Errorf("failed to generate %s queries: %w", intent, err)
 	}
 
+	return r.parseQueryResponse(response), nil
+}
+
+// buildGeneralResearchPrompt creates prompts for general research
+func (r *ResearchServiceImpl) buildGeneralResearchPrompt(topic string, depth int) string {
+	baseQueries := 3
+	if depth >= 2 {
+		baseQueries = 4
+	}
+	if depth >= 3 {
+		baseQueries = 5
+	}
+
+	return fmt.Sprintf(`Generate %d search queries for general research on: %s
+
+Create targeted search queries covering:
+1. Basic overview and definition
+2. Current state and trends 2024
+3. Key examples and use cases
+4. Recent developments and news
+5. Best practices and guidelines
+
+Examples of effective queries:
+- "%s overview 2024"
+- "%s current trends"
+- "%s use cases examples"
+- "%s best practices"
+
+Format: Return only the search queries, one per line.`, baseQueries, topic, topic, topic, topic, topic)
+}
+
+// buildCompetitiveAnalysisPrompt creates prompts for competitive analysis
+func (r *ResearchServiceImpl) buildCompetitiveAnalysisPrompt(topic string, depth int) string {
+	queryCount := 3
+	if depth >= 4 {
+		queryCount = 4
+	}
+
+	return fmt.Sprintf(`Generate %d search queries for competitive analysis of: %s
+
+Create comparison-focused queries covering:
+1. Market positioning and competitors
+2. Feature comparisons and gaps
+3. Pricing and value proposition
+4. User sentiment and feedback
+
+Query patterns to use:
+- "%s vs [competitor]"
+- "%s alternatives comparison"
+- "%s market share analysis"
+- "%s user reviews complaints"
+- "%s pricing comparison"
+- "%s limitations disadvantages"
+
+Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic)
+}
+
+// buildTechnicalDeepDivePrompt creates prompts for technical deep-dive research
+func (r *ResearchServiceImpl) buildTechnicalDeepDivePrompt(topic string, depth int) string {
+	queryCount := 3
+	if depth >= 4 {
+		queryCount = 4
+	}
+	if depth >= 5 {
+		queryCount = 5
+	}
+
+	return fmt.Sprintf(`Generate %d search queries for technical analysis of: %s
+
+Create technical-focused queries covering:
+1. Architecture and implementation details
+2. Performance benchmarks and scalability
+3. Integration examples and API documentation
+4. Security considerations and vulnerabilities
+5. Technical limitations and challenges
+
+Query patterns to use:
+- "%s architecture design"
+- "%s performance benchmarks"
+- "%s API documentation"
+- "%s security vulnerabilities"
+- "%s technical implementation"
+- "%s scalability limits"
+- "%s integration examples"
+
+Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic, topic)
+}
+
+// parseQueryResponse parses the LLM response and extracts clean queries
+func (r *ResearchServiceImpl) parseQueryResponse(response string) []string {
 	queries := strings.Split(strings.TrimSpace(response), "\n")
 	var cleanQueries []string
+
 	for _, query := range queries {
 		query = strings.TrimSpace(query)
-		if query != "" && !strings.HasPrefix(query, "#") {
+		// Remove numbering, bullets, and other formatting
+		query = strings.TrimLeft(query, "0123456789.- ")
+
+		if query != "" && !strings.HasPrefix(query, "#") && len(query) > 5 {
 			cleanQueries = append(cleanQueries, query)
 		}
 	}
 
-	return cleanQueries, nil
+	return cleanQueries
+}
+
+// generateRefinedQueries creates refined queries based on initial results
+func (r *ResearchServiceImpl) generateRefinedQueries(ctx context.Context, originalQuery string, results []core.ResearchResult, depth int) ([]string, error) {
+	// Analyze top results to identify key themes and gaps
+	topResults := results
+	if len(results) > 10 {
+		topResults = results[:10] // Use top 10 results for analysis
+	}
+
+	// Filter high-relevance results (>0.6) for context learning
+	var highRelevanceResults []core.ResearchResult
+	for _, result := range topResults {
+		if result.Relevance > 0.6 {
+			highRelevanceResults = append(highRelevanceResults, result)
+		}
+	}
+
+	if len(highRelevanceResults) == 0 {
+		// If no high-relevance results, use top 5 results
+		if len(topResults) > 5 {
+			highRelevanceResults = topResults[:5]
+		} else {
+			highRelevanceResults = topResults
+		}
+	}
+
+	// Build context from high-relevance results
+	var contextBuilder strings.Builder
+	contextBuilder.WriteString("High-relevance findings:\n")
+	for i, result := range highRelevanceResults {
+		contextBuilder.WriteString(fmt.Sprintf("%d. %s\n   %s\n", i+1, result.Title, result.Snippet))
+	}
+
+	// Generate refined queries based on gaps and opportunities
+	queryCount := 2
+	if depth >= 4 {
+		queryCount = 3
+	}
+	if depth >= 5 {
+		queryCount = 4
+	}
+
+	prompt := fmt.Sprintf(`Based on the initial research results for "%s", generate %d refined search queries to fill information gaps and explore deeper insights.
+
+%s
+
+Analyze the above findings and create targeted queries that:
+1. Address any obvious information gaps
+2. Explore specific aspects mentioned but not fully covered
+3. Find more recent or authoritative sources
+4. Investigate related topics that emerged from the results
+
+Query patterns for refinement:
+- Focus on specific technical terms or concepts found in results
+- Target recent developments (2024) if results seem outdated
+- Look for authoritative sources (academic, official documentation)
+- Explore alternatives or competing approaches mentioned
+
+Format: Return only the refined search queries, one per line.`, originalQuery, queryCount, contextBuilder.String())
+
+	response, err := r.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
+		MaxTokens:   400,
+		Temperature: 0.6, // Lower temperature for more focused refinement
+		Model:       "gemini-1.5-flash",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refined queries: %w", err)
+	}
+
+	return r.parseQueryResponse(response), nil
+}
+
+// QueryContext holds context information for query generation
+type QueryContext struct {
+	OriginalQuery     string
+	PreviousQueries   []string
+	HighScoreKeywords []string
+	IdentifiedGaps    []string
+	RelevanceThemes   map[string]float64
+}
+
+// buildQueryContext analyzes results to build context for future queries
+func (r *ResearchServiceImpl) buildQueryContext(originalQuery string, queries []string, results []core.ResearchResult) *QueryContext {
+	context := &QueryContext{
+		OriginalQuery:     originalQuery,
+		PreviousQueries:   queries,
+		HighScoreKeywords: make([]string, 0),
+		IdentifiedGaps:    make([]string, 0),
+		RelevanceThemes:   make(map[string]float64),
+	}
+
+	// Extract keywords from high-relevance results
+	keywordFreq := make(map[string]int)
+	relevanceSum := make(map[string]float64)
+
+	for _, result := range results {
+		if result.Relevance > 0.7 { // High relevance threshold
+			for _, keyword := range result.Keywords {
+				keywordFreq[keyword]++
+				relevanceSum[keyword] += result.Relevance
+			}
+		}
+	}
+
+	// Build high-score keywords list
+	for keyword, freq := range keywordFreq {
+		if freq >= 2 { // Appeared in at least 2 high-relevance results
+			context.HighScoreKeywords = append(context.HighScoreKeywords, keyword)
+			context.RelevanceThemes[keyword] = relevanceSum[keyword] / float64(freq)
+		}
+	}
+
+	return context
 }
 
 // executeSearch performs a search using the configured search provider
