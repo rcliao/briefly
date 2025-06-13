@@ -39,7 +39,8 @@ type DigestTemplate struct {
 	IncludeIndividualArticles bool // Whether to include the "Individual Articles" section
 	IncludeTopicClustering    bool // Whether to group articles by topic clusters
 	IncludeBanner             bool // Whether to include banner image
-	MaxSummaryLength          int  // 0 for no limit
+	MaxSummaryLength          int  // 0 for no limit (in words for v2.0)
+	MaxDigestWords            int  // v2.0: Maximum total words for entire digest (0 for no limit)
 	IntroductionText          string
 	ConclusionText            string
 	SectionSeparator          string
@@ -60,7 +61,8 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: false,
 			IncludeTopicClustering:    false, // Keep simple for brief format
 			IncludeBanner:             false, // Keep minimal for brief format
-			MaxSummaryLength:          150,
+			MaxSummaryLength:          25,    // v2.0: 15-25 words per article summary
+			MaxDigestWords:            200,   // v2.0: 200-word target for brief format
 			IntroductionText:          "Quick highlights from today's reading:",
 			ConclusionText:            "",
 			SectionSeparator:          "\n\n---\n\n",
@@ -77,7 +79,8 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: true,  // Enable to showcase topic clustering
 			IncludeTopicClustering:    true,  // Enable topic clustering for better organization
 			IncludeBanner:             false, // Standard format keeps simple
-			MaxSummaryLength:          300,
+			MaxSummaryLength:          25,    // v2.0: 15-25 words per article summary
+			MaxDigestWords:            400,   // v2.0: 400-word target for standard format
 			IntroductionText:          "Here's what's worth knowing from today's articles:",
 			ConclusionText:            "",
 			SectionSeparator:          "\n\n---\n\n",
@@ -94,7 +97,8 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: true,  // Enable to showcase topic clustering
 			IncludeTopicClustering:    true,  // Enable topic clustering for detailed analysis
 			IncludeBanner:             false, // Detailed format focuses on content
-			MaxSummaryLength:          0,     // No limit
+			MaxSummaryLength:          50,    // v2.0: Longer summaries for detailed format but still controlled
+			MaxDigestWords:            0,     // No limit for detailed format
 			IntroductionText:          "In-depth analysis of today's key articles:",
 			ConclusionText:            "These insights provide a comprehensive view of current developments in the field.",
 			SectionSeparator:          "\n\n---\n\n",
@@ -111,10 +115,11 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: false,
 			IncludeTopicClustering:    true, // Enable topic clustering for newsletter organization
 			IncludeBanner:             true, // Enable banner for newsletter format
-			MaxSummaryLength:          250,
+			MaxSummaryLength:          25,   // v2.0: 15-25 words per article summary
+			MaxDigestWords:            800,  // v2.0: 800-word target for newsletter format to include more articles
 			IntroductionText:          "Welcome to this week's curated selection of insights! Here's what caught our attention:",
 			ConclusionText:            "Thank you for reading! Forward this to colleagues who might find it valuable.",
-			SectionSeparator:          "\n\n💡 **Key Insight**\n\n",
+			SectionSeparator:          "\n\n---\n\n",
 		}
 	case FormatEmail:
 		return &DigestTemplate{
@@ -128,7 +133,8 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: true,
 			IncludeTopicClustering:    true, // Enable topic clustering for email organization
 			IncludeBanner:             true, // Enable banner for email format
-			MaxSummaryLength:          300,
+			MaxSummaryLength:          25,   // v2.0: 15-25 words per article summary
+			MaxDigestWords:            400,  // v2.0: 400-word target for email format
 			IntroductionText:          "Here's your personalized digest with today's most important insights:",
 			ConclusionText:            "Stay informed and keep exploring!",
 			SectionSeparator:          "\n\n---\n\n",
@@ -188,6 +194,48 @@ func GroupArticlesByTopic(digestItems []render.DigestData) []TopicGroup {
 	})
 
 	return groups
+}
+
+// countWords counts words in a text string
+func countWords(text string) int {
+	if text == "" {
+		return 0
+	}
+	words := strings.Fields(text)
+	return len(words)
+}
+
+// estimateReadTime estimates read time based on word count (assuming 200 WPM)
+func estimateReadTime(wordCount int) string {
+	if wordCount == 0 {
+		return "0m"
+	}
+
+	minutes := wordCount / 200 // 200 words per minute reading speed
+	if minutes == 0 {
+		return "<1m"
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+// generateWordCountHeader generates a header with word count and read time
+func generateWordCountHeader(wordCount int) string {
+	readTime := estimateReadTime(wordCount)
+	return fmt.Sprintf("📊 %d words • ⏱️ %s read\n\n", wordCount, readTime)
+}
+
+// truncateToWordLimit truncates text to stay within word limit
+func truncateToWordLimit(text string, maxWords int) string {
+	if maxWords <= 0 {
+		return text
+	}
+
+	words := strings.Fields(text)
+	if len(words) <= maxWords {
+		return text
+	}
+
+	return strings.Join(words[:maxWords], " ") + "..."
 }
 
 // renderArticlesSection renders the articles section with optional topic clustering
@@ -269,8 +317,9 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 				// Summary
 				if template.IncludeSummaries && item.SummaryText != "" {
 					summary := item.SummaryText
-					if template.MaxSummaryLength > 0 && len(summary) > template.MaxSummaryLength {
-						summary = summary[:template.MaxSummaryLength] + "..."
+					// v2.0: Use word-based truncation instead of character-based
+					if template.MaxSummaryLength > 0 {
+						summary = truncateToWordLimit(summary, template.MaxSummaryLength)
 					}
 					content.WriteString(fmt.Sprintf("%s\n\n", summary))
 				}
@@ -330,8 +379,9 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 			// Summary
 			if template.IncludeSummaries && item.SummaryText != "" {
 				summary := item.SummaryText
-				if template.MaxSummaryLength > 0 && len(summary) > template.MaxSummaryLength {
-					summary = summary[:template.MaxSummaryLength] + "..."
+				// v2.0: Use word-based truncation instead of character-based
+				if template.MaxSummaryLength > 0 {
+					summary = truncateToWordLimit(summary, template.MaxSummaryLength)
 				}
 				content.WriteString(fmt.Sprintf("%s\n\n", summary))
 			}
@@ -365,8 +415,7 @@ func renderAlertsSection(digestItems []render.DigestData, alertsSummary string) 
 			}
 		}
 		if alertCount == 0 {
-			content.WriteString("### ✅ Alert Monitoring\n\n")
-			content.WriteString("No alerts triggered for this digest. All articles passed through standard monitoring criteria.\n\n")
+			return "" // Don't show alerts section if there are no alerts
 		}
 	}
 
@@ -383,7 +432,7 @@ func renderInsightsSection(digestItems []render.DigestData, template *DigestTemp
 	}
 
 	content.WriteString("## 🧠 AI-Powered Insights\n\n")
-	content.WriteString("*Leveraging sentiment analysis, alert monitoring, trend analysis, and research suggestions powered by AI.*\n\n")
+	content.WriteString("*Here's what the data tells us about the themes and patterns in this week's content:*\n\n")
 
 	// 1. Sentiment Analysis Summary
 	if overallSentiment != "" {
@@ -440,6 +489,233 @@ func renderInsightsSection(digestItems []render.DigestData, template *DigestTemp
 	}
 
 	return content.String()
+}
+
+// renderActionableSection renders the "Try This Week" section with specific, actionable recommendations
+func renderActionableSection(digestItems []render.DigestData, template *DigestTemplate) string {
+	var content strings.Builder
+
+	// Only include actionable section for formats that support it
+	if !template.IncludeActionItems {
+		return content.String()
+	}
+
+	content.WriteString("## ⚡ Try This Week\n\n")
+	content.WriteString("*Actionable takeaways from this digest - pick one to implement:*\n\n")
+
+	var actions []string
+
+	// Extract actionable insights from articles
+	for i, item := range digestItems {
+		if i >= 3 { // Limit to top 3 articles to keep focused
+			break
+		}
+
+		action := generateActionableItem(item)
+		if action != "" {
+			actions = append(actions, action)
+		}
+	}
+
+	// If we don't have enough specific actions, add some general ones
+	if len(actions) < 2 {
+		actions = append(actions, generateFallbackActions(digestItems)...)
+	}
+
+	// Limit to 2-3 actions to keep focused
+	if len(actions) > 3 {
+		actions = actions[:3]
+	}
+
+	// Render action items
+	for i, action := range actions {
+		if i >= 3 { // Hard limit to 3 actions
+			break
+		}
+		content.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, action))
+	}
+
+	content.WriteString("\n*💡 Pro tip: Start with just one item - small actions lead to big results.*\n\n")
+
+	return content.String()
+}
+
+// generateActionableItem creates a specific, actionable item from an article
+func generateActionableItem(item render.DigestData) string {
+	title := strings.ToLower(item.Title)
+	summary := strings.ToLower(item.SummaryText)
+
+	// Technology-specific actionable recommendations
+	if strings.Contains(title, "api") || strings.Contains(summary, "api") {
+		return "Test the mentioned API in a small project this week"
+	}
+
+	if strings.Contains(title, "tool") || strings.Contains(title, "library") {
+		return fmt.Sprintf("Evaluate %s for your current tech stack", extractToolName(item.Title))
+	}
+
+	if strings.Contains(title, "security") || strings.Contains(summary, "security") {
+		return "Audit one security practice in your current projects"
+	}
+
+	if strings.Contains(title, "performance") || strings.Contains(summary, "optimization") {
+		return "Profile and optimize one slow function in your codebase"
+	}
+
+	if strings.Contains(title, "testing") || strings.Contains(summary, "test") {
+		return "Add tests for one untested module in your project"
+	}
+
+	if strings.Contains(title, "docker") || strings.Contains(title, "container") {
+		return "Containerize one service in your development environment"
+	}
+
+	if strings.Contains(title, "ai") || strings.Contains(title, "llm") || strings.Contains(title, "ml") {
+		return "Experiment with AI integration in your next feature"
+	}
+
+	if strings.Contains(title, "database") || strings.Contains(summary, "database") {
+		return "Optimize one slow database query in your application"
+	}
+
+	if strings.Contains(title, "monitoring") || strings.Contains(summary, "observability") {
+		return "Add monitoring to one critical service endpoint"
+	}
+
+	if strings.Contains(title, "deployment") || strings.Contains(summary, "deploy") {
+		return "Automate one manual deployment step in your workflow"
+	}
+
+	// Framework-specific actions
+	if strings.Contains(title, "react") {
+		return "Refactor one React component using best practices from the article"
+	}
+
+	if strings.Contains(title, "kubernetes") || strings.Contains(title, "k8s") {
+		return "Review your Kubernetes resource limits and requests"
+	}
+
+	if strings.Contains(title, "go") && !strings.Contains(title, "google") {
+		return "Apply Go performance patterns to your current project"
+	}
+
+	if strings.Contains(title, "rust") {
+		return "Explore Rust for your next system-level component"
+	}
+
+	// Generic actionable item based on content
+	if strings.Contains(summary, "improve") || strings.Contains(summary, "better") {
+		return "Implement one improvement technique from this article"
+	}
+
+	if strings.Contains(summary, "learn") || strings.Contains(summary, "tutorial") {
+		return "Complete the tutorial or example mentioned in the article"
+	}
+
+	// Default action
+	return fmt.Sprintf("Research %s for potential application in your work", extractKeyTerm(item.Title))
+}
+
+// generateFallbackActions provides general actionable items when specific ones can't be generated
+func generateFallbackActions(digestItems []render.DigestData) []string {
+	actions := []string{
+		"Refactor one function using patterns from this week's reading",
+		"Share one insight from these articles with your team",
+		"Bookmark one tool mentioned for future evaluation",
+		"Update one dependency in your current project",
+		"Write documentation for one undocumented feature",
+	}
+
+	// Try to make it more specific if we can detect patterns
+	hasAI := false
+	hasPerf := false
+	hasTools := false
+
+	for _, item := range digestItems {
+		titleLower := strings.ToLower(item.Title)
+		if strings.Contains(titleLower, "ai") || strings.Contains(titleLower, "llm") {
+			hasAI = true
+		}
+		if strings.Contains(titleLower, "performance") || strings.Contains(titleLower, "optimization") {
+			hasPerf = true
+		}
+		if strings.Contains(titleLower, "tool") || strings.Contains(titleLower, "library") {
+			hasTools = true
+		}
+	}
+
+	var contextualActions []string
+	if hasAI {
+		contextualActions = append(contextualActions, "Explore one AI use case for your current project")
+	}
+	if hasPerf {
+		contextualActions = append(contextualActions, "Benchmark one performance-critical operation")
+	}
+	if hasTools {
+		contextualActions = append(contextualActions, "Evaluate one new tool mentioned in the articles")
+	}
+
+	// Return contextual actions if available, otherwise fallback
+	if len(contextualActions) > 0 {
+		return contextualActions
+	}
+
+	return actions[:2] // Return first 2 generic actions
+}
+
+// extractToolName attempts to extract tool/library name from title
+func extractToolName(title string) string {
+	// Simple extraction - look for common patterns
+	words := strings.Fields(title)
+	for _, word := range words {
+		// Skip common articles and prepositions
+		if len(word) > 2 && !isCommonWord(word) {
+			// Look for tool-like words (often capitalized or have specific patterns)
+			if strings.Contains(strings.ToLower(word), "js") ||
+				strings.Contains(strings.ToLower(word), "lib") ||
+				word[0] >= 'A' && word[0] <= 'Z' {
+				return word
+			}
+		}
+	}
+	return "this technology"
+}
+
+// extractKeyTerm extracts a key technical term from the title
+func extractKeyTerm(title string) string {
+	titleLower := strings.ToLower(title)
+
+	// Technical terms to look for
+	techTerms := []string{
+		"kubernetes", "docker", "react", "vue", "angular", "node", "python", "go", "rust",
+		"typescript", "javascript", "api", "microservices", "serverless", "cloud", "aws",
+		"azure", "gcp", "database", "postgresql", "mysql", "mongodb", "redis", "graphql",
+		"machine learning", "ai", "llm", "neural", "blockchain", "crypto", "security",
+		"devops", "cicd", "testing", "monitoring", "performance", "optimization",
+	}
+
+	for _, term := range techTerms {
+		if strings.Contains(titleLower, term) {
+			return term
+		}
+	}
+
+	// If no specific term found, return generic
+	return "the concepts discussed"
+}
+
+// isCommonWord checks if word is a common article/preposition to skip
+func isCommonWord(word string) bool {
+	commonWords := map[string]bool{
+		"the": true, "a": true, "an": true, "and": true, "or": true, "but": true,
+		"in": true, "on": true, "at": true, "to": true, "for": true, "of": true,
+		"with": true, "by": true, "how": true, "why": true, "what": true, "when": true,
+		"where": true, "is": true, "are": true, "was": true, "were": true, "be": true,
+		"been": true, "being": true, "have": true, "has": true, "had": true, "will": true,
+		"would": true, "could": true, "should": true, "may": true, "might": true, "can": true,
+		"this": true, "that": true, "these": true, "those": true, "your": true, "you": true,
+	}
+	return commonWords[strings.ToLower(word)]
 }
 
 // getSentimentEmoji returns the appropriate emoji for a sentiment label
@@ -511,7 +787,14 @@ func renderReferencesSection(digestItems []render.DigestData) string {
 	var content strings.Builder
 	content.WriteString("## References\n\n")
 
-	for i, item := range digestItems {
+	// Limit to top 7 references for better context
+	referenceCount := len(digestItems)
+	if referenceCount > 7 {
+		referenceCount = 7
+	}
+
+	for i := 0; i < referenceCount; i++ {
+		item := digestItems[i]
 		content.WriteString(fmt.Sprintf("[%d] %s\n", i+1, item.URL))
 		if item.Title != "" {
 			content.WriteString(fmt.Sprintf("    *%s*\n", item.Title))
@@ -685,6 +968,78 @@ func RenderWithInsights(digestItems []render.DigestData, outputDir string, final
 	return RenderWithBannerAndInsights(digestItems, outputDir, finalDigest, digestMyTake, template, customTitle, overallSentiment, alertsSummary, trendsSummary, researchSuggestions, nil)
 }
 
+// RenderWithStructuredContent renders a digest using the new cohesive LLM-generated approach
+func RenderWithStructuredContent(digestItems []render.DigestData, outputDir string, structuredContent string, template *DigestTemplate, customTitle string, banner *core.BannerImage) (string, string, error) {
+	dateStr := time.Now().UTC().Format("2006-01-02")
+	filename := fmt.Sprintf("digest_%s_%s.md", strings.ToLower(string(template.Format)), dateStr)
+
+	if outputDir == "" {
+		outputDir = "digests"
+	}
+
+	var content strings.Builder
+
+	// Header - use custom title if provided, otherwise use template title
+	title := template.Title
+	if customTitle != "" {
+		title = customTitle
+	}
+	content.WriteString(fmt.Sprintf("# %s - %s\n\n", title, dateStr))
+
+	// Word count and read time statistics
+	wordCount := countWords(structuredContent)
+	if wordCount > 0 {
+		wordCountHeader := generateWordCountHeader(wordCount)
+		content.WriteString(wordCountHeader)
+	}
+
+	// Banner image (if provided and template supports it)
+	bannerSection := renderBannerSection(banner, template, "markdown")
+	if bannerSection != "" {
+		content.WriteString(bannerSection)
+	}
+
+	// Introduction
+	if template.IntroductionText != "" {
+		content.WriteString(fmt.Sprintf("%s\n\n", template.IntroductionText))
+	}
+
+	// Main structured content (LLM-generated cohesive digest)
+	if structuredContent != "" {
+		content.WriteString(structuredContent)
+		content.WriteString("\n\n")
+	}
+
+	// Conclusion
+	if template.ConclusionText != "" {
+		content.WriteString("\n\n---\n\n")
+		content.WriteString(template.ConclusionText)
+		content.WriteString("\n")
+	}
+
+	// Prompt Corner (for newsletter format)
+	if template.IncludePromptCorner && structuredContent != "" {
+		promptCorner, err := llm.GeneratePromptCorner(structuredContent)
+		if err == nil && promptCorner != "" {
+			content.WriteString("\n\n---\n\n")
+			content.WriteString("## 🎯 Prompt Corner\n\n")
+			content.WriteString(promptCorner)
+			content.WriteString("\n")
+		}
+	}
+
+	// References section (up to 7 references)
+	referencesSection := renderReferencesSection(digestItems)
+	if referencesSection != "" {
+		content.WriteString("\n\n---\n\n")
+		content.WriteString(referencesSection)
+	}
+
+	// Write to file and return both content and path
+	filePath, err := render.WriteDigestToFile(content.String(), outputDir, filename)
+	return content.String(), filePath, err
+}
+
 // RenderWithBannerAndInsights renders a digest with both banner and insights data
 func RenderWithBannerAndInsights(digestItems []render.DigestData, outputDir string, finalDigest string, digestMyTake string, template *DigestTemplate, customTitle string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string, banner *core.BannerImage) (string, string, error) {
 	dateStr := time.Now().UTC().Format("2006-01-02")
@@ -717,13 +1072,19 @@ func RenderWithBannerAndInsights(digestItems []render.DigestData, outputDir stri
 	// Final digest summary (if provided)
 	if finalDigest != "" {
 		content.WriteString("## Executive Summary\n\n")
-		content.WriteString(finalDigest)
+		// v2.0: Limit executive summary to 100-150 words
+		executiveSummary := finalDigest
+		if template.MaxDigestWords > 0 {
+			executiveSummary = truncateToWordLimit(finalDigest, 150) // Max 150 words for executive summary
+		}
+		content.WriteString(executiveSummary)
 		content.WriteString("\n\n")
 	}
 
 	// Alert Monitoring Section (moved up for prominence)
 	alertsSection := renderAlertsSection(digestItems, alertsSummary)
 	if alertsSection != "" {
+		content.WriteString("## 🚨 Alerts\n\n")
 		content.WriteString(alertsSection)
 		content.WriteString("\n")
 	}
@@ -735,11 +1096,23 @@ func RenderWithBannerAndInsights(digestItems []render.DigestData, outputDir stri
 		content.WriteString("\n")
 	}
 
-	// Process each article using helper function
-	content.WriteString(renderArticlesSection(digestItems, template))
+	// v2.0: Try This Week section for actionable recommendations
+	actionSection := renderActionableSection(digestItems, template)
+	if actionSection != "" {
+		content.WriteString(actionSection)
+		content.WriteString("\n")
+	}
+
+	// Process each article using helper function (only for detailed formats)
+	articlesSection := renderArticlesSection(digestItems, template)
+	if articlesSection != "" {
+		content.WriteString("\n\n---\n\n")
+		content.WriteString(articlesSection)
+	}
 
 	// Conclusion
 	if template.ConclusionText != "" {
+		content.WriteString("\n\n")
 		content.WriteString(template.SectionSeparator)
 		content.WriteString(template.ConclusionText)
 		content.WriteString("\n")
@@ -772,9 +1145,23 @@ func RenderWithBannerAndInsights(digestItems []render.DigestData, outputDir stri
 		content.WriteString(referencesSection)
 	}
 
+	// v2.0: Add word count and read time statistics
+	digestContent := content.String()
+	wordCount := countWords(digestContent)
+	if template.MaxDigestWords > 0 && wordCount > 0 {
+		// Insert word count header after the title
+		lines := strings.Split(digestContent, "\n")
+		if len(lines) > 2 {
+			wordCountHeader := generateWordCountHeader(wordCount)
+			// Insert after the title (line 0) and empty line (line 1)
+			newContent := strings.Join(lines[:2], "\n") + "\n" + wordCountHeader + strings.Join(lines[2:], "\n")
+			digestContent = newContent
+		}
+	}
+
 	// Write to file and return both content and path
-	filePath, err := render.WriteDigestToFile(content.String(), outputDir, filename)
-	return content.String(), filePath, err
+	filePath, err := render.WriteDigestToFile(digestContent, outputDir, filename)
+	return digestContent, filePath, err
 }
 
 // RenderHTMLEmail renders a digest as HTML email

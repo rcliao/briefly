@@ -131,6 +131,47 @@ research:
   timeout: "60s"
   concurrent_searches: 3
 
+# Relevance Filtering Configuration
+filtering:
+  enabled: true                     # Enable/disable content filtering
+  min_relevance: 0.4               # Global minimum relevance threshold (0.0-1.0)
+  method: "keyword"                # Scoring method: keyword, embedding, hybrid
+  
+  # Scoring weights for relevance calculation
+  weights:
+    content_relevance: 0.6         # Weight for content match (0.0-1.0)
+    title_relevance: 0.3           # Weight for title match (0.0-1.0)
+    authority: 0.1                 # Weight for source authority (0.0-1.0)
+    recency: 0.0                   # Weight for content freshness (0.0-1.0)
+    quality: 0.0                   # Weight for content quality (0.0-1.0)
+  
+  # Template-specific filtering settings (override global defaults)
+  templates:
+    brief:
+      min_relevance: 0.6           # Stricter for brief format
+      max_words: 200               # Word limit for brief digests
+      max_articles: 3              # Article limit for brief format
+    
+    standard:
+      min_relevance: 0.4           # Balanced for standard format
+      max_words: 400
+      max_articles: 5
+    
+    detailed:
+      min_relevance: 0.2           # Most inclusive for detailed format
+      max_words: 0                 # No word limit (0 = unlimited)
+      max_articles: 0              # No article limit (0 = unlimited)
+    
+    newsletter:
+      min_relevance: 0.4           # Balanced for newsletter
+      max_words: 800
+      max_articles: 6
+    
+    email:
+      min_relevance: 0.4           # Balanced for email format
+      max_words: 400
+      max_articles: 5
+
 # Logging Configuration
 logging:
   level: "info"                 # debug, info, warn, error

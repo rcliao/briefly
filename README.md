@@ -1,12 +1,23 @@
-# Briefly: AI-Powered Digest Generator
+# Briefly: AI-Powered Smart Digest Generator
 
-Briefly is a modern command-line application written in Go that takes a Markdown file containing a list of URLs, fetches the content from each URL, summarizes the text using a Large Language Model (LLM) via the Gemini API, and then generates a cohesive Markdown-formatted digest of all the summarized content.
+Briefly is a modern command-line application written in Go that transforms lengthy article collections into intelligent, bite-sized digests. With v2.0 Smart Concise Digests, it now generates 200-500 word summaries that busy tech professionals can consume in 2-3 minutes, featuring intelligent content filtering, relevance scoring, and actionable recommendations.
 
 ## Features
 
-- **Smart Content Processing**: Reads URLs from Markdown files and intelligently extracts main article content
-- **AI-Powered Summarization**: Uses Gemini API to generate concise, meaningful summaries
-- **Multiple Output Formats**: Choose from brief, standard, detailed, newsletter, or HTML email formats
+### 🎯 v2.0 Smart Concise Digests (Phase 1 - Implemented)
+
+- **Intelligent Content Filtering**: Advanced relevance scoring automatically filters articles by importance, keeping only high-value content (🔥 Critical ≥0.8, ⭐ Important 0.6-0.8, 💡 Optional <0.6)
+- **Word Count Optimization**: Generates precise 200-500 word digests with real-time word counting and read time estimates ("📊 342 words • ⏱️ 2m read")
+- **Unified Relevance Architecture**: Reusable scoring system serves digest filtering, research ranking, and interactive browsing with context-aware weight profiles
+- **Actionable Recommendations**: "⚡ Try This Week" section with 2-3 specific, implementable actions (5-8 words each) like "Test the mentioned API in a small project this week"
+- **Smart Theme Detection**: Automatically infers digest themes (AI, security, performance, etc.) for targeted relevance scoring
+- **Configurable Filtering**: Command-line control with `--min-relevance`, `--max-words`, and `--enable-filtering` flags
+
+### 🚀 Core Features
+
+- **Smart Content Processing**: Reads URLs from Markdown files and intelligently extracts main article content  
+- **AI-Powered Summarization**: Uses Gemini API to generate concise, meaningful summaries with word-based limits (15-25 words per article)
+- **Multiple Output Formats**: Choose from brief (200 words), standard (400 words), detailed, newsletter (500 words), or HTML email formats
 - **AI-Powered Insights**: Comprehensive insights automatically integrated into every digest:
   - **Sentiment Analysis**: Emotional tone analysis with emoji indicators (😊 positive, 😞 negative, 🤔 neutral)
   - **Alert Monitoring**: Configurable alert conditions with automatic evaluation and notifications
@@ -150,11 +161,20 @@ Briefly uses a modern CLI interface with subcommands. Here are the main commands
 ### Generate a Digest
 
 ```bash
-# Basic usage
+# Basic usage (generates 400-word digest with relevance filtering)
 briefly digest input/my-links.md
 
-# Specify output directory and format
-briefly digest --output ./my-digests --format newsletter input/my-links.md
+# v2.0 Smart filtering with custom relevance threshold
+briefly digest --min-relevance 0.7 input/my-links.md
+
+# Generate concise 300-word digest
+briefly digest --max-words 300 input/my-links.md
+
+# Disable filtering to include all articles
+briefly digest --enable-filtering=false input/my-links.md
+
+# Specify output directory and format with word limits
+briefly digest --output ./my-digests --format newsletter --max-words 500 input/my-links.md
 
 # Estimate costs before processing (dry run)
 briefly digest --dry-run input/my-links.md
@@ -165,12 +185,12 @@ briefly --config ~/.my-config.yaml digest input/my-links.md
 
 ### Available Digest Formats
 
-Use the `--format` flag to specify the output style:
+Use the `--format` flag to specify the output style. All formats now include v2.0 word count optimization and actionable recommendations:
 
-- `brief`: Concise digest with key highlights only
-- `standard`: Balanced digest with summaries and key points (default)
-- `detailed`: Comprehensive digest with full summaries and analysis
-- `newsletter`: Newsletter-style digest optimized for sharing, includes "Prompt Corner" with AI-generated prompts readers can copy and use
+- `brief`: Ultra-concise digest (~200 words) with key highlights only
+- `standard`: Balanced digest (~400 words) with summaries and key points (default)
+- `detailed`: Comprehensive digest (unlimited) with full summaries and analysis
+- `newsletter`: Newsletter-style digest (~500 words) optimized for sharing, includes "Prompt Corner" and "⚡ Try This Week" sections
 - `email`: HTML email format with responsive design and rich formatting
 
 ```bash
@@ -360,6 +380,9 @@ The prompts are:
 - `--output, -o`: Output directory for digest files (default: "digests")
 - `--format, -f`: Digest format: brief, standard, detailed, newsletter (default: "standard")
 - `--dry-run`: Estimate costs without making API calls
+- `--min-relevance`: Minimum relevance threshold for article inclusion (0.0-1.0, default: 0.6)
+- `--max-words`: Maximum words for entire digest (0 for template default)
+- `--enable-filtering`: Enable relevance-based content filtering (default: true)
 
 ### Examples
 
@@ -486,21 +509,29 @@ The application will automatically extract all URLs regardless of their formatti
 
 ## How It Works
 
-### Digest Generation
+### Digest Generation (v2.0 Enhanced)
 
 1. **URL Extraction**: Parses the input Markdown file to find all HTTP/HTTPS URLs
 2. **Content Fetching**: Downloads and extracts main content from each URL using intelligent HTML parsing
 3. **Smart Caching**: Checks cache for previously processed articles to avoid redundant API calls
 4. **Content Cleaning**: Removes boilerplate content (navigation, ads, etc.) to focus on main article text
-5. **AI Summarization**: Uses Gemini API to generate concise summaries of each article
-6. **AI-Powered Insights Generation**: Automatically analyzes content for:
+5. **AI Summarization**: Uses Gemini API to generate word-limited summaries (15-25 words per article)
+6. **🎯 v2.0 Relevance Filtering**: 
+   - **Theme Detection**: Automatically infers digest theme from article titles and content
+   - **Relevance Scoring**: Uses KeywordScorer to evaluate content relevance with configurable weights
+   - **Quality Filtering**: Removes low-quality content (short articles, spam domains, missing titles)
+   - **Threshold Filtering**: Keeps only articles meeting minimum relevance score (default 0.6)
+   - **Word Budget Management**: Prioritizes high-relevance content when approaching word limits
+7. **AI-Powered Insights Generation**: Automatically analyzes filtered content for:
    - **Sentiment Analysis**: Determines emotional tone and assigns appropriate emoji indicators
    - **Alert Evaluation**: Checks configured alert conditions against article content and topics
    - **Trend Detection**: Compares current topics with historical data when available
    - **Research Suggestions**: Generates AI-driven research queries for deeper topic exploration
-7. **Template Processing**: Applies the selected format template to structure the output with insights integrated
-8. **Final Digest Generation**: Creates a cohesive digest with proper citations, formatting, and comprehensive insights section
-9. **Output**: Saves the final digest as a Markdown file and displays cache statistics
+8. **🎯 v2.0 Actionable Recommendations**: Generates "⚡ Try This Week" section with 2-3 specific, technology-aware action items
+9. **Template Processing**: Applies word-optimized format templates with integrated insights and recommendations
+10. **Word Count Optimization**: Ensures output meets target word limits (200-500 words) with read time estimates
+11. **Final Digest Generation**: Creates cohesive, scannable digest with proper citations and comprehensive sections
+12. **Output**: Saves the final digest as a Markdown file with word count statistics and filtering results
 
 ### AI-Powered Insights
 
@@ -636,11 +667,12 @@ briefly/
 │   ├── fetch/               # URL fetching and content extraction
 │   ├── llm/                 # LLM client abstraction
 │   ├── logger/              # Structured logging setup
+│   ├── relevance/           # 🎯 v2.0 Unified relevance scoring architecture
 │   ├── render/              # Digest rendering and output
 │   ├── research/            # Deep research and AI query generation
 │   ├── sentiment/           # Sentiment analysis functionality
 │   ├── store/               # SQLite caching system
-│   ├── templates/           # Digest format templates
+│   ├── templates/           # Word-optimized digest format templates
 │   ├── trends/              # Trend analysis and historical comparison  
 │   └── tui/                 # Terminal user interface
 ├── llmclient/               # Legacy Gemini client (being phased out)
@@ -667,6 +699,7 @@ briefly/
 - **`internal/templates/`**: Output format templates
 - **`internal/tui/`**: Interactive terminal interface
 - **`internal/alerts/`**: Alert monitoring and evaluation system
+- **`internal/relevance/`**: 🎯 v2.0 Unified relevance scoring system with interfaces, keyword scorer, and filtering logic
 - **`internal/sentiment/`**: Sentiment analysis functionality
 - **`internal/trends/`**: Trend analysis and historical comparison
 - **`internal/research/`**: Deep research and AI query generation
@@ -674,17 +707,27 @@ briefly/
 
 ## Further Development
 
-See [`docs/plan/execution_plan_v0.md`](docs/plan/execution_plan_v0.md) for the complete development roadmap and current implementation status.
+See [`docs/requirements/v2-smart-concise-digests.md`](docs/requirements/v2-smart-concise-digests.md) for the complete v2.0 development roadmap.
 
-**Current Status**: v0.4 "Insights" milestone is complete with comprehensive AI-powered insights automatically integrated into every digest. Core features are production-ready.
+**Current Status**: 🎯 **v2.0 Smart Concise Digests - Phase 1 Complete**
 
-**Next Priority**: Complete the v1.0 "Multi-Channel" milestone by implementing:
-- HTML email output with beautiful templates
-- Slack/Discord integration for short bullet summaries
-- Text-to-Speech (TTS) MP3 generation
-- Polished documentation and user guides
+✅ **Phase 1 Implemented (High Priority)**:
+- REQ-1: Word count optimization (200-500 words per digest)
+- REQ-2: Unified relevance scoring architecture with KeywordScorer
+- REQ-3: Digest content filtering with configurable thresholds
+- REQ-4: Enhanced actionability with "⚡ Try This Week" recommendations
 
-- **Phase 5: Testing and Documentation**
-  - Write unit tests for key functions.
-  - Write integration tests for the end-to-end workflow.
-  - Continuously update documentation.
+**Next Priority - Phase 2 (Medium Priority)**:
+- REQ-5: Research command unification with shared relevance interface
+- REQ-6: Scoring profiles for different contexts (digest, research, TUI)
+- REQ-7: Alert system streamlining with relevance filtering
+
+**Future - Phase 3 (Lower Priority)**:
+- REQ-8: TUI command relevance integration for content discovery
+- REQ-9: Adaptive scoring with learning capabilities
+
+**v1.0 Multi-Channel Features** (Production Ready):
+- ✅ HTML email output with responsive templates
+- ✅ Slack/Discord integration with webhook support
+- ✅ Text-to-Speech (TTS) MP3 generation with multiple providers
+- ✅ AI banner image generation with DALL-E integration

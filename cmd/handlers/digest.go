@@ -3,12 +3,14 @@ package handlers
 import (
 	"briefly/internal/alerts"
 	"briefly/internal/clustering"
+	"briefly/internal/config"
 	"briefly/internal/core"
 	"briefly/internal/cost"
 	"briefly/internal/fetch"
 	"briefly/internal/llm"
 	"briefly/internal/logger"
 	"briefly/internal/messaging"
+	"briefly/internal/relevance"
 	"briefly/internal/render"
 	"briefly/internal/sentiment"
 	"briefly/internal/services"
@@ -92,6 +94,11 @@ Examples:
 	digestCmd.Flags().String("tts-voice", "alloy", "Voice for TTS generation")
 	digestCmd.Flags().Float32("tts-speed", 1.0, "Speech speed (0.25-4.0)")
 	digestCmd.Flags().Int("tts-max-articles", 10, "Maximum articles for TTS")
+
+	// v2.0 Relevance filtering flags
+	digestCmd.Flags().Float64("min-relevance", 0.4, "Minimum relevance threshold for article inclusion (0.0-1.0)")
+	digestCmd.Flags().Int("max-words", 0, "Maximum words for entire digest (0 for template default)")
+	digestCmd.Flags().Bool("enable-filtering", true, "Enable relevance-based content filtering")
 
 	return digestCmd
 }
@@ -221,8 +228,8 @@ func runDigest(cmd *cobra.Command, inputFile, outputDir, format string, dryRun, 
 		return runCostEstimation(links)
 	}
 
-	// Process articles and generate digest
-	digestItems, processedArticles, err := processArticles(links, format)
+	// Process articles and generate digest with relevance filtering
+	digestItems, processedArticles, err := processArticles(cmd, links, format)
 	if err != nil {
 		return fmt.Errorf("failed to process articles: %w", err)
 	}
@@ -277,7 +284,7 @@ func runCostEstimation(links []core.Link) error {
 	return nil
 }
 
-func processArticles(links []core.Link, format string) ([]render.DigestData, []core.Article, error) {
+func processArticles(cmd *cobra.Command, links []core.Link, format string) ([]render.DigestData, []core.Article, error) {
 	// Initialize cache store
 	cacheStore, err := store.NewStore(".briefly-cache")
 	if err != nil {
@@ -418,6 +425,26 @@ func processArticles(links []core.Link, format string) ([]render.DigestData, []c
 			cacheHits, cacheMisses, float64(cacheHits)/float64(cacheHits+cacheMisses)*100)
 	}
 
+	// v2.0: Apply relevance filtering after summary generation but before clustering
+	enableFiltering := config.IsFilteringEnabled()
+	if cmd.Flags().Changed("enable-filtering") {
+		if flagVal, err := cmd.Flags().GetBool("enable-filtering"); err == nil {
+			enableFiltering = flagVal
+		}
+	}
+	if enableFiltering && len(digestItems) > 0 {
+		originalCount := len(digestItems)
+		filteredItems, filteredArticles, err := applyRelevanceFiltering(cmd, digestItems, processedArticles, format)
+		if err != nil {
+			logger.Warn("Relevance filtering failed, continuing with all articles", "error", err)
+		} else {
+			digestItems = filteredItems
+			processedArticles = filteredArticles
+			fmt.Printf("\n🎯 Relevance Filtering: %d → %d articles (%.1f%% included)\n",
+				originalCount, len(digestItems), float64(len(digestItems))/float64(originalCount)*100)
+		}
+	}
+
 	// Perform clustering if we have enough articles
 	if len(digestItems) > 1 && llmClient != nil {
 		if err := performClustering(digestItems, processedArticles, llmClient, cacheStore); err != nil {
@@ -426,6 +453,158 @@ func processArticles(links []core.Link, format string) ([]render.DigestData, []c
 	}
 
 	return digestItems, processedArticles, nil
+}
+
+// applyRelevanceFiltering applies relevance scoring and filtering to articles
+func applyRelevanceFiltering(cmd *cobra.Command, digestItems []render.DigestData, processedArticles []core.Article, format string) ([]render.DigestData, []core.Article, error) {
+	fmt.Println("\n🎯 Applying relevance filtering...")
+
+	// Get filtering parameters from configuration with command flag overrides
+	minRelevance := config.GetFilteringMinRelevance()
+	if cmd.Flags().Changed("min-relevance") {
+		if flagVal, err := cmd.Flags().GetFloat64("min-relevance"); err == nil {
+			minRelevance = flagVal
+		}
+	}
+
+	// Get template-specific filtering settings
+	templateFilter := config.GetTemplateFilter(format)
+	
+	// Use template-specific min-relevance if not overridden by command flag
+	if !cmd.Flags().Changed("min-relevance") && templateFilter.MinRelevance > 0 {
+		minRelevance = templateFilter.MinRelevance
+	}
+
+	// Get max words from template config with command flag override
+	maxWords := templateFilter.MaxWords
+	if cmd.Flags().Changed("max-words") {
+		if flagVal, err := cmd.Flags().GetInt("max-words"); err == nil {
+			maxWords = flagVal
+		}
+	}
+
+	// Create relevance scorer
+	scorer := relevance.NewKeywordScorer()
+
+	// Infer digest theme from articles
+	var scorableContents []relevance.Scorable
+	for i, item := range digestItems {
+		metadata := make(map[string]interface{})
+		if i < len(processedArticles) {
+			// Add article metadata
+			if !processedArticles[i].DateFetched.IsZero() {
+				metadata["date_published"] = processedArticles[i].DateFetched
+			}
+			metadata["content_type"] = processedArticles[i].ContentType
+			metadata["content_length"] = len(processedArticles[i].CleanedText)
+		}
+
+		adapter := relevance.ArticleAdapter{
+			Title:    item.Title,
+			Content:  item.SummaryText, // Use summary for relevance scoring to be consistent
+			URL:      item.URL,
+			Metadata: metadata,
+		}
+		scorableContents = append(scorableContents, adapter)
+	}
+
+	// Infer the main theme for the digest
+	digestTheme := relevance.InferDigestTheme(scorableContents)
+	fmt.Printf("   📝 Detected theme: %s\n", digestTheme)
+
+	// Create criteria for relevance scoring
+	criteria := relevance.DefaultCriteria("digest", digestTheme)
+	criteria.Threshold = minRelevance
+
+	// Apply configured scoring weights
+	configWeights := config.GetFilteringWeights()
+	criteria.Weights = relevance.ScoringWeights{
+		ContentRelevance: configWeights.ContentRelevance,
+		TitleRelevance:   configWeights.TitleRelevance,
+		Authority:        configWeights.Authority,
+		Recency:          configWeights.Recency,
+		Quality:          configWeights.Quality,
+	}
+
+	// Apply basic quality filters
+	commonFilters := relevance.CommonFilters()
+	criteria.Filters = []relevance.Filter{
+		commonFilters["min_content_length"],
+		commonFilters["has_title"],
+		commonFilters["valid_url"],
+	}
+
+	// Use template's max words if flag not set
+	if maxWords == 0 {
+		template := templates.GetTemplate(templates.DigestFormat(format))
+		if template != nil {
+			maxWords = template.MaxDigestWords
+		}
+	}
+
+	ctx := context.Background()
+
+	// Apply filtering with word budget considerations
+	var filterResults []relevance.FilterResult
+	var err error
+	if maxWords > 0 {
+		filterResults, err = relevance.FilterForDigest(ctx, scorer, scorableContents, criteria, maxWords)
+	} else {
+		filterResults, err = relevance.FilterByThreshold(ctx, scorer, scorableContents, criteria)
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("relevance filtering failed: %w", err)
+	}
+
+	// Get statistics
+	stats := relevance.GetFilterStats(filterResults, minRelevance)
+	fmt.Printf("   📊 Filter stats: %.2f avg score, %.2f max, %.2f min\n",
+		stats.AvgScore, stats.MaxScore, stats.MinScore)
+
+	// Build filtered results
+	var filteredItems []render.DigestData
+	var filteredArticles []core.Article
+
+	for i, result := range filterResults {
+		if result.Included {
+			// Update the digest item with relevance score
+			if i < len(digestItems) {
+				digestItems[i].MyTake = fmt.Sprintf("Relevance: %.2f - %s", result.Score.Value, result.Score.Reasoning)
+				filteredItems = append(filteredItems, digestItems[i])
+			}
+
+			// Update the article with relevance score
+			if i < len(processedArticles) {
+				processedArticles[i].RelevanceScore = result.Score.Value
+				filteredArticles = append(filteredArticles, processedArticles[i])
+			}
+		} else {
+			fmt.Printf("   🔍 Excluded: %s (%.2f) - %s\n",
+				digestItems[i].Title, result.Score.Value, result.Reason)
+		}
+	}
+
+	if len(filteredItems) == 0 {
+		fmt.Printf("   ⚠️ All articles filtered out, keeping top 3 by relevance score\n")
+		// Keep top 3 articles if everything gets filtered out
+		topCount := 3
+		if len(filterResults) < topCount {
+			topCount = len(filterResults)
+		}
+
+		for i := 0; i < topCount; i++ {
+			if i < len(digestItems) {
+				filteredItems = append(filteredItems, digestItems[i])
+			}
+			if i < len(processedArticles) {
+				processedArticles[i].RelevanceScore = filterResults[i].Score.Value
+				filteredArticles = append(filteredArticles, processedArticles[i])
+			}
+		}
+	}
+
+	fmt.Printf("   ✅ Filtering complete: %d articles included\n", len(filteredItems))
+	return filteredItems, filteredArticles, nil
 }
 
 func performClustering(digestItems []render.DigestData, processedArticles []core.Article, llmClient *llm.Client, cacheStore *store.Store) error {
@@ -865,9 +1044,37 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 		combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
 	}
 
-	// Include style guide in LLM prompt if provided
+	// Use new structured generation approach for newsletter format (or all formats if working well)
 	var finalDigest string
-	if styleGuide != "" {
+	var useStructuredGeneration = (format == "newsletter" || format == "standard") // Test with these formats first
+
+	if useStructuredGeneration {
+		// New cohesive generation approach
+		fmt.Printf("🧠 Using new structured generation approach...\n")
+
+		// Prepare context from insights
+		var alertsContext, sentimentContext string
+		var researchQueries []string
+
+		if insightsData != nil {
+			sentimentContext = fmt.Sprintf("Overall: %s (%.2f)",
+				insightsData.OverallSentiment.OverallEmoji, insightsData.OverallSentiment.OverallScore.Overall)
+
+			if len(insightsData.TriggeredAlerts) > 0 {
+				alertManager := alerts.NewAlertManager()
+				alertsContext = alertManager.FormatAlertsSection(insightsData.TriggeredAlerts)
+			}
+
+			researchQueries = insightsData.ResearchSuggestions
+		}
+
+		finalDigest, err = llmClient.GenerateStructuredDigest(
+			combinedSummaries.String(),
+			format,
+			alertsContext,
+			sentimentContext,
+			researchQueries)
+	} else if styleGuide != "" {
 		// Enhanced prompt with style guide
 		finalDigest, err = generateDigestWithStyleGuide(llmClient, combinedSummaries.String(), format, *template, styleGuide)
 	} else {
@@ -929,6 +1136,9 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 
 	if format == "email" {
 		renderedContent, digestPath, renderErr = templates.RenderHTMLEmailWithBanner(digestItems, outputDir, finalDigest, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, "default", banner)
+	} else if useStructuredGeneration {
+		// Use new structured rendering approach
+		renderedContent, digestPath, renderErr = templates.RenderWithStructuredContent(digestItems, outputDir, finalDigest, template, generatedTitle, banner)
 	} else {
 		renderedContent, digestPath, renderErr = templates.RenderWithBannerAndInsights(digestItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, banner)
 	}

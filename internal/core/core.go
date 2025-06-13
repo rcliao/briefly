@@ -45,6 +45,8 @@ type Article struct {
 	AlertTriggered  bool     `json:"alert_triggered"`  // Whether this article triggered any alerts
 	AlertConditions []string `json:"alert_conditions"` // List of alert conditions that matched
 	ResearchQueries []string `json:"research_queries"` // Generated research queries for this article
+	// v2.0 Relevance scoring
+	RelevanceScore float64 `json:"relevance_score"` // Relevance score (0.0 to 1.0) for content filtering
 }
 
 // Summary represents a summarized version of one or more articles.
