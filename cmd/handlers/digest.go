@@ -469,7 +469,7 @@ func applyRelevanceFiltering(cmd *cobra.Command, digestItems []render.DigestData
 
 	// Get template-specific filtering settings
 	templateFilter := config.GetTemplateFilter(format)
-	
+
 	// Use template-specific min-relevance if not overridden by command flag
 	if !cmd.Flags().Changed("min-relevance") && templateFilter.MinRelevance > 0 {
 		minRelevance = templateFilter.MinRelevance

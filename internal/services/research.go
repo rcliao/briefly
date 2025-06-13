@@ -26,7 +26,7 @@ func NewResearchService(llmClient *llm.Client, searchProvider search.Provider) *
 	}
 }
 
-// PerformResearch conducts comprehensive research on a given topic
+// PerformResearch conducts comprehensive research on a given topic with enhanced v2 features
 func (r *ResearchServiceImpl) PerformResearch(ctx context.Context, query string, depth int) (*core.ResearchReport, error) {
 	var allQueries []string
 	var allResults []core.ResearchResult
@@ -48,7 +48,7 @@ func (r *ResearchServiceImpl) PerformResearch(ctx context.Context, query string,
 		allResults = append(allResults, results...)
 	}
 
-	// Score and rank initial results
+	// Score and rank initial results using research v2 scoring
 	rankedResults := r.rankResults(allResults, query)
 
 	// Phase 2: Iterative refinement (for depth 3+)
@@ -74,13 +74,35 @@ func (r *ResearchServiceImpl) PerformResearch(ctx context.Context, query string,
 		}
 	}
 
-	// Generate summary using LLM
-	summary, err := r.generateSummary(ctx, query, rankedResults)
+	// Phase 3: Research V2 enhancements - Clustering and Insights
+	var clusteringResult *ClusteringResult
+	var insights *ActionableInsights
+
+	if depth >= 2 && len(rankedResults) > 0 {
+		// Cluster results into meaningful categories
+		clusterer := NewResultClusterer(r.llmClient)
+		clusteringResult, err = clusterer.ClusterResults(ctx, query, rankedResults)
+		if err != nil {
+			fmt.Printf("Warning: failed to cluster results: %v\n", err)
+		}
+
+		// Generate actionable insights (for depth 3+)
+		if depth >= 3 && clusteringResult != nil {
+			insightsSynthesizer := NewInsightsSynthesizer(r.llmClient)
+			insights, err = insightsSynthesizer.SynthesizeInsights(ctx, query, clusteringResult)
+			if err != nil {
+				fmt.Printf("Warning: failed to generate insights: %v\n", err)
+			}
+		}
+	}
+
+	// Generate enhanced summary using clustering information
+	summary, err := r.generateEnhancedSummary(ctx, query, rankedResults, clusteringResult, insights)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate research summary: %w", err)
 	}
 
-	// Create research report
+	// Create enhanced research report
 	report := &core.ResearchReport{
 		ID:               uuid.New().String(),
 		Query:            query,
@@ -261,13 +283,16 @@ Create targeted search queries covering:
 4. Recent developments and news
 5. Best practices and guidelines
 
-Examples of effective queries:
-- "%s overview 2024"
-- "%s current trends"
-- "%s use cases examples"
-- "%s best practices"
+Examples of effective queries (use individual keywords, not exact phrases):
+- %s overview 2024
+- %s current trends
+- %s use cases examples
+- %s best practices
+- %s tutorial guide
+- %s features benefits
 
-Format: Return only the search queries, one per line.`, baseQueries, topic, topic, topic, topic, topic)
+Focus on using individual keywords and avoid wrapping queries in quotes.
+Format: Return only the search queries, one per line.`, baseQueries, topic, topic, topic, topic, topic, topic, topic)
 }
 
 // buildCompetitiveAnalysisPrompt creates prompts for competitive analysis
@@ -277,23 +302,31 @@ func (r *ResearchServiceImpl) buildCompetitiveAnalysisPrompt(topic string, depth
 		queryCount = 4
 	}
 
-	return fmt.Sprintf(`Generate %d search queries for competitive analysis of: %s
+	return fmt.Sprintf(`Generate %d targeted search queries for competitive analysis of: %s
 
 Create comparison-focused queries covering:
-1. Market positioning and competitors
-2. Feature comparisons and gaps
-3. Pricing and value proposition
-4. User sentiment and feedback
+1. Direct competitor comparisons and market positioning
+2. Feature gap analysis and capability comparisons  
+3. Pricing strategies and value proposition analysis
+4. User sentiment, adoption patterns, and community feedback
 
-Query patterns to use:
-- "%s vs [competitor]"
-- "%s alternatives comparison"
-- "%s market share analysis"
-- "%s user reviews complaints"
-- "%s pricing comparison"
-- "%s limitations disadvantages"
+Enhanced query patterns for competitive intelligence (use keywords, not exact phrases):
+- %s vs competitors performance benchmarks
+- %s alternatives comparison 2024
+- %s market share analysis
+- %s user complaints limitations
+- %s pricing strategy comparison
+- %s competitive advantages disadvantages
+- %s adoption rates enterprise
+- %s feature matrix comparison
+- %s reviews reddit
+- %s vs GitHub Copilot
 
-Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic)
+Focus on finding quantitative comparisons, user testimonials, and market analysis reports.
+Prioritize recent content (2023-2024) for current competitive landscape.
+Use individual keywords and avoid wrapping queries in quotes.
+
+Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic)
 }
 
 // buildTechnicalDeepDivePrompt creates prompts for technical deep-dive research
@@ -306,25 +339,33 @@ func (r *ResearchServiceImpl) buildTechnicalDeepDivePrompt(topic string, depth i
 		queryCount = 5
 	}
 
-	return fmt.Sprintf(`Generate %d search queries for technical analysis of: %s
+	return fmt.Sprintf(`Generate %d search queries for technical deep-dive analysis of: %s
 
 Create technical-focused queries covering:
-1. Architecture and implementation details
-2. Performance benchmarks and scalability
-3. Integration examples and API documentation
-4. Security considerations and vulnerabilities
-5. Technical limitations and challenges
+1. Architecture design patterns and implementation details
+2. Performance benchmarks, scalability analysis, and optimization
+3. API documentation, integration patterns, and developer experience
+4. Security architecture, vulnerabilities, and compliance considerations
+5. Technical limitations, challenges, and known issues
 
-Query patterns to use:
-- "%s architecture design"
-- "%s performance benchmarks"
-- "%s API documentation"
-- "%s security vulnerabilities"
-- "%s technical implementation"
-- "%s scalability limits"
-- "%s integration examples"
+Advanced technical query patterns (use keywords, not exact phrases):
+- %s architecture design patterns
+- %s performance benchmarks scalability  
+- %s API documentation examples
+- %s security vulnerabilities CVE
+- %s technical implementation details
+- %s scalability limits bottlenecks
+- %s integration patterns SDK
+- %s code examples github
+- %s technical specifications
+- %s source code repository
+- %s installation setup guide
 
-Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic, topic)
+Focus on finding official documentation, technical papers, code repositories, and detailed implementation guides.
+Prioritize authoritative sources: official docs, academic papers, GitHub repos, technical blogs.
+Use individual keywords and avoid wrapping queries in quotes.
+
+Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic)
 }
 
 // parseQueryResponse parses the LLM response and extracts clean queries
@@ -338,11 +379,124 @@ func (r *ResearchServiceImpl) parseQueryResponse(response string) []string {
 		query = strings.TrimLeft(query, "0123456789.- ")
 
 		if query != "" && !strings.HasPrefix(query, "#") && len(query) > 5 {
-			cleanQueries = append(cleanQueries, query)
+			// Remove any remaining quotes that might have been added
+			query = strings.Trim(query, "\"'")
+
+			// Break complex queries into keyword-based variants
+			expandedQueries := r.expandQueryToKeywords(query)
+			cleanQueries = append(cleanQueries, expandedQueries...)
 		}
 	}
 
 	return cleanQueries
+}
+
+// expandQueryToKeywords breaks complex queries into individual keyword combinations for better search results
+func (r *ResearchServiceImpl) expandQueryToKeywords(query string) []string {
+	// If query is already short and simple, return as-is
+	if len(strings.Fields(query)) <= 3 {
+		return []string{query}
+	}
+
+	// For complex queries, create multiple keyword-based variants
+	words := strings.Fields(query)
+	var expanded []string
+
+	// Add original query (cleaned)
+	expanded = append(expanded, query)
+
+	// Create keyword combinations
+	if len(words) >= 4 {
+		// Take first 3 words
+		if len(words) >= 3 {
+			expanded = append(expanded, strings.Join(words[:3], " "))
+		}
+
+		// Take key terms (skip common words)
+		keyWords := r.extractKeyTerms(words)
+		if len(keyWords) >= 2 && len(keyWords) != len(words) {
+			expanded = append(expanded, strings.Join(keyWords, " "))
+		}
+
+		// For very long queries, create a simplified version
+		if len(words) >= 6 {
+			// Take every other significant word
+			var simplified []string
+			for i, word := range words {
+				if i == 0 || i%2 == 0 || r.isSignificantTerm(word) {
+					simplified = append(simplified, word)
+				}
+			}
+			if len(simplified) >= 2 && len(simplified) < len(words) {
+				expanded = append(expanded, strings.Join(simplified, " "))
+			}
+		}
+	}
+
+	// Remove duplicates and return
+	return r.removeDuplicateQueries(expanded)
+}
+
+// extractKeyTerms filters out common words and keeps significant terms
+func (r *ResearchServiceImpl) extractKeyTerms(words []string) []string {
+	commonWords := map[string]bool{
+		"and": true, "or": true, "the": true, "a": true, "an": true, "in": true, "on": true, "at": true,
+		"to": true, "for": true, "of": true, "with": true, "by": true, "from": true, "as": true, "is": true,
+		"are": true, "was": true, "were": true, "be": true, "been": true, "have": true, "has": true, "had": true,
+		"do": true, "does": true, "did": true, "will": true, "would": true, "could": true, "should": true,
+		"that": true, "this": true, "these": true, "those": true, "vs": true, "comparison": true,
+	}
+
+	var keyTerms []string
+	for _, word := range words {
+		word = strings.ToLower(strings.Trim(word, ".,!?;:"))
+		if len(word) > 2 && !commonWords[word] {
+			keyTerms = append(keyTerms, word)
+		}
+	}
+
+	return keyTerms
+}
+
+// isSignificantTerm determines if a word is likely to be important for search
+func (r *ResearchServiceImpl) isSignificantTerm(word string) bool {
+	word = strings.ToLower(word)
+
+	// Technical terms and important keywords
+	significantTerms := []string{
+		"ai", "api", "cli", "code", "tool", "framework", "library", "sdk", "github", "performance",
+		"benchmark", "security", "architecture", "documentation", "integration", "features", "pricing",
+		"alternative", "comparison", "review", "tutorial", "guide", "2024", "2023", "trends",
+	}
+
+	for _, term := range significantTerms {
+		if strings.Contains(word, term) {
+			return true
+		}
+	}
+
+	// Words with numbers or technical patterns
+	if len(word) > 3 && (strings.ContainsAny(word, "0123456789") || strings.Contains(word, "-")) {
+		return true
+	}
+
+	return false
+}
+
+// removeDuplicateQueries removes duplicate queries from the list
+func (r *ResearchServiceImpl) removeDuplicateQueries(queries []string) []string {
+	seen := make(map[string]bool)
+	var unique []string
+
+	for _, query := range queries {
+		normalized := strings.ToLower(strings.TrimSpace(query))
+		if !seen[normalized] && len(normalized) > 0 {
+			seen[normalized] = true
+			unique = append(unique, query)
+		}
+	}
+
+	return unique
 }
 
 // generateRefinedQueries creates refined queries based on initial results
@@ -386,7 +540,7 @@ func (r *ResearchServiceImpl) generateRefinedQueries(ctx context.Context, origin
 		queryCount = 4
 	}
 
-	prompt := fmt.Sprintf(`Based on the initial research results for "%s", generate %d refined search queries to fill information gaps and explore deeper insights.
+	prompt := fmt.Sprintf(`Based on the initial research results for %s, generate %d refined search queries to fill information gaps and explore deeper insights.
 
 %s
 
@@ -415,7 +569,6 @@ Format: Return only the refined search queries, one per line.`, originalQuery, q
 
 	return r.parseQueryResponse(response), nil
 }
-
 
 // executeSearch performs a search using the configured search provider
 func (r *ResearchServiceImpl) executeSearch(ctx context.Context, query string) ([]core.ResearchResult, error) {
@@ -468,29 +621,243 @@ func (r *ResearchServiceImpl) rankResults(results []core.ResearchResult, origina
 	return results
 }
 
-// calculateRelevanceScore calculates a relevance score for a research result
+// calculateRelevanceScore calculates a relevance score for a research result using research v2 scoring
 func (r *ResearchServiceImpl) calculateRelevanceScore(result core.ResearchResult, queryWords []string) float64 {
+	// Use research v2 scoring weights
+	weights := r.getResearchV2Weights()
+
 	var score float64
 	titleLower := strings.ToLower(result.Title)
 	snippetLower := strings.ToLower(result.Snippet)
 
-	// Score based on title matches (weighted higher)
+	// Content relevance (30%)
+	contentScore := r.calculateContentRelevance(titleLower, snippetLower, queryWords)
+	score += contentScore * weights.ContentRelevance
+
+	// Title relevance (15%)
+	titleScore := r.calculateTitleRelevance(titleLower, queryWords)
+	score += titleScore * weights.TitleRelevance
+
+	// Authority score (20%)
+	authorityScore := r.calculateAuthorityScore(result.URL)
+	score += authorityScore * weights.Authority
+
+	// Recency score (15%) - boost recent content
+	recencyScore := r.calculateRecencyScore(result.DateFound)
+	score += recencyScore * weights.Recency
+
+	// Quality score (20%) - technical depth + competitive value
+	qualityScore := r.calculateQualityScore(titleLower, snippetLower)
+	score += qualityScore * weights.Quality
+
+	// Normalize to 0-1 range
+	if score > 1.0 {
+		score = 1.0
+	}
+
+	return score
+}
+
+// getResearchV2Weights returns research v2 scoring weights
+func (r *ResearchServiceImpl) getResearchV2Weights() struct {
+	ContentRelevance float64
+	TitleRelevance   float64
+	Authority        float64
+	Recency          float64
+	Quality          float64
+} {
+	return struct {
+		ContentRelevance float64
+		TitleRelevance   float64
+		Authority        float64
+		Recency          float64
+		Quality          float64
+	}{
+		ContentRelevance: 0.30,
+		TitleRelevance:   0.15,
+		Authority:        0.20,
+		Recency:          0.15,
+		Quality:          0.20,
+	}
+}
+
+// calculateContentRelevance calculates content relevance score
+func (r *ResearchServiceImpl) calculateContentRelevance(title, snippet string, queryWords []string) float64 {
+	var matches int
+	totalWords := len(queryWords)
+
+	if totalWords == 0 {
+		return 0.0
+	}
+
 	for _, word := range queryWords {
-		if strings.Contains(titleLower, word) {
-			score += 0.3
+		if strings.Contains(title, word) || strings.Contains(snippet, word) {
+			matches++
 		}
 	}
 
-	// Score based on snippet matches
+	return float64(matches) / float64(totalWords)
+}
+
+// calculateTitleRelevance calculates title-specific relevance
+func (r *ResearchServiceImpl) calculateTitleRelevance(title string, queryWords []string) float64 {
+	var matches int
+	totalWords := len(queryWords)
+
+	if totalWords == 0 {
+		return 0.0
+	}
+
 	for _, word := range queryWords {
-		if strings.Contains(snippetLower, word) {
-			score += 0.1
+		if strings.Contains(title, word) {
+			matches++
 		}
 	}
 
-	// Bonus for quality domains
-	if r.isQualityDomain(result.URL) {
-		score += 0.2
+	// Bonus for exact phrase matches in title
+	titleWords := strings.Fields(title)
+	if len(titleWords) > 0 && len(queryWords) > 1 {
+		queryPhrase := strings.Join(queryWords, " ")
+		if strings.Contains(title, queryPhrase) {
+			matches += len(queryWords) // Bonus for phrase match
+		}
+	}
+
+	score := float64(matches) / float64(totalWords)
+	if score > 1.0 {
+		score = 1.0
+	}
+
+	return score
+}
+
+// calculateAuthorityScore calculates source authority score with tier-based weighting
+func (r *ResearchServiceImpl) calculateAuthorityScore(url string) float64 {
+	// Tier 1 (Weight: 1.0): Official documentation, academic papers, technical specifications
+	tier1Domains := []string{
+		"github.com", "docs.github.com", "arxiv.org", "doi.org", "pubmed.ncbi.nlm.nih.gov",
+		"ieee.org", "acm.org", "openai.com", "anthropic.com", "google.ai",
+		"microsoft.com", "azure.microsoft.com", "aws.amazon.com", "cloud.google.com",
+		"tensorflow.org", "pytorch.org", "huggingface.co", "papers.nips.cc",
+		"kubernetes.io", "docker.com", "golang.org", "python.org", "nodejs.org",
+	}
+
+	// Tier 2 (Weight: 0.8): Established tech publications, industry reports
+	tier2Domains := []string{
+		"stackoverflow.com", "medium.com", "dev.to", "hackernews.ycombinator.com",
+		"techcrunch.com", "wired.com", "arstechnica.com", "theverge.com",
+		"venturebeat.com", "zdnet.com", "infoworld.com", "computerworld.com",
+		"towardsdatascience.com", "kdnuggets.com", "machinelearningmastery.com",
+	}
+
+	// Tier 3 (Weight: 0.6): Developer blogs, conference presentations
+	tier3Domains := []string{
+		"blog.", "blogs.", ".blog", ".dev", "engineering.", "tech.",
+		"conference", "summit", "meetup", "presentation", "slides",
+	}
+
+	// Tier 4 (Weight: 0.4): Community forums, social media discussions
+	tier4Domains := []string{
+		"reddit.com", "discord.com", "slack.com", "twitter.com", "x.com",
+		"facebook.com", "linkedin.com", "youtube.com", "forum",
+	}
+
+	urlLower := strings.ToLower(url)
+
+	// Check tier 1 domains
+	for _, domain := range tier1Domains {
+		if strings.Contains(urlLower, domain) {
+			return 1.0
+		}
+	}
+
+	// Check tier 2 domains
+	for _, domain := range tier2Domains {
+		if strings.Contains(urlLower, domain) {
+			return 0.8
+		}
+	}
+
+	// Check tier 3 domains
+	for _, domain := range tier3Domains {
+		if strings.Contains(urlLower, domain) {
+			return 0.6
+		}
+	}
+
+	// Check tier 4 domains
+	for _, domain := range tier4Domains {
+		if strings.Contains(urlLower, domain) {
+			return 0.4
+		}
+	}
+
+	// Default score for unknown domains
+	return 0.5
+}
+
+// calculateRecencyScore calculates recency score with 6-month boost
+func (r *ResearchServiceImpl) calculateRecencyScore(dateFound time.Time) float64 {
+	now := time.Now()
+	daysSince := int(now.Sub(dateFound).Hours() / 24)
+
+	// Boost content from last 6 months (180 days)
+	if daysSince <= 180 {
+		return 1.0 - (float64(daysSince)/180.0)*0.5 // Score: 1.0 to 0.5
+	}
+
+	// Older content gets lower score
+	if daysSince <= 365 {
+		return 0.5 - (float64(daysSince-180)/185.0)*0.3 // Score: 0.5 to 0.2
+	}
+
+	// Very old content gets minimum score
+	return 0.2
+}
+
+// calculateQualityScore calculates quality score based on technical depth and competitive value
+func (r *ResearchServiceImpl) calculateQualityScore(title, snippet string) float64 {
+	score := 0.0
+	text := title + " " + snippet
+	textLower := strings.ToLower(text)
+
+	// Technical depth indicators
+	technicalTerms := []string{
+		"api", "architecture", "implementation", "performance", "benchmark",
+		"scalability", "algorithm", "framework", "library", "sdk", "code",
+		"technical", "engineering", "development", "deployment", "infrastructure",
+		"security", "optimization", "integration", "documentation", "specification",
+	}
+
+	// Competitive value indicators
+	competitiveTerms := []string{
+		"vs", "versus", "comparison", "compare", "alternative", "competitor",
+		"market", "analysis", "review", "evaluation", "benchmark", "pros", "cons",
+		"advantages", "disadvantages", "features", "pricing", "cost", "adoption",
+	}
+
+	// Score technical depth
+	technicalMatches := 0
+	for _, term := range technicalTerms {
+		if strings.Contains(textLower, term) {
+			technicalMatches++
+		}
+	}
+	score += float64(technicalMatches) / float64(len(technicalTerms)) * 0.6
+
+	// Score competitive value
+	competitiveMatches := 0
+	for _, term := range competitiveTerms {
+		if strings.Contains(textLower, term) {
+			competitiveMatches++
+		}
+	}
+	score += float64(competitiveMatches) / float64(len(competitiveTerms)) * 0.4
+
+	// Bonus for code examples or detailed technical content
+	if strings.Contains(textLower, "github") || strings.Contains(textLower, "example") ||
+		strings.Contains(textLower, "tutorial") || strings.Contains(textLower, "guide") {
+		score += 0.1
 	}
 
 	// Normalize to 0-1 range
@@ -501,63 +868,95 @@ func (r *ResearchServiceImpl) calculateRelevanceScore(result core.ResearchResult
 	return score
 }
 
-// isQualityDomain checks if a URL is from a quality domain
-func (r *ResearchServiceImpl) isQualityDomain(url string) bool {
-	qualityDomains := []string{
-		"github.com", "arxiv.org", "doi.org", "pubmed.ncbi.nlm.nih.gov",
-		"stackoverflow.com", "medium.com", "nature.com", "ieee.org",
-		"acm.org", "nytimes.com", "bbc.com", "reuters.com",
-	}
-
-	urlLower := strings.ToLower(url)
-	for _, domain := range qualityDomains {
-		if strings.Contains(urlLower, domain) {
-			return true
-		}
-	}
-	return false
-}
-
-// generateSummary creates a comprehensive summary of research results
-func (r *ResearchServiceImpl) generateSummary(ctx context.Context, originalQuery string, results []core.ResearchResult) (string, error) {
+// generateEnhancedSummary creates a comprehensive summary with clustering and insights
+func (r *ResearchServiceImpl) generateEnhancedSummary(ctx context.Context, originalQuery string, results []core.ResearchResult, clusteringResult *ClusteringResult, insights *ActionableInsights) (string, error) {
 	if len(results) == 0 {
 		return "No research results found for the given query.", nil
 	}
 
 	var content strings.Builder
-	content.WriteString("Research Results:\n\n")
+	content.WriteString(fmt.Sprintf("Research Query: %s\n", originalQuery))
+	content.WriteString(fmt.Sprintf("Total Results: %d\n", len(results)))
 
-	// Include top 10 results in summary generation
-	maxResults := 10
-	if len(results) < maxResults {
-		maxResults = len(results)
+	if clusteringResult != nil {
+		content.WriteString(fmt.Sprintf("Results Organized into %d Categories\n", len(clusteringResult.Categories)))
+		content.WriteString(fmt.Sprintf("Overall Quality Score: %.2f\n", clusteringResult.OverallQuality))
+
+		content.WriteString("\nCategorized Research Findings:\n")
+		for _, category := range clusteringResult.Categories {
+			if len(category.Results) > 0 {
+				content.WriteString(fmt.Sprintf("\n%s (%d results, quality: %.2f):\n",
+					category.Name, len(category.Results), category.Quality))
+
+				// Include top 2 results from each category
+				maxPerCategory := 2
+				if len(category.Results) < maxPerCategory {
+					maxPerCategory = len(category.Results)
+				}
+
+				for i := 0; i < maxPerCategory; i++ {
+					result := category.Results[i]
+					content.WriteString(fmt.Sprintf("- %s\n", result.Title))
+				}
+			}
+		}
+
+		if len(clusteringResult.CoverageGaps) > 0 {
+			content.WriteString(fmt.Sprintf("\nCoverage Gaps: %s\n", strings.Join(clusteringResult.CoverageGaps, ", ")))
+		}
+	} else {
+		// Fallback to top results if no clustering
+		content.WriteString("\nTop Research Results:\n")
+		maxResults := 8
+		if len(results) < maxResults {
+			maxResults = len(results)
+		}
+
+		for i := 0; i < maxResults; i++ {
+			result := results[i]
+			content.WriteString(fmt.Sprintf("%d. %s\n   %s\n", i+1, result.Title, result.Snippet))
+		}
 	}
 
-	for i := 0; i < maxResults; i++ {
-		result := results[i]
-		content.WriteString(fmt.Sprintf("%d. %s\n   %s\n   URL: %s\n\n",
-			i+1, result.Title, result.Snippet, result.URL))
-	}
-
-	prompt := fmt.Sprintf(`Based on the research results below about "%s", create a comprehensive research summary:
+	var promptBuilder strings.Builder
+	promptBuilder.WriteString(fmt.Sprintf(`Based on the comprehensive research about %s with the following findings:
 
 %s
 
-Create a summary that includes:
-1. Overview of the topic based on findings
-2. Key insights and trends identified
-3. Notable resources or sources found
-4. Recommended follow-up actions or areas for deeper research
+Create an enhanced research summary that includes:
 
-Format as a well-structured markdown summary (400-600 words).`, originalQuery, content.String())
+1. **Executive Overview**: High-level summary of what this technology/topic is and why it matters
 
-	response, err := r.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
-		MaxTokens:   800,
+2. **Key Findings**: Most important insights discovered across all research categories
+
+3. **Research Highlights**: Notable patterns, trends, or standout information found
+
+4. **Information Quality Assessment**: Confidence level in findings and data gaps identified
+
+`, originalQuery, content.String()))
+
+	if insights != nil {
+		promptBuilder.WriteString(fmt.Sprintf(`
+5. **Strategic Insights**: Based on actionable insights analysis:
+   - Competitive positioning and market context
+   - Technical feasibility and implementation considerations  
+   - Strategic recommendations for decision-making
+
+Confidence Level: %.2f
+`, insights.ConfidenceLevel))
+	} else {
+		promptBuilder.WriteString("5. **Next Steps**: Recommended areas for follow-up research or evaluation\n")
+	}
+
+	promptBuilder.WriteString("\nFormat as a well-structured markdown summary (500-800 words) suitable for both technical and business stakeholders.")
+
+	response, err := r.llmClient.GenerateText(ctx, promptBuilder.String(), llm.TextGenerationOptions{
+		MaxTokens:   1200,
 		Temperature: 0.6,
 		Model:       "gemini-1.5-flash",
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to generate summary: %w", err)
+		return "", fmt.Errorf("failed to generate enhanced summary: %w", err)
 	}
 
 	return strings.TrimSpace(response), nil

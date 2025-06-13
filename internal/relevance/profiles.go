@@ -23,6 +23,36 @@ var (
 		Quality:          0.0, // Quality embedded in authority
 	}
 
+	// ResearchV2Weights optimized for enhanced research v2 requirements
+	// Multi-dimensional relevancy assessment with technical depth and competitive value
+	ResearchV2Weights = ScoringWeights{
+		ContentRelevance: 0.30, // Core topic match
+		TitleRelevance:   0.15, // Moderate title importance
+		Authority:        0.20, // Source credibility
+		Recency:          0.15, // Publication freshness
+		Quality:          0.20, // Technical depth + competitive value
+	}
+
+	// CompetitiveAnalysisWeights optimized for competitive intelligence
+	// High authority and quality focus with competitive value emphasis
+	CompetitiveAnalysisWeights = ScoringWeights{
+		ContentRelevance: 0.25, // Moderate content relevance
+		TitleRelevance:   0.15, // Lower title weight
+		Authority:        0.30, // Very high authority weight
+		Recency:          0.20, // Recent competitive intelligence
+		Quality:          0.10, // Competitive comparison richness
+	}
+
+	// TechnicalDeepDiveWeights optimized for technical assessment
+	// High content relevance with technical depth emphasis
+	TechnicalDeepDiveWeights = ScoringWeights{
+		ContentRelevance: 0.35, // High technical content match
+		TitleRelevance:   0.15, // Moderate title importance
+		Authority:        0.25, // Technical source credibility
+		Recency:          0.10, // Technical content less time-sensitive
+		Quality:          0.15, // Technical detail richness
+	}
+
 	// InteractiveWeights optimized for TUI/interactive browsing
 	// High title importance for quick scanning, balanced content relevance
 	InteractiveWeights = ScoringWeights{
@@ -61,6 +91,12 @@ func GetWeightsForContext(context string) ScoringWeights {
 		return DigestWeights
 	case "research", "deep_research":
 		return ResearchWeights
+	case "research_v2":
+		return ResearchV2Weights
+	case "competitive", "competitive_analysis":
+		return CompetitiveAnalysisWeights
+	case "technical", "technical_analysis":
+		return TechnicalDeepDiveWeights
 	case "tui", "interactive", "browse":
 		return InteractiveWeights
 	case "news", "feed":
