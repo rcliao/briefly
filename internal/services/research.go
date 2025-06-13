@@ -283,13 +283,16 @@ Create targeted search queries covering:
 4. Recent developments and news
 5. Best practices and guidelines
 
-Examples of effective queries:
-- "%s overview 2024"
-- "%s current trends"
-- "%s use cases examples"
-- "%s best practices"
+Examples of effective queries (use individual keywords, not exact phrases):
+- %s overview 2024
+- %s current trends
+- %s use cases examples
+- %s best practices
+- %s tutorial guide
+- %s features benefits
 
-Format: Return only the search queries, one per line.`, baseQueries, topic, topic, topic, topic, topic)
+Focus on using individual keywords and avoid wrapping queries in quotes.
+Format: Return only the search queries, one per line.`, baseQueries, topic, topic, topic, topic, topic, topic, topic)
 }
 
 // buildCompetitiveAnalysisPrompt creates prompts for competitive analysis
@@ -307,20 +310,23 @@ Create comparison-focused queries covering:
 3. Pricing strategies and value proposition analysis
 4. User sentiment, adoption patterns, and community feedback
 
-Enhanced query patterns for competitive intelligence:
-- "%s vs [competitor] performance benchmarks"
-- "%s alternatives comparison 2024"
-- "%s market share analysis"
-- "%s user complaints limitations"
-- "%s pricing strategy comparison"
-- "%s competitive advantages disadvantages"
-- "%s adoption rates enterprise"
-- "%s feature matrix comparison"
+Enhanced query patterns for competitive intelligence (use keywords, not exact phrases):
+- %s vs competitors performance benchmarks
+- %s alternatives comparison 2024
+- %s market share analysis
+- %s user complaints limitations
+- %s pricing strategy comparison
+- %s competitive advantages disadvantages
+- %s adoption rates enterprise
+- %s feature matrix comparison
+- %s reviews reddit
+- %s vs GitHub Copilot
 
 Focus on finding quantitative comparisons, user testimonials, and market analysis reports.
 Prioritize recent content (2023-2024) for current competitive landscape.
+Use individual keywords and avoid wrapping queries in quotes.
 
-Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic, topic, topic)
+Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic)
 }
 
 // buildTechnicalDeepDivePrompt creates prompts for technical deep-dive research
@@ -342,21 +348,24 @@ Create technical-focused queries covering:
 4. Security architecture, vulnerabilities, and compliance considerations
 5. Technical limitations, challenges, and known issues
 
-Advanced technical query patterns:
-- "%s architecture design patterns"
-- "%s performance benchmarks scalability"  
-- "%s API documentation examples"
-- "%s security vulnerabilities CVE"
-- "%s technical implementation details"
-- "%s scalability limits bottlenecks"
-- "%s integration patterns SDK"
-- "%s code examples github"
-- "%s technical specifications"
+Advanced technical query patterns (use keywords, not exact phrases):
+- %s architecture design patterns
+- %s performance benchmarks scalability  
+- %s API documentation examples
+- %s security vulnerabilities CVE
+- %s technical implementation details
+- %s scalability limits bottlenecks
+- %s integration patterns SDK
+- %s code examples github
+- %s technical specifications
+- %s source code repository
+- %s installation setup guide
 
 Focus on finding official documentation, technical papers, code repositories, and detailed implementation guides.
 Prioritize authoritative sources: official docs, academic papers, GitHub repos, technical blogs.
+Use individual keywords and avoid wrapping queries in quotes.
 
-Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic)
+Format: Return only the search queries, one per line.`, queryCount, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic, topic)
 }
 
 // parseQueryResponse parses the LLM response and extracts clean queries
@@ -370,11 +379,124 @@ func (r *ResearchServiceImpl) parseQueryResponse(response string) []string {
 		query = strings.TrimLeft(query, "0123456789.- ")
 
 		if query != "" && !strings.HasPrefix(query, "#") && len(query) > 5 {
-			cleanQueries = append(cleanQueries, query)
+			// Remove any remaining quotes that might have been added
+			query = strings.Trim(query, "\"'")
+
+			// Break complex queries into keyword-based variants
+			expandedQueries := r.expandQueryToKeywords(query)
+			cleanQueries = append(cleanQueries, expandedQueries...)
 		}
 	}
 
 	return cleanQueries
+}
+
+// expandQueryToKeywords breaks complex queries into individual keyword combinations for better search results
+func (r *ResearchServiceImpl) expandQueryToKeywords(query string) []string {
+	// If query is already short and simple, return as-is
+	if len(strings.Fields(query)) <= 3 {
+		return []string{query}
+	}
+
+	// For complex queries, create multiple keyword-based variants
+	words := strings.Fields(query)
+	var expanded []string
+
+	// Add original query (cleaned)
+	expanded = append(expanded, query)
+
+	// Create keyword combinations
+	if len(words) >= 4 {
+		// Take first 3 words
+		if len(words) >= 3 {
+			expanded = append(expanded, strings.Join(words[:3], " "))
+		}
+
+		// Take key terms (skip common words)
+		keyWords := r.extractKeyTerms(words)
+		if len(keyWords) >= 2 && len(keyWords) != len(words) {
+			expanded = append(expanded, strings.Join(keyWords, " "))
+		}
+
+		// For very long queries, create a simplified version
+		if len(words) >= 6 {
+			// Take every other significant word
+			var simplified []string
+			for i, word := range words {
+				if i == 0 || i%2 == 0 || r.isSignificantTerm(word) {
+					simplified = append(simplified, word)
+				}
+			}
+			if len(simplified) >= 2 && len(simplified) < len(words) {
+				expanded = append(expanded, strings.Join(simplified, " "))
+			}
+		}
+	}
+
+	// Remove duplicates and return
+	return r.removeDuplicateQueries(expanded)
+}
+
+// extractKeyTerms filters out common words and keeps significant terms
+func (r *ResearchServiceImpl) extractKeyTerms(words []string) []string {
+	commonWords := map[string]bool{
+		"and": true, "or": true, "the": true, "a": true, "an": true, "in": true, "on": true, "at": true,
+		"to": true, "for": true, "of": true, "with": true, "by": true, "from": true, "as": true, "is": true,
+		"are": true, "was": true, "were": true, "be": true, "been": true, "have": true, "has": true, "had": true,
+		"do": true, "does": true, "did": true, "will": true, "would": true, "could": true, "should": true,
+		"that": true, "this": true, "these": true, "those": true, "vs": true, "comparison": true,
+	}
+
+	var keyTerms []string
+	for _, word := range words {
+		word = strings.ToLower(strings.Trim(word, ".,!?;:"))
+		if len(word) > 2 && !commonWords[word] {
+			keyTerms = append(keyTerms, word)
+		}
+	}
+
+	return keyTerms
+}
+
+// isSignificantTerm determines if a word is likely to be important for search
+func (r *ResearchServiceImpl) isSignificantTerm(word string) bool {
+	word = strings.ToLower(word)
+
+	// Technical terms and important keywords
+	significantTerms := []string{
+		"ai", "api", "cli", "code", "tool", "framework", "library", "sdk", "github", "performance",
+		"benchmark", "security", "architecture", "documentation", "integration", "features", "pricing",
+		"alternative", "comparison", "review", "tutorial", "guide", "2024", "2023", "trends",
+	}
+
+	for _, term := range significantTerms {
+		if strings.Contains(word, term) {
+			return true
+		}
+	}
+
+	// Words with numbers or technical patterns
+	if len(word) > 3 && (strings.ContainsAny(word, "0123456789") || strings.Contains(word, "-")) {
+		return true
+	}
+
+	return false
+}
+
+// removeDuplicateQueries removes duplicate queries from the list
+func (r *ResearchServiceImpl) removeDuplicateQueries(queries []string) []string {
+	seen := make(map[string]bool)
+	var unique []string
+
+	for _, query := range queries {
+		normalized := strings.ToLower(strings.TrimSpace(query))
+		if !seen[normalized] && len(normalized) > 0 {
+			seen[normalized] = true
+			unique = append(unique, query)
+		}
+	}
+
+	return unique
 }
 
 // generateRefinedQueries creates refined queries based on initial results
@@ -418,7 +540,7 @@ func (r *ResearchServiceImpl) generateRefinedQueries(ctx context.Context, origin
 		queryCount = 4
 	}
 
-	prompt := fmt.Sprintf(`Based on the initial research results for "%s", generate %d refined search queries to fill information gaps and explore deeper insights.
+	prompt := fmt.Sprintf(`Based on the initial research results for %s, generate %d refined search queries to fill information gaps and explore deeper insights.
 
 %s
 
@@ -797,7 +919,7 @@ func (r *ResearchServiceImpl) generateEnhancedSummary(ctx context.Context, origi
 	}
 
 	var promptBuilder strings.Builder
-	promptBuilder.WriteString(fmt.Sprintf(`Based on the comprehensive research about "%s" with the following findings:
+	promptBuilder.WriteString(fmt.Sprintf(`Based on the comprehensive research about %s with the following findings:
 
 %s
 
@@ -838,12 +960,6 @@ Confidence Level: %.2f
 	}
 
 	return strings.TrimSpace(response), nil
-}
-
-// generateSummary creates a comprehensive summary of research results (legacy method - kept for backward compatibility)
-// Deprecated: Use generateEnhancedSummary instead
-func (r *ResearchServiceImpl) generateSummary(ctx context.Context, originalQuery string, results []core.ResearchResult) (string, error) {
-	return r.generateEnhancedSummary(ctx, originalQuery, results, nil, nil)
 }
 
 // calculateOverallRelevance calculates the overall relevance score for a set of results
