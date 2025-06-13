@@ -416,48 +416,6 @@ Format: Return only the refined search queries, one per line.`, originalQuery, q
 	return r.parseQueryResponse(response), nil
 }
 
-// QueryContext holds context information for query generation
-type QueryContext struct {
-	OriginalQuery     string
-	PreviousQueries   []string
-	HighScoreKeywords []string
-	IdentifiedGaps    []string
-	RelevanceThemes   map[string]float64
-}
-
-// buildQueryContext analyzes results to build context for future queries
-func (r *ResearchServiceImpl) buildQueryContext(originalQuery string, queries []string, results []core.ResearchResult) *QueryContext {
-	context := &QueryContext{
-		OriginalQuery:     originalQuery,
-		PreviousQueries:   queries,
-		HighScoreKeywords: make([]string, 0),
-		IdentifiedGaps:    make([]string, 0),
-		RelevanceThemes:   make(map[string]float64),
-	}
-
-	// Extract keywords from high-relevance results
-	keywordFreq := make(map[string]int)
-	relevanceSum := make(map[string]float64)
-
-	for _, result := range results {
-		if result.Relevance > 0.7 { // High relevance threshold
-			for _, keyword := range result.Keywords {
-				keywordFreq[keyword]++
-				relevanceSum[keyword] += result.Relevance
-			}
-		}
-	}
-
-	// Build high-score keywords list
-	for keyword, freq := range keywordFreq {
-		if freq >= 2 { // Appeared in at least 2 high-relevance results
-			context.HighScoreKeywords = append(context.HighScoreKeywords, keyword)
-			context.RelevanceThemes[keyword] = relevanceSum[keyword] / float64(freq)
-		}
-	}
-
-	return context
-}
 
 // executeSearch performs a search using the configured search provider
 func (r *ResearchServiceImpl) executeSearch(ctx context.Context, query string) ([]core.ResearchResult, error) {
