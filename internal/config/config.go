@@ -219,19 +219,65 @@ type Feeds struct {
 
 // Research holds research configuration
 type Research struct {
-	MaxDepth           int    `mapstructure:"max_depth"`
-	MaxQueries         int    `mapstructure:"max_queries"`
-	Timeout            string `mapstructure:"timeout"`
-	ConcurrentSearches int    `mapstructure:"concurrent_searches"`
+	MaxDepth           int        `mapstructure:"max_depth"`
+	MaxQueries         int        `mapstructure:"max_queries"`
+	Timeout            string     `mapstructure:"timeout"`
+	ConcurrentSearches int        `mapstructure:"concurrent_searches"`
+	V2                 ResearchV2 `mapstructure:"v2"`
+}
+
+// ResearchV2 holds research v2 enhanced features configuration
+type ResearchV2 struct {
+	Enabled         bool                  `mapstructure:"enabled"`
+	QueryGeneration QueryGenerationConfig `mapstructure:"query_generation"`
+	Scoring         ScoringConfig         `mapstructure:"scoring"`
+	Clustering      ClusteringConfig      `mapstructure:"clustering"`
+	Insights        InsightsConfig        `mapstructure:"insights"`
+	Sources         SourcesConfig         `mapstructure:"sources"`
+}
+
+// QueryGenerationConfig holds query generation settings
+type QueryGenerationConfig struct {
+	CompetitiveAnalysis bool `mapstructure:"competitive_analysis"`
+	TechnicalDepth      bool `mapstructure:"technical_depth"`
+	MaxIterations       int  `mapstructure:"max_iterations"`
+}
+
+// ScoringConfig holds scoring configuration
+type ScoringConfig struct {
+	Profile           string  `mapstructure:"profile"` // research, competitive, technical
+	SemanticThreshold float64 `mapstructure:"semantic_threshold"`
+	AuthorityWeight   float64 `mapstructure:"authority_weight"`
+}
+
+// ClusteringConfig holds clustering settings
+type ClusteringConfig struct {
+	AutoCategorize   bool    `mapstructure:"auto_categorize"`
+	MinClusterSize   int     `mapstructure:"min_cluster_size"`
+	BalanceThreshold float64 `mapstructure:"balance_threshold"`
+}
+
+// InsightsConfig holds insights generation settings
+type InsightsConfig struct {
+	CompetitiveIntelligence  bool `mapstructure:"competitive_intelligence"`
+	TechnicalAssessment      bool `mapstructure:"technical_assessment"`
+	StrategicRecommendations bool `mapstructure:"strategic_recommendations"`
+}
+
+// SourcesConfig holds source management settings
+type SourcesConfig struct {
+	AuthorityWeighting   bool    `mapstructure:"authority_weighting"`
+	DiversityRequirement int     `mapstructure:"diversity_requirement"`
+	QualityThreshold     float64 `mapstructure:"quality_threshold"`
 }
 
 // Filtering holds relevance filtering configuration
 type Filtering struct {
-	Enabled       bool              `mapstructure:"enabled"`        // Enable/disable relevance filtering
-	MinRelevance  float64           `mapstructure:"min_relevance"`  // Minimum relevance threshold (0.0-1.0)
-	Method        string            `mapstructure:"method"`         // Scoring method: keyword, embedding, hybrid
-	Weights       FilteringWeights  `mapstructure:"weights"`        // Scoring weights configuration
-	Templates     TemplateFiltering `mapstructure:"templates"`      // Per-template filtering settings
+	Enabled      bool              `mapstructure:"enabled"`       // Enable/disable relevance filtering
+	MinRelevance float64           `mapstructure:"min_relevance"` // Minimum relevance threshold (0.0-1.0)
+	Method       string            `mapstructure:"method"`        // Scoring method: keyword, embedding, hybrid
+	Weights      FilteringWeights  `mapstructure:"weights"`       // Scoring weights configuration
+	Templates    TemplateFiltering `mapstructure:"templates"`     // Per-template filtering settings
 }
 
 // FilteringWeights holds scoring weight configuration
@@ -428,11 +474,29 @@ func setDefaults() {
 	viper.SetDefault("research.timeout", "60s")
 	viper.SetDefault("research.concurrent_searches", 3)
 
+	// Research V2 defaults
+	viper.SetDefault("research.v2.enabled", true)
+	viper.SetDefault("research.v2.query_generation.competitive_analysis", true)
+	viper.SetDefault("research.v2.query_generation.technical_depth", true)
+	viper.SetDefault("research.v2.query_generation.max_iterations", 3)
+	viper.SetDefault("research.v2.scoring.profile", "research")
+	viper.SetDefault("research.v2.scoring.semantic_threshold", 0.7)
+	viper.SetDefault("research.v2.scoring.authority_weight", 0.2)
+	viper.SetDefault("research.v2.clustering.auto_categorize", true)
+	viper.SetDefault("research.v2.clustering.min_cluster_size", 3)
+	viper.SetDefault("research.v2.clustering.balance_threshold", 0.6)
+	viper.SetDefault("research.v2.insights.competitive_intelligence", true)
+	viper.SetDefault("research.v2.insights.technical_assessment", true)
+	viper.SetDefault("research.v2.insights.strategic_recommendations", true)
+	viper.SetDefault("research.v2.sources.authority_weighting", true)
+	viper.SetDefault("research.v2.sources.diversity_requirement", 4)
+	viper.SetDefault("research.v2.sources.quality_threshold", 0.5)
+
 	// Filtering defaults
 	viper.SetDefault("filtering.enabled", true)
 	viper.SetDefault("filtering.min_relevance", 0.4)
 	viper.SetDefault("filtering.method", "keyword")
-	
+
 	// Filtering weights defaults (digest profile)
 	viper.SetDefault("filtering.weights.content_relevance", 0.6)
 	viper.SetDefault("filtering.weights.title_relevance", 0.3)
@@ -441,23 +505,23 @@ func setDefaults() {
 	viper.SetDefault("filtering.weights.quality", 0.0)
 
 	// Template-specific filtering defaults
-	viper.SetDefault("filtering.templates.brief.min_relevance", 0.6)     // Stricter for brief
+	viper.SetDefault("filtering.templates.brief.min_relevance", 0.6) // Stricter for brief
 	viper.SetDefault("filtering.templates.brief.max_words", 200)
 	viper.SetDefault("filtering.templates.brief.max_articles", 3)
-	
-	viper.SetDefault("filtering.templates.standard.min_relevance", 0.4)   // Balanced
+
+	viper.SetDefault("filtering.templates.standard.min_relevance", 0.4) // Balanced
 	viper.SetDefault("filtering.templates.standard.max_words", 400)
 	viper.SetDefault("filtering.templates.standard.max_articles", 5)
-	
-	viper.SetDefault("filtering.templates.detailed.min_relevance", 0.2)   // Most inclusive
-	viper.SetDefault("filtering.templates.detailed.max_words", 0)         // No limit
-	viper.SetDefault("filtering.templates.detailed.max_articles", 0)      // No limit
-	
+
+	viper.SetDefault("filtering.templates.detailed.min_relevance", 0.2) // Most inclusive
+	viper.SetDefault("filtering.templates.detailed.max_words", 0)       // No limit
+	viper.SetDefault("filtering.templates.detailed.max_articles", 0)    // No limit
+
 	viper.SetDefault("filtering.templates.newsletter.min_relevance", 0.4) // Balanced
 	viper.SetDefault("filtering.templates.newsletter.max_words", 800)
 	viper.SetDefault("filtering.templates.newsletter.max_articles", 6)
-	
-	viper.SetDefault("filtering.templates.email.min_relevance", 0.4)      // Balanced
+
+	viper.SetDefault("filtering.templates.email.min_relevance", 0.4) // Balanced
 	viper.SetDefault("filtering.templates.email.max_words", 400)
 	viper.SetDefault("filtering.templates.email.max_articles", 5)
 
