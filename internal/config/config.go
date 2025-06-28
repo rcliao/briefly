@@ -25,6 +25,7 @@ type Config struct {
 	Feeds     Feeds     `mapstructure:"feeds"`
 	Research  Research  `mapstructure:"research"`
 	Filtering Filtering `mapstructure:"filtering"`
+	Team      Team      `mapstructure:"team"`
 	Logging   Logging   `mapstructure:"logging"`
 	CLI       CLI       `mapstructure:"cli"`
 }
@@ -321,6 +322,20 @@ type CLI struct {
 	StyleGuidePath string `mapstructure:"style_guide_path"`
 }
 
+// Team holds team context configuration for relevance and insights
+type Team struct {
+	TechStack         []string `mapstructure:"tech_stack"`          // Technologies your team uses
+	CurrentChallenges []string `mapstructure:"current_challenges"`  // Current problems/focuses
+	Interests         []string `mapstructure:"interests"`           // Areas of interest
+	ProductType       string   `mapstructure:"product_type"`        // Type of product being built
+	CompanySize       string   `mapstructure:"company_size"`        // startup, mid-size, enterprise
+	Industry          string   `mapstructure:"industry"`            // Industry vertical
+	ExpertiseLevel    string   `mapstructure:"expertise_level"`     // junior, mid, senior, principal
+	WorkingStyle      string   `mapstructure:"working_style"`       // agile, waterfall, lean, etc.
+	TeamSize          int      `mapstructure:"team_size"`           // Size of the engineering team
+	Priority          string   `mapstructure:"priority"`            // Current priority: performance, features, quality, etc.
+}
+
 var globalConfig *Config
 
 // Load loads the configuration from various sources
@@ -534,6 +549,18 @@ func setDefaults() {
 	viper.SetDefault("cli.editor", os.Getenv("EDITOR"))
 	viper.SetDefault("cli.interactive", false)
 	viper.SetDefault("cli.default_format", "standard")
+
+	// Team defaults - generic software engineering team
+	viper.SetDefault("team.tech_stack", []string{"JavaScript", "Python", "React"})
+	viper.SetDefault("team.current_challenges", []string{"Performance optimization", "Code quality", "Scalability"})
+	viper.SetDefault("team.interests", []string{"Best practices", "Developer experience", "System design"})
+	viper.SetDefault("team.product_type", "Web application")
+	viper.SetDefault("team.company_size", "startup")
+	viper.SetDefault("team.industry", "technology")
+	viper.SetDefault("team.expertise_level", "mid")
+	viper.SetDefault("team.working_style", "agile")
+	viper.SetDefault("team.team_size", 5)
+	viper.SetDefault("team.priority", "features")
 }
 
 // bindEnvironmentVariables sets up flexible environment variable binding
@@ -755,6 +782,7 @@ func GetEmail() Email         { return Get().Email }
 func GetFeeds() Feeds         { return Get().Feeds }
 func GetResearch() Research   { return Get().Research }
 func GetFiltering() Filtering { return Get().Filtering }
+func GetTeam() Team           { return Get().Team }
 func GetLogging() Logging     { return Get().Logging }
 func GetCLI() CLI             { return Get().CLI }
 
@@ -771,6 +799,61 @@ func GetSerpAPIKey() string      { return Get().Search.Providers.SerpAPI.APIKey 
 func GetOutputDirectory() string { return Get().Output.Directory }
 func GetCacheDirectory() string  { return Get().Cache.Directory }
 func IsDebugMode() bool          { return Get().App.Debug }
+
+// Team context convenience getters
+func GetTeamTechStack() []string         { return Get().Team.TechStack }
+func GetTeamChallenges() []string        { return Get().Team.CurrentChallenges }
+func GetTeamInterests() []string         { return Get().Team.Interests }
+func GetTeamProductType() string         { return Get().Team.ProductType }
+func GetTeamPriority() string            { return Get().Team.Priority }
+func GetTeamContext() Team               { return Get().Team }
+
+// GenerateTeamContextPrompt creates a formatted prompt string for LLM context
+func GenerateTeamContextPrompt() string {
+	team := GetTeamContext()
+	
+	var prompt strings.Builder
+	prompt.WriteString("I'm sharing these links with my software engineering team. ")
+	
+	if len(team.TechStack) > 0 {
+		prompt.WriteString(fmt.Sprintf("We work with %s, ", strings.Join(team.TechStack, ", ")))
+	}
+	
+	if team.ProductType != "" {
+		prompt.WriteString(fmt.Sprintf("and focus on %s. ", team.ProductType))
+	}
+	
+	prompt.WriteString("Help me write concise \"Why it matters\" insights for each link.\n\n")
+	prompt.WriteString("Context about our team:\n")
+	
+	if team.ProductType != "" {
+		prompt.WriteString(fmt.Sprintf("- We build %s\n", team.ProductType))
+	}
+	
+	if len(team.CurrentChallenges) > 0 {
+		prompt.WriteString("- Current challenges: ")
+		prompt.WriteString(strings.Join(team.CurrentChallenges, ", "))
+		prompt.WriteString("\n")
+	}
+	
+	if len(team.TechStack) > 0 {
+		prompt.WriteString("- Tech stack: ")
+		prompt.WriteString(strings.Join(team.TechStack, ", "))
+		prompt.WriteString("\n")
+	}
+	
+	if len(team.Interests) > 0 {
+		prompt.WriteString("- Team interests: ")
+		prompt.WriteString(strings.Join(team.Interests, ", "))
+		prompt.WriteString("\n")
+	}
+	
+	if team.Priority != "" {
+		prompt.WriteString(fmt.Sprintf("- Current priority: %s\n", team.Priority))
+	}
+	
+	return prompt.String()
+}
 
 // Filtering convenience getters
 func IsFilteringEnabled() bool              { return Get().Filtering.Enabled }
@@ -873,4 +956,33 @@ func isValidSearchID(searchID string) bool {
 func Reset() {
 	globalConfig = nil
 	viper.Reset()
+}
+
+// SaveTeamContextOverride saves team context overrides to a temporary config file
+// This allows TUI changes to override the main config without modifying the original file
+func SaveTeamContextOverride(teamContext Team) error {
+	// Create/update the team context override in viper
+	viper.Set("team.tech_stack", teamContext.TechStack)
+	viper.Set("team.current_challenges", teamContext.CurrentChallenges)
+	viper.Set("team.interests", teamContext.Interests)
+	viper.Set("team.product_type", teamContext.ProductType)
+	viper.Set("team.company_size", teamContext.CompanySize)
+	viper.Set("team.industry", teamContext.Industry)
+	viper.Set("team.expertise_level", teamContext.ExpertiseLevel)
+	viper.Set("team.working_style", teamContext.WorkingStyle)
+	viper.Set("team.team_size", teamContext.TeamSize)
+	viper.Set("team.priority", teamContext.Priority)
+	
+	// Update the global config if it exists
+	if globalConfig != nil {
+		globalConfig.Team = teamContext
+	}
+	
+	// Write the updated config to an override file
+	overrideFile := ".briefly-override.yaml"
+	if err := viper.WriteConfigAs(overrideFile); err != nil {
+		return fmt.Errorf("failed to write team context override: %w", err)
+	}
+	
+	return nil
 }

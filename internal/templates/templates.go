@@ -787,11 +787,8 @@ func renderReferencesSection(digestItems []render.DigestData) string {
 	var content strings.Builder
 	content.WriteString("## References\n\n")
 
-	// Limit to top 7 references for better context
+	// Use all references
 	referenceCount := len(digestItems)
-	if referenceCount > 7 {
-		referenceCount = 7
-	}
 
 	for i := 0; i < referenceCount; i++ {
 		item := digestItems[i]
@@ -966,6 +963,169 @@ func RenderWithBanner(digestItems []render.DigestData, outputDir string, finalDi
 // RenderWithInsights renders a digest with comprehensive insights data (backward compatibility)
 func RenderWithInsights(digestItems []render.DigestData, outputDir string, finalDigest string, digestMyTake string, template *DigestTemplate, customTitle string, overallSentiment string, alertsSummary string, trendsSummary string, researchSuggestions []string) (string, string, error) {
 	return RenderWithBannerAndInsights(digestItems, outputDir, finalDigest, digestMyTake, template, customTitle, overallSentiment, alertsSummary, trendsSummary, researchSuggestions, nil)
+}
+
+// RenderTeamFriendlyBrief renders the new team-focused brief format with emoji categorization
+func RenderTeamFriendlyBrief(digestItems []render.DigestData, outputDir string, customTitle string, teamContext string) (string, string, error) {
+	dateStr := time.Now().UTC().Format("2006-01-02")
+	filename := fmt.Sprintf("digest_brief_%s.md", dateStr)
+
+	if outputDir == "" {
+		outputDir = "digests"
+	}
+
+	var content strings.Builder
+
+	// Header
+	title := "Weekly Tech Radar"
+	if customTitle != "" {
+		title = customTitle
+	}
+	content.WriteString(fmt.Sprintf("# 📚 %s - %s\n\n", title, time.Now().Format("Jan 2, 2006")))
+
+	// Categorize articles
+	categories := categorizeArticlesForBrief(digestItems)
+
+	// Product Launches & Major Updates
+	if len(categories.ProductLaunches) > 0 {
+		content.WriteString("## 🎯 **Product Launches & Major Updates**\n\n")
+		for _, item := range categories.ProductLaunches {
+			content.WriteString(fmt.Sprintf("- **%s** - [Link](%s)\n", item.Title, item.URL))
+			content.WriteString(fmt.Sprintf("  What: %s\n", extractOneLineDescription(item.SummaryText)))
+			if item.MyTake != "" {
+				content.WriteString(fmt.Sprintf("  Why it matters: %s\n\n", item.MyTake))
+			} else {
+				content.WriteString("  Why it matters: New development in the ecosystem\n\n")
+			}
+		}
+	}
+
+	// Engineering Deep Dives
+	if len(categories.EngineeringDeepDives) > 0 {
+		content.WriteString("## 🛠️ **Engineering Deep Dives**\n\n")
+		for _, item := range categories.EngineeringDeepDives {
+			content.WriteString(fmt.Sprintf("- **%s** - [Link](%s)\n", item.Title, item.URL))
+			content.WriteString(fmt.Sprintf("  What: %s\n", extractCoreConceptDescription(item.SummaryText)))
+			if item.MyTake != "" {
+				content.WriteString(fmt.Sprintf("  Why it matters: %s\n\n", item.MyTake))
+			} else {
+				content.WriteString("  Why it matters: Technical insights for our development approach\n\n")
+			}
+		}
+	}
+
+	// Interesting Implementations
+	if len(categories.InterestingImplementations) > 0 {
+		content.WriteString("## 💡 **Interesting Implementations**\n\n")
+		for _, item := range categories.InterestingImplementations {
+			content.WriteString(fmt.Sprintf("- **%s** - [Link](%s)\n", item.Title, item.URL))
+			content.WriteString(fmt.Sprintf("  What: %s\n", extractImplementationDescription(item.SummaryText)))
+			if item.MyTake != "" {
+				content.WriteString(fmt.Sprintf("  Why it matters: %s\n\n", item.MyTake))
+			} else {
+				content.WriteString("  Why it matters: Lessons we can apply to our projects\n\n")
+			}
+		}
+	}
+
+	// Worth Exploring
+	if len(categories.WorthExploring) > 0 {
+		content.WriteString("## 🔍 **Worth Exploring**\n\n")
+		for _, item := range categories.WorthExploring {
+			description := extractOneLineDescription(item.SummaryText)
+			content.WriteString(fmt.Sprintf("- **%s** - [Link](%s) → %s\n", item.Title, item.URL, description))
+		}
+		content.WriteString("\n")
+	}
+
+	// Footer
+	content.WriteString("---\n")
+	content.WriteString(fmt.Sprintf("*Generated with team context • %d articles • Forward to your team*\n", len(digestItems)))
+
+	// Write to file
+	filePath, err := render.WriteDigestToFile(content.String(), outputDir, filename)
+	return content.String(), filePath, err
+}
+
+// ArticleCategories holds categorized articles for brief format
+type ArticleCategories struct {
+	ProductLaunches           []render.DigestData
+	EngineeringDeepDives      []render.DigestData
+	InterestingImplementations []render.DigestData
+	WorthExploring            []render.DigestData
+}
+
+// categorizeArticlesForBrief categorizes articles based on title and content keywords
+func categorizeArticlesForBrief(digestItems []render.DigestData) ArticleCategories {
+	categories := ArticleCategories{}
+
+	for _, item := range digestItems {
+		titleLower := strings.ToLower(item.Title)
+		summaryLower := strings.ToLower(item.SummaryText)
+
+		// Product launches & updates
+		if containsAny(titleLower, []string{"launch", "release", "announce", "unveil", "version", "update"}) ||
+			containsAny(summaryLower, []string{"launched", "released", "announced", "new version", "updated"}) {
+			categories.ProductLaunches = append(categories.ProductLaunches, item)
+		} else if containsAny(titleLower, []string{"deep dive", "guide", "tutorial", "how to", "engineering", "architecture", "system", "design", "performance"}) ||
+			containsAny(summaryLower, []string{"technical", "engineering", "architecture", "system design", "performance", "optimization"}) {
+			categories.EngineeringDeepDives = append(categories.EngineeringDeepDives, item)
+		} else if containsAny(titleLower, []string{"built", "implementation", "project", "case study", "building"}) ||
+			containsAny(summaryLower, []string{"implementation", "built", "developed", "created", "project"}) {
+			categories.InterestingImplementations = append(categories.InterestingImplementations, item)
+		} else {
+			// Default to worth exploring
+			categories.WorthExploring = append(categories.WorthExploring, item)
+		}
+	}
+
+	return categories
+}
+
+// containsAny checks if text contains any of the given keywords
+func containsAny(text string, keywords []string) bool {
+	for _, keyword := range keywords {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+// extractOneLineDescription extracts a concise one-line description from summary
+func extractOneLineDescription(summary string) string {
+	sentences := strings.Split(summary, ".")
+	if len(sentences) > 0 && len(sentences[0]) > 0 {
+		cleaned := strings.TrimSpace(sentences[0])
+		if len(cleaned) > 80 {
+			return cleaned[:77] + "..."
+		}
+		return cleaned
+	}
+	if len(summary) > 80 {
+		return summary[:77] + "..."
+	}
+	return summary
+}
+
+// extractCoreConceptDescription extracts technical concept from summary
+func extractCoreConceptDescription(summary string) string {
+	// Look for technical keywords and extract relevant sentences
+	summary = strings.TrimSpace(summary)
+	if len(summary) > 100 {
+		return summary[:97] + "..."
+	}
+	return summary
+}
+
+// extractImplementationDescription extracts what was built/solved from summary
+func extractImplementationDescription(summary string) string {
+	// Similar to extractCoreConceptDescription but focused on implementations
+	summary = strings.TrimSpace(summary)
+	if len(summary) > 100 {
+		return summary[:97] + "..."
+	}
+	return summary
 }
 
 // RenderWithStructuredContent renders a digest using the new cohesive LLM-generated approach

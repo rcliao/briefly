@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os" // Added to fetch API key from environment variable
+	"strconv"
 	"strings"
 	"time"
 
@@ -246,6 +247,287 @@ Article Content:
 	}
 
 	return summary, nil
+}
+
+// GenerateWhyItMatters generates team context-aware "Why it matters" insights for articles
+func (c *Client) GenerateWhyItMatters(articles []core.Article, teamContext string) (map[string]string, error) {
+	if len(articles) == 0 {
+		return nil, fmt.Errorf("no articles provided")
+	}
+
+	// Template for team context-aware insights
+	whyItMattersPrompt := `%s
+
+For each link below, provide a one-sentence "Why it matters" that connects to our context:
+
+%s
+
+Format each response as:
+"Why it matters: [Your insight here - how it relates to our stack, challenges, or interests]"
+
+Make each insight specific and actionable for our team.`
+
+	// Prepare article list
+	var articleList strings.Builder
+	for i, article := range articles {
+		articleList.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, article.Title))
+		articleList.WriteString(fmt.Sprintf("   Summary: %s\n", article.CleanedText[:min(500, len(article.CleanedText))]))
+		articleList.WriteString(fmt.Sprintf("   URL: %s\n\n", article.LinkID))
+	}
+
+	prompt := fmt.Sprintf(whyItMattersPrompt, teamContext, articleList.String())
+
+	ctx := context.Background()
+	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate why it matters insights: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("no content generated for why it matters insights")
+	}
+
+	contentPart := resp.Candidates[0].Content.Parts[0]
+	content, ok := contentPart.(genai.Text)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response format from API, expected genai.Text")
+	}
+
+	// Parse the response to extract insights for each article
+	insights := parseWhyItMattersResponse(string(content), articles)
+	return insights, nil
+}
+
+// GenerateWhyItMattersSingle generates a "Why it matters" insight for a single article
+func (c *Client) GenerateWhyItMattersSingle(article core.Article, teamContext string) (string, error) {
+	// Template for single article insight
+	singleInsightPrompt := `%s
+
+Article: **%s**
+Summary: %s
+URL: %s
+
+Provide a one-sentence "Why it matters" insight that connects this article to our team's context:
+
+Format: "Why it matters: [Your specific insight about relevance to our stack, challenges, or interests]"`
+
+	// Truncate content for single article processing
+	content := article.CleanedText
+	if len(content) > 1000 {
+		content = content[:1000] + "..."
+	}
+
+	prompt := fmt.Sprintf(singleInsightPrompt, teamContext, article.Title, content, article.LinkID)
+
+	ctx := context.Background()
+	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", fmt.Errorf("failed to generate single insight: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("no content generated for single insight")
+	}
+
+	contentPart := resp.Candidates[0].Content.Parts[0]
+	responseContent, ok := contentPart.(genai.Text)
+	if !ok {
+		return "", fmt.Errorf("unexpected response format from API, expected genai.Text")
+	}
+
+	// Extract the insight from the response
+	insight := extractInsightFromResponse(string(responseContent))
+	return insight, nil
+}
+
+// GenerateTeamRelevanceScore generates a relevance score for an article based on team context
+func (c *Client) GenerateTeamRelevanceScore(article core.Article, teamContext string) (float64, string, error) {
+	relevancePrompt := `%s
+
+Article: **%s**
+Summary: %s
+
+Rate this article's relevance to our team on a scale of 0.0 to 1.0, where:
+- 0.0-0.3: Low relevance (general interest only)
+- 0.4-0.6: Medium relevance (somewhat applicable to our work)  
+- 0.7-0.9: High relevance (directly applicable to our challenges/stack)
+- 0.9-1.0: Critical relevance (must-read for our current priorities)
+
+Respond in this exact format:
+Relevance Score: [0.0-1.0]
+Reasoning: [One sentence explaining why this score was assigned]`
+
+	content := article.CleanedText
+	if len(content) > 800 {
+		content = content[:800] + "..."
+	}
+
+	prompt := fmt.Sprintf(relevancePrompt, teamContext, article.Title, content)
+
+	ctx := context.Background()
+	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return 0.0, "", fmt.Errorf("failed to generate relevance score: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return 0.0, "", fmt.Errorf("no content generated for relevance score")
+	}
+
+	contentPart := resp.Candidates[0].Content.Parts[0]
+	responseContent, ok := contentPart.(genai.Text)
+	if !ok {
+		return 0.0, "", fmt.Errorf("unexpected response format from API, expected genai.Text")
+	}
+
+	// Parse score and reasoning from response
+	score, reasoning := parseRelevanceResponse(string(responseContent))
+	return score, reasoning, nil
+}
+
+// parseWhyItMattersResponse parses the LLM response to extract insights for each article
+func parseWhyItMattersResponse(response string, articles []core.Article) map[string]string {
+	insights := make(map[string]string)
+	lines := strings.Split(response, "\n")
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Why it matters:") {
+			insight := strings.TrimSpace(strings.TrimPrefix(line, "Why it matters:"))
+			// For now, use a simple mapping approach
+			// In production, this could be more sophisticated
+			if len(articles) > 0 {
+				// Map to first unprocessed article
+				for _, article := range articles {
+					if _, exists := insights[article.ID]; !exists {
+						insights[article.ID] = insight
+						break
+					}
+				}
+			}
+		}
+	}
+	
+	return insights
+}
+
+// extractInsightFromResponse extracts the insight text from the LLM response
+func extractInsightFromResponse(response string) string {
+	lines := strings.Split(response, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Why it matters:") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "Why it matters:"))
+		}
+	}
+	// Fallback: return the whole response if format is unexpected
+	return strings.TrimSpace(response)
+}
+
+// parseRelevanceResponse parses relevance score and reasoning from LLM response
+func parseRelevanceResponse(response string) (float64, string) {
+	lines := strings.Split(response, "\n")
+	var score float64
+	var reasoning string
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Relevance Score:") {
+			scoreStr := strings.TrimSpace(strings.TrimPrefix(line, "Relevance Score:"))
+			if parsedScore, err := strconv.ParseFloat(scoreStr, 64); err == nil {
+				score = parsedScore
+			}
+		} else if strings.HasPrefix(line, "Reasoning:") {
+			reasoning = strings.TrimSpace(strings.TrimPrefix(line, "Reasoning:"))
+		}
+	}
+	
+	// Ensure score is within valid range
+	if score < 0.0 {
+		score = 0.0
+	} else if score > 1.0 {
+		score = 1.0
+	}
+	
+	if reasoning == "" {
+		reasoning = "No specific reasoning provided"
+	}
+	
+	return score, reasoning
+}
+
+// RegenerateDigestWithMyTake regenerates an entire digest incorporating the user's personal take
+func (c *Client) RegenerateDigestWithMyTake(originalDigest, myTake, teamContext, styleGuide string) (string, error) {
+	if originalDigest == "" {
+		return "", fmt.Errorf("original digest content cannot be empty")
+	}
+	
+	if myTake == "" {
+		return originalDigest, nil // No changes needed
+	}
+
+	// Create comprehensive regeneration prompt
+	regenerationPrompt := `I need you to regenerate this digest by incorporating my personal take and insights. The goal is to create a cohesive, enhanced version that weaves my perspective throughout rather than just appending it.
+
+ORIGINAL DIGEST:
+%s
+
+MY PERSONAL TAKE:
+%s
+
+%s
+
+%s
+
+INSTRUCTIONS:
+1. Integrate my personal take naturally throughout the digest, not just as an appendix
+2. Enhance insights and conclusions based on my perspective
+3. Maintain the original structure and format while improving content quality
+4. Keep all original links and references intact
+5. Make the enhanced digest feel cohesive and authoritative
+6. If I've provided contradictory or additional insights, weave them into the relevant sections
+7. Enhance the executive summary to reflect my perspective
+8. Maintain professional tone while incorporating my voice
+
+Generate the complete enhanced digest that feels like a collaborative effort between AI analysis and human insight.`
+
+	// Prepare context sections
+	var contextSection, styleSection string
+	
+	if teamContext != "" {
+		contextSection = fmt.Sprintf("TEAM CONTEXT:\n%s\n", teamContext)
+	}
+	
+	if styleGuide != "" {
+		styleSection = fmt.Sprintf("STYLE GUIDE:\n%s\n", styleGuide)
+	}
+
+	prompt := fmt.Sprintf(regenerationPrompt, originalDigest, myTake, contextSection, styleSection)
+
+	ctx := context.Background()
+	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", fmt.Errorf("failed to regenerate digest: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("no content generated for digest regeneration")
+	}
+
+	contentPart := resp.Candidates[0].Content.Parts[0]
+	content, ok := contentPart.(genai.Text)
+	if !ok {
+		return "", fmt.Errorf("unexpected response format from API, expected genai.Text")
+	}
+
+	return string(content), nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // Close cleans up resources used by the client
@@ -679,6 +961,69 @@ Return the queries as a simple numbered list (1. Query one 2. Query two, etc.) w
 	queriesText, ok := queriesPart.(genai.Text)
 	if !ok {
 		return nil, fmt.Errorf("unexpected response format from API for article ID %s, expected genai.Text", article.ID)
+	}
+
+	// Parse the numbered list of queries
+	lines := strings.Split(string(queriesText), "\n")
+	var queries []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Remove numbering like "1. " or "- "
+		line = strings.TrimPrefix(line, "- ")
+		if len(line) > 2 && line[1] == '.' && line[0] >= '1' && line[0] <= '9' {
+			line = strings.TrimSpace(line[2:])
+		}
+		if line != "" {
+			queries = append(queries, line)
+		}
+	}
+
+	return queries, nil
+}
+
+// GenerateDigestResearchQueries generates comprehensive research queries based on the entire digest content
+// This creates follow-up research directions based on themes and patterns across all articles
+func (c *Client) GenerateDigestResearchQueries(digestContent string, teamContext string, articleTitles []string) ([]string, error) {
+	articlesContext := strings.Join(articleTitles, "\n- ")
+	
+	prompt := fmt.Sprintf(`Based on this digest content and team context, generate 5-7 strategic research queries that would help the team dive deeper into the themes and trends identified across all articles.
+
+DIGEST CONTENT:
+%s
+
+TEAM CONTEXT:
+%s
+
+ARTICLES COVERED:
+- %s
+
+REQUIREMENTS:
+- Focus on cross-article themes and patterns rather than individual articles
+- Generate queries that would help uncover future trends and opportunities
+- Consider the team's context and current challenges
+- Include both technical and strategic research directions
+- Make queries specific enough to be actionable but broad enough to uncover new insights
+- Mix different research angles: competitive analysis, technical deep-dives, market trends, case studies
+
+FORMAT: Return as a numbered list (1. Query one 2. Query two, etc.) without additional formatting:`, digestContent, teamContext, articlesContext)
+
+	ctx := context.Background()
+	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate digest research queries: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("no digest research queries generated by the API")
+	}
+
+	queriesPart := resp.Candidates[0].Content.Parts[0]
+	queriesText, ok := queriesPart.(genai.Text)
+	if !ok {
+		return nil, fmt.Errorf("unexpected response format from API for digest research queries, expected genai.Text")
 	}
 
 	// Parse the numbered list of queries
