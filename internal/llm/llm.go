@@ -23,19 +23,17 @@ const (
 	// SummarizeTextPromptTemplate is the template for the summarization prompt.
 	SummarizeTextPromptTemplate = "Please summarize the following text concisely:\n\n---\n%s\n---"
 	// SummarizeTextWithFormatPromptTemplate is the template for format-aware summarization.
-	SummarizeTextWithFormatPromptTemplate = `Please summarize the following text for a %s digest format.
+	SummarizeTextWithFormatPromptTemplate = `Summarize the following text for a %s format. Focus on what matters and why it's relevant. Write only the summary, no meta-commentary or format explanations.
 
-FORMAT GUIDELINES:
-- Brief: Create a very concise summary (50-100 words) focusing only on the most essential information
-- Standard: Provide a balanced summary (100-200 words) with key points and context
-- Detailed: Generate a comprehensive summary (200-300 words) with thorough analysis and context
-- Newsletter: Write an engaging summary (150-250 words) in a conversational, shareable style
+FORMAT REQUIREMENTS:
+- Brief: 50-100 words, essential information only
+- Standard: 100-200 words, key points with context  
+- Detailed: 200-300 words, comprehensive analysis
+- Newsletter: 150-250 words, engaging and shareable
+- Scannable: 20-40 words, one complete sentence focusing on the core insight
 
-Please tailor your summary to match the %s format characteristics.
-
----
-%s
----`
+Text to summarize:
+%s`
 )
 
 // Client represents a client for interacting with an LLM.
@@ -145,7 +143,7 @@ func (c *Client) SummarizeArticleTextWithFormat(article core.Article, format str
 		return core.Summary{}, fmt.Errorf("article ID %s has no CleanedText to summarize", article.ID)
 	}
 
-	prompt := fmt.Sprintf(SummarizeTextWithFormatPromptTemplate, format, format, article.CleanedText)
+	prompt := fmt.Sprintf(SummarizeTextWithFormatPromptTemplate, format, article.CleanedText)
 
 	ctx := context.Background()
 	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
@@ -389,7 +387,7 @@ Reasoning: [One sentence explaining why this score was assigned]`
 func parseWhyItMattersResponse(response string, articles []core.Article) map[string]string {
 	insights := make(map[string]string)
 	lines := strings.Split(response, "\n")
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "Why it matters:") {
@@ -407,7 +405,7 @@ func parseWhyItMattersResponse(response string, articles []core.Article) map[str
 			}
 		}
 	}
-	
+
 	return insights
 }
 
@@ -429,7 +427,7 @@ func parseRelevanceResponse(response string) (float64, string) {
 	lines := strings.Split(response, "\n")
 	var score float64
 	var reasoning string
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "Relevance Score:") {
@@ -441,18 +439,18 @@ func parseRelevanceResponse(response string) (float64, string) {
 			reasoning = strings.TrimSpace(strings.TrimPrefix(line, "Reasoning:"))
 		}
 	}
-	
+
 	// Ensure score is within valid range
 	if score < 0.0 {
 		score = 0.0
 	} else if score > 1.0 {
 		score = 1.0
 	}
-	
+
 	if reasoning == "" {
 		reasoning = "No specific reasoning provided"
 	}
-	
+
 	return score, reasoning
 }
 
@@ -461,7 +459,7 @@ func (c *Client) RegenerateDigestWithMyTake(originalDigest, myTake, teamContext,
 	if originalDigest == "" {
 		return "", fmt.Errorf("original digest content cannot be empty")
 	}
-	
+
 	if myTake == "" {
 		return originalDigest, nil // No changes needed
 	}
@@ -493,11 +491,11 @@ Generate the complete enhanced digest that feels like a collaborative effort bet
 
 	// Prepare context sections
 	var contextSection, styleSection string
-	
+
 	if teamContext != "" {
 		contextSection = fmt.Sprintf("TEAM CONTEXT:\n%s\n", teamContext)
 	}
-	
+
 	if styleGuide != "" {
 		styleSection = fmt.Sprintf("STYLE GUIDE:\n%s\n", styleGuide)
 	}
@@ -988,7 +986,7 @@ Return the queries as a simple numbered list (1. Query one 2. Query two, etc.) w
 // This creates follow-up research directions based on themes and patterns across all articles
 func (c *Client) GenerateDigestResearchQueries(digestContent string, teamContext string, articleTitles []string) ([]string, error) {
 	articlesContext := strings.Join(articleTitles, "\n- ")
-	
+
 	prompt := fmt.Sprintf(`Based on this digest content and team context, generate 5-7 strategic research queries that would help the team dive deeper into the themes and trends identified across all articles.
 
 DIGEST CONTENT:
@@ -1087,6 +1085,8 @@ func (c *Client) GenerateFinalDigest(combinedSummaries, format string) (string, 
 		styleRequirements = "Comprehensive and analytical (500-800 words). Provide thorough analysis and deeper insights."
 	case "newsletter":
 		styleRequirements = "Engaging and shareable (400-600 words). Use a conversational tone with compelling insights."
+	case "scannable":
+		styleRequirements = "Scannable and link-focused (300-400 words). Create a brief overview that highlights key themes without burying the individual articles."
 	case "email":
 		styleRequirements = "Personal and relevant (300-500 words). Write as if addressing a colleague directly."
 	default:
@@ -1174,6 +1174,9 @@ func (c *Client) GenerateStructuredDigest(combinedSummaries, format string, aler
 	case "newsletter":
 		wordTarget = "400-500 words total"
 		structuralGuidance = "Create engaging newsletter content: (1) Attention-grabbing opener, (2-3) Key themes with practical insights, (4) Actionable takeaways, (5) Reader-focused conclusion"
+	case "scannable":
+		wordTarget = "200-300 words total"
+		structuralGuidance = "Create scannable overview: (1) Brief engaging opener about main theme, (2-3) Key patterns and insights that connect the articles, (3) What readers should focus on"
 	case "detailed":
 		wordTarget = "500-700 words total"
 		structuralGuidance = "Comprehensive analysis: (1) Executive overview, (2-3) Detailed theme analysis, (4) Implications and trends, (5) Actionable recommendations"

@@ -244,6 +244,7 @@ func TestGetAvailableFormats(t *testing.T) {
 		"standard",
 		"detailed",
 		"newsletter",
+		"scannable",
 		"email",
 	}
 

@@ -23,6 +23,8 @@ const (
 	FormatDetailed DigestFormat = "detailed"
 	// FormatNewsletter creates a newsletter-style digest optimized for sharing
 	FormatNewsletter DigestFormat = "newsletter"
+	// FormatScannableNewsletter creates a scannable newsletter format with prominent links
+	FormatScannableNewsletter DigestFormat = "scannable"
 	// FormatEmail creates HTML email format
 	FormatEmail DigestFormat = "email"
 )
@@ -120,6 +122,24 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IntroductionText:          "Welcome to this week's curated selection of insights! Here's what caught our attention:",
 			ConclusionText:            "Thank you for reading! Forward this to colleagues who might find it valuable.",
 			SectionSeparator:          "\n\n---\n\n",
+		}
+	case FormatScannableNewsletter:
+		return &DigestTemplate{
+			Format:                    FormatScannableNewsletter,
+			Title:                     "Briefly Bytes",
+			IncludeSummaries:          true,
+			IncludeKeyInsights:        false, // Remove AI insights for bite-sized format
+			IncludeActionItems:        false, // Remove action items for bite-sized format
+			IncludeSourceLinks:        true,
+			IncludePromptCorner:       false, // Remove prompt corner for bite-sized format
+			IncludeIndividualArticles: true,  // Enable individual articles in scannable format
+			IncludeTopicClustering:    false, // Disable clustering for scannable - use flat structure
+			IncludeBanner:             false, // Remove banner for bite-sized format
+			MaxSummaryLength:          25,    // Allow complete sentences for bite-sized format
+			MaxDigestWords:            400,   // Reduced word count for bite-sized format
+			IntroductionText:          "This week's tech highlights - bite-sized for busy schedules:",
+			ConclusionText:            "Keep learning, keep building 🚀",
+			SectionSeparator:          "\n\n",
 		}
 	case FormatEmail:
 		return &DigestTemplate{
@@ -238,12 +258,48 @@ func truncateToWordLimit(text string, maxWords int) string {
 	return strings.Join(words[:maxWords], " ") + "..."
 }
 
+// truncateToCompleteSentence truncates text to complete sentences within word limit
+func truncateToCompleteSentence(text string, maxWords int) string {
+	if maxWords <= 0 {
+		return text
+	}
+
+	words := strings.Fields(text)
+	if len(words) <= maxWords {
+		return text
+	}
+
+	// Find the last complete sentence within the word limit
+	truncated := strings.Join(words[:maxWords], " ")
+	
+	// Look for sentence endings
+	sentences := strings.FieldsFunc(truncated, func(r rune) bool {
+		return r == '.' || r == '!' || r == '?'
+	})
+	
+	if len(sentences) > 0 {
+		// Return the first complete sentence
+		firstSentence := strings.TrimSpace(sentences[0])
+		if firstSentence != "" {
+			return firstSentence + "."
+		}
+	}
+	
+	// If no complete sentence found, fall back to word limit with ellipsis
+	return strings.Join(words[:maxWords], " ") + "..."
+}
+
 // renderArticlesSection renders the articles section with optional topic clustering
 func renderArticlesSection(digestItems []render.DigestData, template *DigestTemplate) string {
 	var content strings.Builder
 
 	if !template.IncludeIndividualArticles {
 		return content.String()
+	}
+
+	// Use scannable format for the new scannable newsletter format
+	if template.Format == FormatScannableNewsletter {
+		return renderScannableArticlesSection(digestItems, template)
 	}
 
 	content.WriteString("## Individual Articles\n\n")
@@ -397,6 +453,140 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 	}
 
 	return content.String()
+}
+
+// renderScannableArticlesSection renders articles in a scannable newsletter format
+func renderScannableArticlesSection(digestItems []render.DigestData, template *DigestTemplate) string {
+	var content strings.Builder
+
+	content.WriteString("## 📖 Featured Articles\n\n")
+
+	for i, item := range digestItems {
+		if i > 0 {
+			content.WriteString("\n")
+		}
+
+		// Get content type emoji
+		contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
+
+		// Article title with content type emoji
+		content.WriteString(fmt.Sprintf("### %s %s\n\n", contentEmoji, item.Title))
+
+		// Key insight (summary) - simplified to just the summary
+		if template.IncludeSummaries && item.SummaryText != "" {
+			summary := item.SummaryText
+			if template.MaxSummaryLength > 0 {
+				summary = truncateToCompleteSentence(summary, template.MaxSummaryLength)
+			}
+			content.WriteString(fmt.Sprintf("%s\n\n", summary))
+		}
+
+		// Link with clear call to action
+		if template.IncludeSourceLinks {
+			content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+		}
+
+		// Add separator between articles
+		if i < len(digestItems)-1 {
+			content.WriteString("---\n\n")
+		}
+	}
+
+	return content.String()
+}
+
+// getContentTypeEmoji returns appropriate emoji based on content type and title
+func getContentTypeEmoji(contentType, title string) string {
+	titleLower := strings.ToLower(title)
+
+	// Check for video content
+	if contentType == "youtube" || strings.Contains(titleLower, "video") {
+		return "🎥"
+	}
+
+	// Check for PDF/documentation
+	if contentType == "pdf" || strings.Contains(titleLower, "guide") || strings.Contains(titleLower, "documentation") {
+		return "📄"
+	}
+
+	// Check for tools/products
+	if strings.Contains(titleLower, "tool") || strings.Contains(titleLower, "platform") || strings.Contains(titleLower, "app") {
+		return "🛠️"
+	}
+
+	// Check for research/studies
+	if strings.Contains(titleLower, "research") || strings.Contains(titleLower, "study") || strings.Contains(titleLower, "analysis") {
+		return "📊"
+	}
+
+	// Check for tutorials/how-to
+	if strings.Contains(titleLower, "how to") || strings.Contains(titleLower, "tutorial") || strings.Contains(titleLower, "guide") {
+		return "📚"
+	}
+
+	// Check for news/announcements
+	if strings.Contains(titleLower, "announcement") || strings.Contains(titleLower, "release") || strings.Contains(titleLower, "launch") {
+		return "📢"
+	}
+
+	// Check for AI/ML specific content
+	if strings.Contains(titleLower, "ai") || strings.Contains(titleLower, "machine learning") || strings.Contains(titleLower, "llm") {
+		return "🤖"
+	}
+
+	// Check for performance/optimization
+	if strings.Contains(titleLower, "performance") || strings.Contains(titleLower, "optimization") || strings.Contains(titleLower, "speed") {
+		return "⚡"
+	}
+
+	// Check for security
+	if strings.Contains(titleLower, "security") || strings.Contains(titleLower, "privacy") || strings.Contains(titleLower, "vulnerability") {
+		return "🔒"
+	}
+
+	// Default to hot/trending content
+	return "🔥"
+}
+
+// generateWhyItMatters creates a default "why it matters" statement when MyTake is not available
+func generateWhyItMatters(item render.DigestData) string {
+	titleLower := strings.ToLower(item.Title)
+
+	// AI/ML related
+	if strings.Contains(titleLower, "ai") || strings.Contains(titleLower, "llm") || strings.Contains(titleLower, "machine learning") {
+		return "Key development in AI that could impact how we work with intelligent systems"
+	}
+
+	// Tools/platforms
+	if strings.Contains(titleLower, "tool") || strings.Contains(titleLower, "platform") {
+		return "New tool that could enhance productivity and development workflows"
+	}
+
+	// Security
+	if strings.Contains(titleLower, "security") || strings.Contains(titleLower, "vulnerability") {
+		return "Security insight important for protecting systems and data"
+	}
+
+	// Performance/optimization
+	if strings.Contains(titleLower, "performance") || strings.Contains(titleLower, "optimization") {
+		return "Performance insight that could improve system efficiency"
+	}
+
+	// Research/studies
+	if strings.Contains(titleLower, "research") || strings.Contains(titleLower, "study") {
+		return "Research findings that provide data-driven insights for decision making"
+	}
+
+	// Generic fallback
+	return "Important development worth understanding for staying current in tech"
+}
+
+// capitalizeFirst capitalizes the first letter of a string
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // renderAlertsSection renders just the alerts section
@@ -1049,10 +1239,10 @@ func RenderTeamFriendlyBrief(digestItems []render.DigestData, outputDir string, 
 
 // ArticleCategories holds categorized articles for brief format
 type ArticleCategories struct {
-	ProductLaunches           []render.DigestData
-	EngineeringDeepDives      []render.DigestData
+	ProductLaunches            []render.DigestData
+	EngineeringDeepDives       []render.DigestData
 	InterestingImplementations []render.DigestData
-	WorthExploring            []render.DigestData
+	WorthExploring             []render.DigestData
 }
 
 // categorizeArticlesForBrief categorizes articles based on title and content keywords
@@ -1241,26 +1431,32 @@ func RenderWithBannerAndInsights(digestItems []render.DigestData, outputDir stri
 		content.WriteString("\n\n")
 	}
 
-	// Alert Monitoring Section (moved up for prominence)
-	alertsSection := renderAlertsSection(digestItems, alertsSummary)
-	if alertsSection != "" {
-		content.WriteString("## 🚨 Alerts\n\n")
-		content.WriteString(alertsSection)
-		content.WriteString("\n")
+	// Alert Monitoring Section (moved up for prominence) - skip for scannable format
+	if template.Format != FormatScannableNewsletter {
+		alertsSection := renderAlertsSection(digestItems, alertsSummary)
+		if alertsSection != "" {
+			content.WriteString("## 🚨 Alerts\n\n")
+			content.WriteString(alertsSection)
+			content.WriteString("\n")
+		}
 	}
 
-	// AI-Powered Insights Section (without alerts, which are now shown above)
-	insightsSection := renderInsightsSection(digestItems, template, overallSentiment, "", trendsSummary, researchSuggestions)
-	if insightsSection != "" {
-		content.WriteString(insightsSection)
-		content.WriteString("\n")
+	// AI-Powered Insights Section (without alerts, which are now shown above) - skip for scannable format
+	if template.Format != FormatScannableNewsletter {
+		insightsSection := renderInsightsSection(digestItems, template, overallSentiment, "", trendsSummary, researchSuggestions)
+		if insightsSection != "" {
+			content.WriteString(insightsSection)
+			content.WriteString("\n")
+		}
 	}
 
-	// v2.0: Try This Week section for actionable recommendations
-	actionSection := renderActionableSection(digestItems, template)
-	if actionSection != "" {
-		content.WriteString(actionSection)
-		content.WriteString("\n")
+	// v2.0: Try This Week section for actionable recommendations - skip for scannable format
+	if template.Format != FormatScannableNewsletter {
+		actionSection := renderActionableSection(digestItems, template)
+		if actionSection != "" {
+			content.WriteString(actionSection)
+			content.WriteString("\n")
+		}
 	}
 
 	// Process each article using helper function (only for detailed formats)
@@ -1392,6 +1588,7 @@ func GetAvailableFormats() []string {
 		string(FormatStandard),
 		string(FormatDetailed),
 		string(FormatNewsletter),
+		string(FormatScannableNewsletter),
 		string(FormatEmail),
 	}
 }

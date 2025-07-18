@@ -43,7 +43,7 @@ Features:
 - Smart Headlines: Automatically generates compelling, content-based titles
 - AI-powered insights: Sentiment analysis, alerts, and trend analysis  
 - AI banner images: Generate visual banners using DALL-E for enhanced presentation
-- Multiple formats: brief, standard, detailed, newsletter, email, slack, discord, audio, condensed
+- Multiple formats: brief, standard, detailed, newsletter, scannable, email, slack, discord, audio, condensed
 - Interactive my-take workflow: Add personal commentary
 - Single article mode: Process just one URL
 
@@ -76,7 +76,7 @@ Examples:
 
 	// Add flags
 	digestCmd.Flags().StringP("output", "o", "digests", "Output directory for digest file")
-	digestCmd.Flags().StringP("format", "f", "standard", "Digest format: brief, standard, detailed, newsletter, email, slack, discord, audio, condensed")
+	digestCmd.Flags().StringP("format", "f", "standard", "Digest format: brief, standard, detailed, newsletter, scannable, email, slack, discord, audio, condensed")
 	digestCmd.Flags().Bool("dry-run", false, "Estimate costs without making API calls")
 	digestCmd.Flags().Bool("list-formats", false, "List available output formats")
 	digestCmd.Flags().Bool("single", false, "Process single URL instead of input file")
@@ -471,7 +471,7 @@ func processArticles(cmd *cobra.Command, links []core.Link, format string) ([]re
 				logger.Warn("Relevance filtering failed completely, continuing with all articles", "error", err)
 			}
 		}
-		
+
 		if err == nil {
 			digestItems = filteredItems
 			processedArticles = filteredArticles
@@ -664,7 +664,7 @@ func applyEnhancedRelevanceFiltering(cmd *cobra.Command, digestItems []render.Di
 		}
 
 		article := processedArticles[i]
-		
+
 		// Use LLM to generate team-aware relevance score
 		relevanceScore, reasoning, err := llmClient.GenerateTeamRelevanceScore(article, teamContext)
 		if err != nil {
@@ -677,7 +677,7 @@ func applyEnhancedRelevanceFiltering(cmd *cobra.Command, digestItems []render.Di
 		// Apply threshold
 		if relevanceScore >= minRelevance {
 			// Update digest item with enhanced relevance info
-			digestItems[i].MyTake = fmt.Sprintf("%s (Team relevance: %.2f - %s)", 
+			digestItems[i].MyTake = fmt.Sprintf("%s (Team relevance: %.2f - %s)",
 				digestItems[i].MyTake, relevanceScore, reasoning)
 			filteredItems = append(filteredItems, digestItems[i])
 
@@ -685,10 +685,10 @@ func applyEnhancedRelevanceFiltering(cmd *cobra.Command, digestItems []render.Di
 			processedArticles[i].RelevanceScore = relevanceScore
 			filteredArticles = append(filteredArticles, processedArticles[i])
 
-			fmt.Printf("   ✅ Included: %s (%.2f) - %s\n", 
+			fmt.Printf("   ✅ Included: %s (%.2f) - %s\n",
 				item.Title, relevanceScore, reasoning)
 		} else {
-			fmt.Printf("   🔍 Excluded: %s (%.2f) - %s\n", 
+			fmt.Printf("   🔍 Excluded: %s (%.2f) - %s\n",
 				item.Title, relevanceScore, reasoning)
 		}
 	}
@@ -696,14 +696,14 @@ func applyEnhancedRelevanceFiltering(cmd *cobra.Command, digestItems []render.Di
 	// Ensure we don't filter out everything
 	if len(filteredItems) == 0 && len(digestItems) > 0 {
 		fmt.Printf("   ⚠️ All articles filtered out, keeping top 3 by team relevance\n")
-		
+
 		// Keep top 3 articles by team relevance
 		type scoredItem struct {
 			digestItem render.DigestData
 			article    core.Article
 			score      float64
 		}
-		
+
 		var scoredItems []scoredItem
 		for i, item := range digestItems {
 			if i < len(processedArticles) {
@@ -966,10 +966,10 @@ func generateTeamFriendlyBrief(digestItems []render.DigestData, outputDir string
 
 	// Get team context for the title
 	teamContext := config.GenerateTeamContextPrompt()
-	
+
 	// Use custom title with team context
 	customTitle := "Weekly Tech Radar"
-	
+
 	// Generate the team-friendly brief using our new template
 	_, filePath, err := templates.RenderTeamFriendlyBrief(digestItems, outputDir, customTitle, teamContext)
 	if err != nil {
@@ -1178,6 +1178,8 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 		digestFormat = templates.FormatDetailed
 	case "newsletter":
 		digestFormat = templates.FormatNewsletter
+	case "scannable":
+		digestFormat = templates.FormatScannableNewsletter
 	case "email":
 		digestFormat = templates.FormatEmail
 	case "standard", "":
@@ -1272,7 +1274,7 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 		for _, item := range digestItems {
 			articleTitles = append(articleTitles, item.Title)
 		}
-		
+
 		digestResearchQueries, err := llmClient.GenerateDigestResearchQueries(finalDigest, teamContext, articleTitles)
 		if err != nil {
 			logger.Warn("Failed to generate digest research queries", "error", err)
@@ -1360,7 +1362,7 @@ func handleInteractiveMyTake(digestPath, styleGuide string) error {
 	fmt.Printf("2. 👁️  Just review the digest (open in editor)\n")
 	fmt.Printf("3. ⏭️  Skip and finish\n")
 	fmt.Print("Enter your choice [1-3]: ")
-	
+
 	choice, err := reader.ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("failed to read user input: %w", err)
@@ -1390,21 +1392,21 @@ func handleLLMRegenerateWorkflow(digestPath, styleGuide string, reader *bufio.Re
 	fmt.Printf("  • Personal experiences related to the content\n")
 	fmt.Printf("  • Disagreements or additional insights\n")
 	fmt.Printf("  • Team-specific implications\n\n")
-	
+
 	fmt.Printf("Type your take (press Enter twice when done):\n")
 	fmt.Printf("─────────────────────────────────────────\n")
-	
+
 	var myTakeLines []string
 	emptyLineCount := 0
-	
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read my-take input: %w", err)
 		}
-		
+
 		line = strings.TrimRight(line, "\n")
-		
+
 		if line == "" {
 			emptyLineCount++
 			if emptyLineCount >= 2 {
@@ -1413,15 +1415,15 @@ func handleLLMRegenerateWorkflow(digestPath, styleGuide string, reader *bufio.Re
 		} else {
 			emptyLineCount = 0
 		}
-		
+
 		myTakeLines = append(myTakeLines, line)
 	}
-	
+
 	// Remove trailing empty lines
 	for len(myTakeLines) > 0 && myTakeLines[len(myTakeLines)-1] == "" {
 		myTakeLines = myTakeLines[:len(myTakeLines)-1]
 	}
-	
+
 	myTake := strings.Join(myTakeLines, "\n")
 	myTake = strings.TrimSpace(myTake)
 
@@ -1432,14 +1434,14 @@ func handleLLMRegenerateWorkflow(digestPath, styleGuide string, reader *bufio.Re
 
 	fmt.Printf("─────────────────────────────────────────\n")
 	fmt.Printf("📝 Take received (%d characters)\n", len(myTake))
-	
+
 	// Confirm before proceeding
 	fmt.Print("Proceed with LLM regeneration? [Y/n]: ")
 	confirm, err := reader.ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("failed to read confirmation: %w", err)
 	}
-	
+
 	confirm = strings.TrimSpace(strings.ToLower(confirm))
 	if confirm == "n" || confirm == "no" {
 		fmt.Println("Regeneration cancelled")
@@ -1481,7 +1483,7 @@ func handleLLMRegenerateWorkflow(digestPath, styleGuide string, reader *bufio.Re
 
 	fmt.Printf("✅ Enhanced digest generated: %s\n", newPath)
 	fmt.Printf("📊 Original: %d chars → Enhanced: %d chars\n", len(content), len(regeneratedContent))
-	
+
 	// Optionally open the new digest
 	fmt.Print("Open enhanced digest in editor? [Y/n]: ")
 	openResponse, err := reader.ReadString('\n')
@@ -1491,7 +1493,7 @@ func handleLLMRegenerateWorkflow(digestPath, styleGuide string, reader *bufio.Re
 			return openDigestInEditor(newPath)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1579,17 +1581,17 @@ func generateStandardDigest(llmClient *llm.Client, content, format string, templ
 func regenerateDigestWithMyTake(llmClient *llm.Client, originalContent, myTake, styleGuide string) (string, error) {
 	// Get team context for enhanced regeneration
 	teamContext := config.GenerateTeamContextPrompt()
-	
+
 	// Use LLM to regenerate the entire digest with personal take integrated
 	fmt.Printf("🤖 Using LLM to regenerate digest with your personal take...\n")
-	
+
 	regeneratedContent, err := llmClient.RegenerateDigestWithMyTake(originalContent, myTake, teamContext, styleGuide)
 	if err != nil {
 		// Fallback to simple append if LLM regeneration fails
 		fmt.Printf("⚠️  LLM regeneration failed (%s), falling back to simple append\n", err.Error())
 		return originalContent + "\n\n## My Take\n\n" + myTake, nil
 	}
-	
+
 	fmt.Printf("✅ Successfully regenerated digest with integrated personal insights\n")
 	return regeneratedContent, nil
 }

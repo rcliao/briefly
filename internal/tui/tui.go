@@ -41,45 +41,45 @@ const (
 // Model represents the state of the TUI application.
 type model struct {
 	// Core state
-	store    *store.Store
+	store     *store.Store
 	llmClient *llm.Client
-	width    int
-	height   int
-	mode     viewMode
-	quitting bool
+	width     int
+	height    int
+	mode      viewMode
+	quitting  bool
 
 	// Navigation
-	selectedIdx    int
-	
+	selectedIdx int
+
 	// Menu state
 	menuItems []string
-	
+
 	// Team context setup
-	teamContext     config.Team
-	editingField    string
-	editingValue    string
-	
+	teamContext  config.Team
+	editingField string
+	editingValue string
+
 	// Pipeline state
-	currentStep     pipelineStep
-	pipelineStatus  string
-	
+	currentStep    pipelineStep
+	pipelineStatus string
+
 	// Article processing
-	articles         []core.Article  
-	digestItems      []render.DigestData
-	insights         map[string]string
-	relevanceScores  map[string]float64
-	
+	articles        []core.Article
+	digestItems     []render.DigestData
+	insights        map[string]string
+	relevanceScores map[string]float64
+
 	// Digest history
-	digests         []core.Digest
-	
+	digests []core.Digest
+
 	// My-take editing
 	editingMyTake   string
 	editingDigestID string
-	
+
 	// UI state
-	showHelp        bool
-	errorMessage    string
-	statusMessage   string
+	showHelp      bool
+	errorMessage  string
+	statusMessage string
 }
 
 // InitialModel returns the initial state of the TUI model.
@@ -104,22 +104,22 @@ func InitialModel() model {
 		llmClient:   llmClient,
 		mode:        viewMainMenu,
 		selectedIdx: 0,
-		
+
 		// Initialize menu items
 		menuItems: []string{
 			"🎯 Configure Team Context",
 			"📝 Generate Digest (Interactive)",
 			"📊 Review Articles",
-			"🔍 Tune Relevance Filtering", 
+			"🔍 Tune Relevance Filtering",
 			"📚 View Digest History",
 			"❌ Exit",
 		},
-		
+
 		// Load team context
 		teamContext:     teamContext,
 		insights:        make(map[string]string),
 		relevanceScores: make(map[string]float64),
-		
+
 		// UI state
 		showHelp: true,
 	}
@@ -413,7 +413,7 @@ func (m *model) handleTeamContextEdit() tea.Cmd {
 		m.editingField = "tech_stack"
 		m.editingValue = strings.Join(m.teamContext.TechStack, ", ")
 		return m.startFieldEdit()
-	case 1: // Current Challenges  
+	case 1: // Current Challenges
 		m.editingField = "current_challenges"
 		m.editingValue = strings.Join(m.teamContext.CurrentChallenges, ", ")
 		return m.startFieldEdit()
@@ -510,7 +510,7 @@ func (m model) View() string {
 		Italic(true)
 
 	var content strings.Builder
-	
+
 	// Header
 	content.WriteString(titleStyle.Render("📚 Briefly - Interactive Digest Generator"))
 	content.WriteString("\n\n")
@@ -557,10 +557,10 @@ func (m model) View() string {
 // Render methods for each view mode
 func (m model) renderMainMenu(headerStyle, selectedStyle, normalStyle lipgloss.Style) string {
 	var content strings.Builder
-	
+
 	content.WriteString(headerStyle.Render("📋 Main Menu"))
 	content.WriteString("\n\n")
-	
+
 	for i, item := range m.menuItems {
 		if i == m.selectedIdx {
 			content.WriteString(selectedStyle.Render("  " + item))
@@ -569,18 +569,18 @@ func (m model) renderMainMenu(headerStyle, selectedStyle, normalStyle lipgloss.S
 		}
 		content.WriteString("\n")
 	}
-	
+
 	return content.String()
 }
 
 func (m model) renderTeamContextSetup(headerStyle, selectedStyle, normalStyle lipgloss.Style) string {
 	var content strings.Builder
-	
+
 	content.WriteString(headerStyle.Render("🎯 Team Context Setup"))
 	content.WriteString("\n\n")
-	
+
 	content.WriteString(normalStyle.Render("Configure your team context for personalized digests:\n\n"))
-	
+
 	fields := []string{
 		fmt.Sprintf("Tech Stack: %v", m.teamContext.TechStack),
 		fmt.Sprintf("Current Challenges: %v", m.teamContext.CurrentChallenges),
@@ -588,7 +588,7 @@ func (m model) renderTeamContextSetup(headerStyle, selectedStyle, normalStyle li
 		fmt.Sprintf("Product Type: %s", m.teamContext.ProductType),
 		"Save Configuration",
 	}
-	
+
 	for i, field := range fields {
 		if i == m.selectedIdx {
 			content.WriteString(selectedStyle.Render("  " + field))
@@ -597,26 +597,26 @@ func (m model) renderTeamContextSetup(headerStyle, selectedStyle, normalStyle li
 		}
 		content.WriteString("\n")
 	}
-	
+
 	return content.String()
 }
 
 func (m model) renderDigestPipeline(headerStyle, selectedStyle, normalStyle lipgloss.Style) string {
 	var content strings.Builder
-	
+
 	content.WriteString(headerStyle.Render("📝 Digest Pipeline"))
 	content.WriteString("\n\n")
-	
+
 	// Pipeline progress
 	steps := []string{
 		"📥 Fetching Articles",
-		"📝 Summarizing Content", 
+		"📝 Summarizing Content",
 		"🧮 Clustering Topics",
 		"🧠 Generating Insights",
 		"🔍 Filtering Relevance",
 		"📊 Creating Digest",
 	}
-	
+
 	for i, step := range steps {
 		if pipelineStep(i) == m.currentStep {
 			content.WriteString(selectedStyle.Render("  ➤ " + step))
@@ -627,28 +627,28 @@ func (m model) renderDigestPipeline(headerStyle, selectedStyle, normalStyle lipg
 		}
 		content.WriteString("\n")
 	}
-	
+
 	if m.pipelineStatus != "" {
 		content.WriteString("\n")
 		content.WriteString(normalStyle.Render("Status: " + m.pipelineStatus))
 	}
-	
+
 	return content.String()
 }
 
 func (m model) renderArticleReview(headerStyle, selectedStyle, normalStyle lipgloss.Style) string {
 	var content strings.Builder
-	
+
 	content.WriteString(headerStyle.Render("📊 Article Review"))
 	content.WriteString("\n\n")
-	
+
 	if len(m.digestItems) == 0 {
 		content.WriteString(normalStyle.Render("No articles to review yet. Generate a digest first."))
 		return content.String()
 	}
-	
+
 	content.WriteString(normalStyle.Render(fmt.Sprintf("Reviewing %d articles:\n\n", len(m.digestItems))))
-	
+
 	for i, item := range m.digestItems {
 		if i == m.selectedIdx {
 			content.WriteString(selectedStyle.Render(fmt.Sprintf("  ➤ %s", item.Title)))
@@ -657,35 +657,35 @@ func (m model) renderArticleReview(headerStyle, selectedStyle, normalStyle lipgl
 		}
 		content.WriteString("\n")
 	}
-	
+
 	return content.String()
 }
 
 func (m model) renderRelevanceTuning(headerStyle, selectedStyle, normalStyle lipgloss.Style) string {
 	var content strings.Builder
-	
+
 	content.WriteString(headerStyle.Render("🔍 Relevance Tuning"))
 	content.WriteString("\n\n")
-	
+
 	content.WriteString(normalStyle.Render("Adjust relevance filtering settings:\n\n"))
 	content.WriteString(normalStyle.Render("• Minimum relevance score\n"))
 	content.WriteString(normalStyle.Render("• Team context weight\n"))
 	content.WriteString(normalStyle.Render("• Content filtering rules\n"))
-	
+
 	return content.String()
 }
 
 func (m model) renderDigestHistory(headerStyle, selectedStyle, normalStyle lipgloss.Style) string {
 	var content strings.Builder
-	
+
 	content.WriteString(headerStyle.Render("📚 Digest History"))
 	content.WriteString("\n\n")
-	
+
 	if len(m.digests) == 0 {
 		content.WriteString(normalStyle.Render("No previous digests found."))
 		return content.String()
 	}
-	
+
 	for i, digest := range m.digests {
 		if i == m.selectedIdx {
 			content.WriteString(selectedStyle.Render(fmt.Sprintf("  ➤ %s (%s)", digest.Title, digest.Format)))
@@ -694,29 +694,29 @@ func (m model) renderDigestHistory(headerStyle, selectedStyle, normalStyle lipgl
 		}
 		content.WriteString("\n")
 	}
-	
+
 	content.WriteString("\n")
 	content.WriteString(normalStyle.Render("Press [e] to edit my-take for selected digest"))
-	
+
 	return content.String()
 }
 
 func (m model) renderEditMyTake(headerStyle, selectedStyle, normalStyle lipgloss.Style) string {
 	var content strings.Builder
-	
+
 	content.WriteString(headerStyle.Render("✏️ Edit My Take"))
 	content.WriteString("\n\n")
-	
+
 	content.WriteString(normalStyle.Render("Editing my-take for digest: " + m.editingDigestID))
 	content.WriteString("\n\n")
-	
+
 	content.WriteString(normalStyle.Render("Current take:"))
 	content.WriteString("\n")
 	content.WriteString(selectedStyle.Render(m.editingMyTake))
 	content.WriteString("\n\n")
-	
+
 	content.WriteString(normalStyle.Render("Press [Ctrl+S] to save and regenerate with LLM"))
-	
+
 	return content.String()
 }
 
