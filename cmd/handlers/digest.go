@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"briefly/internal/alerts"
+	"briefly/internal/categorization"
 	"briefly/internal/clustering"
 	"briefly/internal/config"
 	"briefly/internal/core"
@@ -432,6 +433,40 @@ func processArticles(cmd *cobra.Command, links []core.Link, format string) ([]re
 		}
 	}
 
+	// Step 2.5: Categorize and sort articles (for scannable format and better organization)
+	if format == "scannable" || format == "newsletter" {
+		fmt.Println("\n🏷️ Categorizing articles for enhanced organization...")
+		categorizationService := categorization.NewService(llmClient)
+		categorizedItems, err := categorizationService.CategorizeArticles(context.Background(), digestItems, processedArticles)
+		if err != nil {
+			logger.Warn("Failed to categorize articles", "error", err)
+		} else {
+			// Sort by category priority and relevance
+			sortedItems := categorization.SortCategorizedItems(categorizedItems)
+			
+			// Replace digest items and articles with sorted categorized versions
+			if len(sortedItems) == len(digestItems) {
+				// Update all items with category information
+				for i, catItem := range sortedItems {
+					digestItems[i] = catItem.DigestItem
+					processedArticles[i] = catItem.Article
+					// Store category info in MyTake for now (can be enhanced later)
+					categoryInfo := fmt.Sprintf("%s %s", catItem.Category.Category.Emoji, catItem.Category.Category.Name)
+					if digestItems[i].MyTake != "" {
+						digestItems[i].MyTake = fmt.Sprintf("%s | %s", categoryInfo, digestItems[i].MyTake)
+					} else {
+						digestItems[i].MyTake = categoryInfo
+					}
+				}
+				fmt.Printf("   ✅ Categorized and sorted %d articles across %d categories\n", 
+					len(sortedItems), len(categorization.Categories))
+			} else {
+				logger.Warn("Categorization result count mismatch, skipping category sorting", 
+					"expected", len(digestItems), "got", len(sortedItems))
+			}
+		}
+	}
+
 	// Step 3: Generate team-relevant "Why it matters" insights
 	fmt.Println("\n💡 Generating team-relevant insights...")
 	teamContext := config.GenerateTeamContextPrompt()
@@ -440,11 +475,21 @@ func processArticles(cmd *cobra.Command, links []core.Link, format string) ([]re
 		if err != nil {
 			logger.Warn("Failed to generate why it matters insights", "error", err)
 		} else {
-			// Apply insights to digest items
+			// Apply insights to digest items while preserving category information
 			for i := range digestItems {
 				if i < len(processedArticles) {
 					if insight, exists := insights[processedArticles[i].ID]; exists {
-						digestItems[i].MyTake = insight
+						// Preserve category information if present
+						if digestItems[i].MyTake != "" && strings.Contains(digestItems[i].MyTake, " | ") {
+							// Category info exists, append the insight
+							digestItems[i].MyTake = fmt.Sprintf("%s | %s", digestItems[i].MyTake, insight)
+						} else if digestItems[i].MyTake != "" && (strings.Contains(digestItems[i].MyTake, "🔥") || strings.Contains(digestItems[i].MyTake, "🚀") || strings.Contains(digestItems[i].MyTake, "🛠️") || strings.Contains(digestItems[i].MyTake, "📊") || strings.Contains(digestItems[i].MyTake, "💡") || strings.Contains(digestItems[i].MyTake, "🔍")) {
+							// Category info exists without separator, add separator
+							digestItems[i].MyTake = fmt.Sprintf("%s | %s", digestItems[i].MyTake, insight)
+						} else {
+							// No category info, just set the insight
+							digestItems[i].MyTake = insight
+						}
 						fmt.Printf("   ✅ Generated insight for: %s\n", digestItems[i].Title)
 					}
 				}
@@ -1195,21 +1240,57 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 	fmt.Printf("Generating final digest summary using %s format...\n", format)
 	logger.Info("Generating final digest summary", "format", format)
 
-	// Prepare combined summaries for final digest
+	// Prepare combined summaries for final digest with category information
 	var combinedSummaries strings.Builder
-	for i, item := range digestItems {
-		combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, item.Title))
-		combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
-		combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
+	
+	// Check if articles are categorized by looking for category info in MyTake
+	categorized := checkIfCategorized(digestItems)
+	
+	if categorized {
+		// Group by categories and include category context
+		categoryGroups := groupItemsByCategory(digestItems)
+		categoryOrder := []string{"🔥 Breaking & Hot", "🚀 Product Updates", "🛠️ Dev Tools & Techniques", "📊 Research & Analysis", "💡 Ideas & Inspiration", "🔍 Worth Monitoring"}
+		
+		for _, categoryName := range categoryOrder {
+			if items, exists := categoryGroups[categoryName]; exists && len(items) > 0 {
+				combinedSummaries.WriteString(fmt.Sprintf("**Category: %s** (%d articles)\n", categoryName, len(items)))
+				for i, item := range items {
+					combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, item.Title))
+					combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
+					combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
+				}
+				combinedSummaries.WriteString("\n")
+			}
+		}
+		
+		// Handle uncategorized items
+		uncategorized := getUncategorizedItems(digestItems, categoryGroups)
+		if len(uncategorized) > 0 {
+			combinedSummaries.WriteString("**Category: Other** (uncategorized)\n")
+			for i, item := range uncategorized {
+				combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, item.Title))
+				combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
+				combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
+			}
+		}
+	} else {
+		// Fallback to original flat format
+		for i, item := range digestItems {
+			combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, item.Title))
+			combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
+			combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
+		}
 	}
 
-	// Use new structured generation approach for newsletter format (or all formats if working well)
+	// Use new structured generation approach for newsletter and standard formats
+	// For scannable format, we want enhanced summary but keep the categorized Featured Articles section
 	var finalDigest string
-	var useStructuredGeneration = (format == "newsletter" || format == "standard") // Test with these formats first
+	var useStructuredGeneration = (format == "newsletter" || format == "standard")
+	var useEnhancedSummary = (format == "newsletter" || format == "standard" || format == "scannable")
 
-	if useStructuredGeneration {
-		// New cohesive generation approach
-		fmt.Printf("🧠 Using new structured generation approach...\n")
+	if useEnhancedSummary {
+		// Enhanced summary generation approach  
+		fmt.Printf("🧠 Using enhanced summary generation...\n")
 
 		// Prepare context from insights
 		var alertsContext, sentimentContext string
@@ -1709,4 +1790,59 @@ func generateBannerImage(digestContent, outputDir, format string) *core.BannerIm
 	}
 
 	return banner
+}
+
+// checkIfCategorized checks if articles have category information in MyTake
+func checkIfCategorized(digestItems []render.DigestData) bool {
+	for _, item := range digestItems {
+		if item.MyTake != "" && (strings.Contains(item.MyTake, "🔥") || strings.Contains(item.MyTake, "🚀") || strings.Contains(item.MyTake, "🛠️") || strings.Contains(item.MyTake, "📊") || strings.Contains(item.MyTake, "💡") || strings.Contains(item.MyTake, "🔍")) {
+			return true
+		}
+	}
+	return false
+}
+
+// groupItemsByCategory groups digest items by their category information from MyTake
+func groupItemsByCategory(digestItems []render.DigestData) map[string][]render.DigestData {
+	categoryGroups := make(map[string][]render.DigestData)
+	
+	for _, item := range digestItems {
+		if item.MyTake != "" && strings.Contains(item.MyTake, " ") {
+			// Extract category from MyTake (format: "🔥 Breaking & Hot | insight")
+			parts := strings.Split(item.MyTake, " | ")
+			if len(parts) >= 1 {
+				categoryName := strings.TrimSpace(parts[0])
+				if categoryName != "" && strings.Contains(categoryName, " ") {
+					categoryGroups[categoryName] = append(categoryGroups[categoryName], item)
+				}
+			}
+		}
+	}
+	
+	return categoryGroups
+}
+
+// getUncategorizedItems returns items that don't belong to any category group
+func getUncategorizedItems(digestItems []render.DigestData, categoryGroups map[string][]render.DigestData) []render.DigestData {
+	var uncategorized []render.DigestData
+	
+	for _, item := range digestItems {
+		found := false
+		for _, articles := range categoryGroups {
+			for _, catItem := range articles {
+				if catItem.URL == item.URL {
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			uncategorized = append(uncategorized, item)
+		}
+	}
+	
+	return uncategorized
 }

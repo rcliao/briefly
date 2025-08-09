@@ -459,36 +459,131 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 func renderScannableArticlesSection(digestItems []render.DigestData, template *DigestTemplate) string {
 	var content strings.Builder
 
-	content.WriteString("## 📖 Featured Articles\n\n")
+	// Check if articles are categorized (look for category info in MyTake)
+	categorized := false
+	categoryGroups := make(map[string][]render.DigestData)
+	categoryOrder := []string{"🔥 Breaking & Hot", "🚀 Product Updates", "🛠️ Dev Tools & Techniques", "📊 Research & Analysis", "💡 Ideas & Inspiration", "🔍 Worth Monitoring"}
 
-	for i, item := range digestItems {
-		if i > 0 {
-			content.WriteString("\n")
-		}
-
-		// Get content type emoji
-		contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
-
-		// Article title with content type emoji
-		content.WriteString(fmt.Sprintf("### %s %s\n\n", contentEmoji, item.Title))
-
-		// Key insight (summary) - simplified to just the summary
-		if template.IncludeSummaries && item.SummaryText != "" {
-			summary := item.SummaryText
-			if template.MaxSummaryLength > 0 {
-				summary = truncateToCompleteSentence(summary, template.MaxSummaryLength)
+	for _, item := range digestItems {
+		if item.MyTake != "" && strings.Contains(item.MyTake, " ") {
+			// Try to extract category from MyTake (format: "🔥 Breaking & Hot | insight")
+			parts := strings.Split(item.MyTake, " | ")
+			if len(parts) >= 1 {
+				categoryName := strings.TrimSpace(parts[0])
+				if categoryName != "" && strings.Contains(categoryName, " ") {
+					categorized = true
+					categoryGroups[categoryName] = append(categoryGroups[categoryName], item)
+				}
 			}
-			content.WriteString(fmt.Sprintf("%s\n\n", summary))
 		}
+	}
 
-		// Link with clear call to action
-		if template.IncludeSourceLinks {
-			content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+	if categorized {
+		content.WriteString("## 📖 Featured Articles\n\n")
+		
+		// Render articles grouped by category in priority order
+		for _, categoryName := range categoryOrder {
+			if articles, exists := categoryGroups[categoryName]; exists && len(articles) > 0 {
+				content.WriteString(fmt.Sprintf("### %s\n\n", categoryName))
+				
+				for i, item := range articles {
+					if i > 0 {
+						content.WriteString("\n")
+					}
+					
+					// Get content type emoji
+					contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
+					
+					// Article title with content type emoji
+					content.WriteString(fmt.Sprintf("**%s %s**\n\n", contentEmoji, item.Title))
+					
+					// Key insight (summary) - simplified to just the summary
+					if template.IncludeSummaries && item.SummaryText != "" {
+						summary := item.SummaryText
+						if template.MaxSummaryLength > 0 {
+							summary = truncateToCompleteSentence(summary, template.MaxSummaryLength)
+						}
+						content.WriteString(fmt.Sprintf("%s\n\n", summary))
+					}
+					
+					// Link with clear call to action  
+					if template.IncludeSourceLinks {
+						content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+					}
+				}
+			}
 		}
+		
+		// Handle any uncategorized items
+		uncategorized := []render.DigestData{}
+		for _, item := range digestItems {
+			found := false
+			for _, articles := range categoryGroups {
+				for _, catItem := range articles {
+					if catItem.URL == item.URL {
+						found = true
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+			if !found {
+				uncategorized = append(uncategorized, item)
+			}
+		}
+		
+		if len(uncategorized) > 0 {
+			content.WriteString("### 🔍 Additional Items\n\n")
+			for i, item := range uncategorized {
+				if i > 0 {
+					content.WriteString("\n")
+				}
+				contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
+				content.WriteString(fmt.Sprintf("**%s %s**\n\n", contentEmoji, item.Title))
+				
+				if template.IncludeSummaries && item.SummaryText != "" {
+					summary := item.SummaryText
+					if template.MaxSummaryLength > 0 {
+						summary = truncateToCompleteSentence(summary, template.MaxSummaryLength)
+					}
+					content.WriteString(fmt.Sprintf("%s\n\n", summary))
+				}
+				
+				if template.IncludeSourceLinks {
+					content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+				}
+			}
+		}
+	} else {
+		// Fallback to original format if not categorized
+		content.WriteString("## 📖 Featured Articles\n\n")
 
-		// Add separator between articles
-		if i < len(digestItems)-1 {
-			content.WriteString("---\n\n")
+		for i, item := range digestItems {
+			if i > 0 {
+				content.WriteString("\n")
+			}
+
+			// Get content type emoji
+			contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
+
+			// Article title with content type emoji
+			content.WriteString(fmt.Sprintf("### %s %s\n\n", contentEmoji, item.Title))
+
+			// Key insight (summary) - simplified to just the summary
+			if template.IncludeSummaries && item.SummaryText != "" {
+				summary := item.SummaryText
+				if template.MaxSummaryLength > 0 {
+					summary = truncateToCompleteSentence(summary, template.MaxSummaryLength)
+				}
+				content.WriteString(fmt.Sprintf("%s\n\n", summary))
+			}
+
+			// Link with clear call to action
+			if template.IncludeSourceLinks {
+				content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+			}
 		}
 	}
 

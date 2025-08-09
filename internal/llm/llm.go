@@ -543,6 +543,131 @@ func (c *Client) GetGenaiModel() *genai.GenerativeModel {
 	return c.genaiModel
 }
 
+// CategorizeArticle categorizes an article using LLM analysis
+func (c *Client) CategorizeArticle(ctx context.Context, article core.Article, categories map[string]Category) (CategoryResult, error) {
+	if article.CleanedText == "" && article.Title == "" {
+		return CategoryResult{}, fmt.Errorf("article has no content to categorize")
+	}
+
+	// Build category descriptions for the prompt
+	var categoryDescriptions []string
+	for id, category := range categories {
+		categoryDescriptions = append(categoryDescriptions, 
+			fmt.Sprintf("%s (%s %s): %s", id, category.Emoji, category.Name, category.Description))
+	}
+
+	prompt := fmt.Sprintf(`Analyze this article and categorize it into one of the following categories. Consider the title, content, urgency, and relevance.
+
+AVAILABLE CATEGORIES:
+%s
+
+ARTICLE TO CATEGORIZE:
+Title: %s
+Content: %s
+
+Respond with EXACTLY this format:
+CATEGORY: [category_id]
+CONFIDENCE: [0.0-1.0]
+REASONING: [brief explanation in one sentence]
+
+Be precise and specific in your categorization.`, 
+		strings.Join(categoryDescriptions, "\n"), 
+		article.Title, 
+		article.CleanedText)
+
+	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return CategoryResult{}, fmt.Errorf("failed to categorize article: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return CategoryResult{}, fmt.Errorf("no categorization response generated")
+	}
+
+	contentPart := resp.Candidates[0].Content.Parts[0]
+	content, ok := contentPart.(genai.Text)
+	if !ok {
+		return CategoryResult{}, fmt.Errorf("unexpected response format from categorization API")
+	}
+
+	return parseCategorizeResponse(string(content), categories)
+}
+
+// Category represents a content category (imported from categorization package)
+type Category struct {
+	ID          string
+	Name        string
+	Emoji       string
+	Priority    int
+	Description string
+}
+
+// CategoryResult holds categorization results
+type CategoryResult struct {
+	Category   Category
+	Confidence float64
+	Reasoning  string
+	Source     string
+}
+
+// parseCategorizeResponse parses LLM response for article categorization
+func parseCategorizeResponse(response string, categories map[string]Category) (CategoryResult, error) {
+	lines := strings.Split(response, "\n")
+	
+	var categoryID string
+	var confidence float64
+	var reasoning string
+	
+	// Parse each line for the expected format
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		if strings.HasPrefix(line, "CATEGORY:") {
+			categoryID = strings.TrimSpace(strings.TrimPrefix(line, "CATEGORY:"))
+		} else if strings.HasPrefix(line, "CONFIDENCE:") {
+			confidenceStr := strings.TrimSpace(strings.TrimPrefix(line, "CONFIDENCE:"))
+			if parsed, err := strconv.ParseFloat(confidenceStr, 64); err == nil {
+				confidence = parsed
+			}
+		} else if strings.HasPrefix(line, "REASONING:") {
+			reasoning = strings.TrimSpace(strings.TrimPrefix(line, "REASONING:"))
+		}
+	}
+	
+	// Validate and get category
+	category, exists := categories[categoryID]
+	if !exists {
+		// Fallback to monitoring category
+		category = Category{
+			ID:          "monitoring",
+			Name:        "Worth Monitoring",
+			Emoji:       "🔍",
+			Priority:    6,
+			Description: "Emerging trends and topics worth exploring",
+		}
+		confidence = 0.5
+		reasoning = "LLM returned unknown category, using fallback"
+	}
+	
+	// Ensure reasonable confidence bounds
+	if confidence < 0.0 {
+		confidence = 0.0
+	} else if confidence > 1.0 {
+		confidence = 1.0
+	}
+	
+	if reasoning == "" {
+		reasoning = "LLM-based categorization"
+	}
+	
+	return CategoryResult{
+		Category:   category,
+		Confidence: confidence,
+		Reasoning:  reasoning,
+		Source:     "llm-based",
+	}, nil
+}
+
 // GenerateText generates text using the LLM with specified options
 func (c *Client) GenerateText(ctx context.Context, prompt string, options TextGenerationOptions) (string, error) {
 	if prompt == "" {
@@ -1200,6 +1325,19 @@ func (c *Client) GenerateStructuredDigest(combinedSummaries, format string, aler
 	if len(researchSuggestions) > 0 {
 		researchContext = fmt.Sprintf("\n\nRELATED RESEARCH AREAS:\n%s", strings.Join(researchSuggestions[:3], "; ")) // Top 3 suggestions
 	}
+	
+	// Check if articles are categorized by looking for "Category:" in the combined summaries
+	categorizedPrompt := ""
+	if strings.Contains(combinedSummaries, "**Category:") {
+		categorizedPrompt = `
+
+CATEGORIZATION CONTEXT:
+The articles have been organized into categories (Breaking & Hot, Product Updates, Dev Tools & Techniques, etc.). Use this categorization to:
+- Identify thematic patterns across categories
+- Connect related insights within and between categories
+- Highlight the most significant developments from high-priority categories
+- Create smooth transitions between different topic areas`
+	}
 
 	prompt := fmt.Sprintf(`You are creating a cohesive, professionally-written digest that synthesizes multiple article summaries into one flowing narrative. Generate the COMPLETE digest content as a unified piece of writing.
 
@@ -1230,7 +1368,7 @@ INDIVIDUAL ARTICLE SUMMARIES:
 
 Generate a complete, cohesive digest that reads as a unified analysis rather than disconnected sections. Start with an engaging hook and build a narrative that connects the key insights from these articles into a compelling story about the trends and implications for readers.
 
-IMPORTANT: Generate ONLY the main content - no headers, no "## Executive Summary" titles, just the flowing narrative content that will form the heart of the digest.`, format, wordTarget, structuralGuidance, alertsContext, sentimentContext, researchContext, combinedSummaries)
+IMPORTANT: Generate ONLY the main content - no headers, no "## Executive Summary" titles, just the flowing narrative content that will form the heart of the digest. Ensure the content is complete and stays within the target word count without abrupt truncation.`, format, wordTarget, structuralGuidance, categorizedPrompt, alertsContext, sentimentContext, researchContext, combinedSummaries)
 
 	ctx := context.Background()
 	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
