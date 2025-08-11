@@ -50,6 +50,7 @@ to quickly create a Cobra application.`,
 
 	// Add subcommands
 	rootCmd.AddCommand(NewDigestCmd())
+	rootCmd.AddCommand(NewSummarizeCmd())
 	rootCmd.AddCommand(NewResearchCmd())
 	rootCmd.AddCommand(NewCacheCmd())
 	rootCmd.AddCommand(NewTUICmd())

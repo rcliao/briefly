@@ -34,32 +34,53 @@ var Categories = map[string]Category{
 		Priority:    2,
 		Description: "Product launches, releases, major updates, and announcements",
 	},
+	"aiml": {
+		ID:          "aiml",
+		Name:        "AI & Machine Learning",
+		Emoji:       "🤖",
+		Priority:    3,
+		Description: "AI models, ML research, LLMs, machine learning techniques and breakthroughs",
+	},
+	"security": {
+		ID:          "security",
+		Name:        "Security & Privacy",
+		Emoji:       "🔒",
+		Priority:    4,
+		Description: "Cybersecurity, privacy, vulnerabilities, and security best practices",
+	},
 	"devtools": {
 		ID:          "devtools",
 		Name:        "Dev Tools & Techniques",
 		Emoji:       "🛠️",
-		Priority:    3,
+		Priority:    5,
 		Description: "Engineering insights, development tools, tutorials, and techniques",
+	},
+	"infrastructure": {
+		ID:          "infrastructure",
+		Name:        "Infrastructure & Cloud",
+		Emoji:       "☁️",
+		Priority:    6,
+		Description: "Cloud platforms, DevOps, infrastructure, scaling, and system architecture",
 	},
 	"research": {
 		ID:          "research",
 		Name:        "Research & Analysis",
 		Emoji:       "📊",
-		Priority:    4,
+		Priority:    7,
 		Description: "Studies, benchmarks, deep dives, and analytical content",
 	},
 	"inspiration": {
 		ID:          "inspiration",
 		Name:        "Ideas & Inspiration",
 		Emoji:       "💡",
-		Priority:    5,
+		Priority:    8,
 		Description: "Interesting implementations, case studies, and creative projects",
 	},
 	"monitoring": {
 		ID:          "monitoring",
 		Name:        "Worth Monitoring",
 		Emoji:       "🔍",
-		Priority:    6,
+		Priority:    9,
 		Description: "Emerging trends, experimental projects, and topics worth exploring",
 	},
 }
@@ -239,6 +260,30 @@ func (s *Service) categorizeArticleRuleBased(digestItem render.DigestData, artic
 		}
 	}
 
+	// AI & Machine Learning - AI models, LLMs, ML research
+	if containsAnyKeywords(title, []string{"ai", "artificial intelligence", "machine learning", "ml", "llm", "gpt", "neural", "model", "claude", "gemini", "chatgpt"}) ||
+		containsAnyKeywords(summary, []string{"artificial intelligence", "machine learning", "neural network", "deep learning", "llm", "language model", "ai model"}) ||
+		containsAnyKeywords(content, []string{"machine learning", "artificial intelligence", "neural", "transformer", "llm"}) {
+		return CategoryResult{
+			Category:   Categories["aiml"],
+			Confidence: 0.9,
+			Reasoning:  "Contains AI/ML keywords",
+			Source:     "rule-based",
+		}
+	}
+
+	// Security & Privacy - cybersecurity, vulnerabilities, privacy
+	if containsAnyKeywords(title, []string{"security", "vulnerability", "breach", "privacy", "encryption", "cyber", "hack", "exploit", "auth", "ssl", "tls"}) ||
+		containsAnyKeywords(summary, []string{"security", "vulnerability", "privacy", "encryption", "cybersecurity", "attack", "breach", "exploit"}) ||
+		containsAnyKeywords(content, []string{"security", "vulnerability", "privacy", "encryption", "cybersecurity"}) {
+		return CategoryResult{
+			Category:   Categories["security"],
+			Confidence: 0.85,
+			Reasoning:  "Contains security/privacy keywords",
+			Source:     "rule-based",
+		}
+	}
+
 	// Dev Tools & Techniques - engineering, tools, tutorials
 	if containsAnyKeywords(title, []string{"guide", "tutorial", "how to", "engineering", "development", "coding", "programming", "tool", "framework", "library"}) ||
 		containsAnyKeywords(summary, []string{"technical", "engineering", "development", "tutorial", "guide", "tool", "framework"}) ||
@@ -247,6 +292,18 @@ func (s *Service) categorizeArticleRuleBased(digestItem render.DigestData, artic
 			Category:   Categories["devtools"],
 			Confidence: 0.8,
 			Reasoning:  "Contains development/engineering keywords",
+			Source:     "rule-based",
+		}
+	}
+
+	// Infrastructure & Cloud - cloud platforms, DevOps, scaling
+	if containsAnyKeywords(title, []string{"cloud", "aws", "azure", "gcp", "kubernetes", "docker", "devops", "infrastructure", "scaling", "deployment"}) ||
+		containsAnyKeywords(summary, []string{"cloud", "infrastructure", "scaling", "deployment", "devops", "kubernetes", "container"}) ||
+		containsAnyKeywords(content, []string{"cloud", "infrastructure", "scaling", "deployment", "devops"}) {
+		return CategoryResult{
+			Category:   Categories["infrastructure"],
+			Confidence: 0.85,
+			Reasoning:  "Contains infrastructure/cloud keywords",
 			Source:     "rule-based",
 		}
 	}

@@ -46,6 +46,14 @@ type DigestTemplate struct {
 	IntroductionText          string
 	ConclusionText            string
 	SectionSeparator          string
+	
+	// LinkedIn optimization fields
+	IncludeLinkedInHook       bool   // Whether to include LinkedIn hook at top
+	IncludeGameChanger        bool   // Whether to include "This Week's Game-Changer" section
+	IncludeDiscussionPrompt   bool   // Whether to include engagement question at end
+	IncludeTryThisWeek        bool   // Whether to include actionable items section
+	LinkedInHookPattern       string // Pattern for hook generation (Pattern1, Pattern2, Pattern3)
+	GameChangerFormat         string // Format template for game-changer section
 }
 
 // GetTemplate returns a pre-configured template for the specified format
@@ -63,6 +71,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: false,
 			IncludeTopicClustering:    false, // Keep simple for brief format
 			IncludeBanner:             false, // Keep minimal for brief format
+			IncludeDiscussionPrompt:   true,  // Enable discussion prompt for engagement
 			MaxSummaryLength:          25,    // v2.0: 15-25 words per article summary
 			MaxDigestWords:            200,   // v2.0: 200-word target for brief format
 			IntroductionText:          "Quick highlights from today's reading:",
@@ -81,6 +90,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: true,  // Enable to showcase topic clustering
 			IncludeTopicClustering:    true,  // Enable topic clustering for better organization
 			IncludeBanner:             false, // Standard format keeps simple
+			IncludeDiscussionPrompt:   true,  // Enable discussion prompt for engagement
 			MaxSummaryLength:          25,    // v2.0: 15-25 words per article summary
 			MaxDigestWords:            400,   // v2.0: 400-word target for standard format
 			IntroductionText:          "Here's what's worth knowing from today's articles:",
@@ -99,6 +109,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: true,  // Enable to showcase topic clustering
 			IncludeTopicClustering:    true,  // Enable topic clustering for detailed analysis
 			IncludeBanner:             false, // Detailed format focuses on content
+			IncludeDiscussionPrompt:   true,  // Enable discussion prompt for engagement
 			MaxSummaryLength:          50,    // v2.0: Longer summaries for detailed format but still controlled
 			MaxDigestWords:            0,     // No limit for detailed format
 			IntroductionText:          "In-depth analysis of today's key articles:",
@@ -117,6 +128,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: false,
 			IncludeTopicClustering:    true, // Enable topic clustering for newsletter organization
 			IncludeBanner:             true, // Enable banner for newsletter format
+			IncludeDiscussionPrompt:   true,  // Enable discussion prompt for engagement
 			MaxSummaryLength:          25,   // v2.0: 15-25 words per article summary
 			MaxDigestWords:            800,  // v2.0: 800-word target for newsletter format to include more articles
 			IntroductionText:          "Welcome to this week's curated selection of insights! Here's what caught our attention:",
@@ -135,7 +147,10 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: true,  // Enable individual articles in scannable format
 			IncludeTopicClustering:    false, // Disable clustering for scannable - use flat structure
 			IncludeBanner:             false, // Remove banner for bite-sized format
-			MaxSummaryLength:          25,    // Allow complete sentences for bite-sized format
+			IncludeDiscussionPrompt:   true,  // Enable discussion prompt for LinkedIn engagement
+			IncludeLinkedInHook:       true,  // Enable LinkedIn hook for engagement
+			IncludeGameChanger:        true,  // Enable Game-Changer section for LinkedIn
+			MaxSummaryLength:          22,    // Strict 20-25 word range (target 22 words)
 			MaxDigestWords:            400,   // Reduced word count for bite-sized format
 			IntroductionText:          "This week's tech highlights - bite-sized for busy schedules:",
 			ConclusionText:            "Keep learning, keep building 🚀",
@@ -153,6 +168,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: true,
 			IncludeTopicClustering:    true, // Enable topic clustering for email organization
 			IncludeBanner:             true, // Enable banner for email format
+			IncludeDiscussionPrompt:   true,  // Enable discussion prompt for engagement
 			MaxSummaryLength:          25,   // v2.0: 15-25 words per article summary
 			MaxDigestWords:            400,  // v2.0: 400-word target for email format
 			IntroductionText:          "Here's your personalized digest with today's most important insights:",
@@ -289,6 +305,61 @@ func truncateToCompleteSentence(text string, maxWords int) string {
 	return strings.Join(words[:maxWords], " ") + "..."
 }
 
+// truncateToScannableFormat provides strict 20-25 word enforcement for scannable format
+// Prioritizes readability while enforcing word limits more strictly than truncateToCompleteSentence
+func truncateToScannableFormat(text string, minWords, maxWords int) string {
+	if maxWords <= 0 {
+		return text
+	}
+
+	words := strings.Fields(text)
+	wordCount := len(words)
+
+	// If already within range, return as-is
+	if wordCount >= minWords && wordCount <= maxWords {
+		return text
+	}
+
+	// If too short, return as-is (can't artificially expand)
+	if wordCount < minWords {
+		return text
+	}
+
+	// If too long, try to find optimal truncation point
+	// First attempt: look for complete sentence within range
+	for i := maxWords; i >= minWords; i-- {
+		candidate := strings.Join(words[:i], " ")
+		
+		// Check if this ends with proper punctuation
+		if strings.HasSuffix(candidate, ".") || strings.HasSuffix(candidate, "!") || strings.HasSuffix(candidate, "?") {
+			return candidate
+		}
+	}
+
+	// Second attempt: look for clause boundaries (commas, semicolons)
+	for i := maxWords; i >= minWords; i-- {
+		candidate := strings.Join(words[:i], " ")
+		
+		if strings.HasSuffix(candidate, ",") || strings.HasSuffix(candidate, ";") {
+			// Remove trailing comma/semicolon and add period
+			return strings.TrimSuffix(strings.TrimSuffix(candidate, ","), ";") + "."
+		}
+	}
+
+	// Final fallback: hard truncate at maxWords with proper ending
+	truncated := strings.Join(words[:maxWords], " ")
+	
+	// Remove any trailing punctuation and add ellipsis if we cut mid-sentence
+	truncated = strings.TrimRight(truncated, ".,;:!?")
+	
+	// If the next word (if exists) would complete a thought, hint at continuation
+	if wordCount > maxWords {
+		return truncated + "..."
+	}
+	
+	return truncated + "."
+}
+
 // renderArticlesSection renders the articles section with optional topic clustering
 func renderArticlesSection(digestItems []render.DigestData, template *DigestTemplate) string {
 	var content strings.Builder
@@ -387,7 +458,7 @@ func renderArticlesSection(digestItems []render.DigestData, template *DigestTemp
 
 				// Source link
 				if template.IncludeSourceLinks {
-					content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+					content.WriteString(fmt.Sprintf("%s\n\n", formatScannableLink(item.URL)))
 				}
 			}
 		}
@@ -462,17 +533,34 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 	// Check if articles are categorized (look for category info in MyTake)
 	categorized := false
 	categoryGroups := make(map[string][]render.DigestData)
-	categoryOrder := []string{"🔥 Breaking & Hot", "🚀 Product Updates", "🛠️ Dev Tools & Techniques", "📊 Research & Analysis", "💡 Ideas & Inspiration", "🔍 Worth Monitoring"}
+	categoryOrder := []string{
+		"🔥 Breaking & Hot", 
+		"🚀 Product Updates", 
+		"🤖 AI & Machine Learning", 
+		"🔒 Security & Privacy", 
+		"🛠️ Dev Tools & Techniques", 
+		"☁️ Infrastructure & Cloud", 
+		"📊 Research & Analysis", 
+		"💡 Ideas & Inspiration", 
+		"🔍 Worth Monitoring",
+	}
 
 	for _, item := range digestItems {
-		if item.MyTake != "" && strings.Contains(item.MyTake, " ") {
-			// Try to extract category from MyTake (format: "🔥 Breaking & Hot | insight")
+		if item.MyTake != "" {
+			// Try to extract category from MyTake (format: "🔥 Breaking & Hot | insight" or "🔥 Breaking & Hot")
 			parts := strings.Split(item.MyTake, " | ")
 			if len(parts) >= 1 {
 				categoryName := strings.TrimSpace(parts[0])
-				if categoryName != "" && strings.Contains(categoryName, " ") {
-					categorized = true
-					categoryGroups[categoryName] = append(categoryGroups[categoryName], item)
+				if categoryName != "" {
+					// Check if this matches any of our expected categories
+					for _, expectedCategory := range categoryOrder {
+						if categoryName == expectedCategory || 
+						   strings.HasSuffix(expectedCategory, strings.TrimSpace(strings.TrimLeft(categoryName, "🔥🚀🤖🔒🛠️☁️📊💡🔍"))) {
+							categorized = true
+							categoryGroups[expectedCategory] = append(categoryGroups[expectedCategory], item)
+							break
+						}
+					}
 				}
 			}
 		}
@@ -481,12 +569,18 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 	if categorized {
 		content.WriteString("## 📖 Featured Articles\n\n")
 		
+		// Track article numbering across categories
+		articleNum := 1
+		
 		// Render articles grouped by category in priority order
 		for _, categoryName := range categoryOrder {
 			if articles, exists := categoryGroups[categoryName]; exists && len(articles) > 0 {
 				content.WriteString(fmt.Sprintf("### %s\n\n", categoryName))
 				
-				for i, item := range articles {
+				// Sort articles within category by priority score
+				sortedArticles := SortByPriority(articles)
+				
+				for i, item := range sortedArticles {
 					if i > 0 {
 						content.WriteString("\n")
 					}
@@ -494,21 +588,24 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 					// Get content type emoji
 					contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
 					
-					// Article title with content type emoji
-					content.WriteString(fmt.Sprintf("**%s %s**\n\n", contentEmoji, item.Title))
+					// Article title with number and content type emoji
+					content.WriteString(fmt.Sprintf("**[%d] %s %s**\n\n", articleNum, contentEmoji, item.Title))
+					articleNum++
 					
 					// Key insight (summary) - simplified to just the summary
 					if template.IncludeSummaries && item.SummaryText != "" {
 						summary := item.SummaryText
 						if template.MaxSummaryLength > 0 {
-							summary = truncateToCompleteSentence(summary, template.MaxSummaryLength)
+							// Use strict word enforcement for scannable format (20-25 words)
+							summary = truncateToScannableFormat(summary, 20, template.MaxSummaryLength)
 						}
 						content.WriteString(fmt.Sprintf("%s\n\n", summary))
 					}
 					
-					// Link with clear call to action  
+					// Link with clear call to action and reference URL
 					if template.IncludeSourceLinks {
-						content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+						content.WriteString(fmt.Sprintf("%s\n", formatScannableLink(item.URL)))
+						content.WriteString(fmt.Sprintf("*Reference: %s*\n\n", item.URL))
 					}
 				}
 			}
@@ -541,26 +638,32 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 					content.WriteString("\n")
 				}
 				contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
-				content.WriteString(fmt.Sprintf("**%s %s**\n\n", contentEmoji, item.Title))
+				content.WriteString(fmt.Sprintf("**[%d] %s %s**\n\n", articleNum, contentEmoji, item.Title))
+				articleNum++
 				
 				if template.IncludeSummaries && item.SummaryText != "" {
 					summary := item.SummaryText
 					if template.MaxSummaryLength > 0 {
-						summary = truncateToCompleteSentence(summary, template.MaxSummaryLength)
+						// Use strict word enforcement for scannable format (20-25 words)
+						summary = truncateToScannableFormat(summary, 20, template.MaxSummaryLength)
 					}
 					content.WriteString(fmt.Sprintf("%s\n\n", summary))
 				}
 				
 				if template.IncludeSourceLinks {
-					content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+					content.WriteString(fmt.Sprintf("%s\n", formatScannableLink(item.URL)))
+					content.WriteString(fmt.Sprintf("*Reference: %s*\n\n", item.URL))
 				}
 			}
 		}
 	} else {
 		// Fallback to original format if not categorized
 		content.WriteString("## 📖 Featured Articles\n\n")
+		
+		// Sort all articles by priority score when not categorized
+		sortedItems := SortByPriority(digestItems)
 
-		for i, item := range digestItems {
+		for i, item := range sortedItems {
 			if i > 0 {
 				content.WriteString("\n")
 			}
@@ -568,26 +671,574 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 			// Get content type emoji
 			contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
 
-			// Article title with content type emoji
-			content.WriteString(fmt.Sprintf("### %s %s\n\n", contentEmoji, item.Title))
+			// Article title with number and content type emoji
+			content.WriteString(fmt.Sprintf("### [%d] %s %s\n\n", i+1, contentEmoji, item.Title))
 
 			// Key insight (summary) - simplified to just the summary
 			if template.IncludeSummaries && item.SummaryText != "" {
 				summary := item.SummaryText
 				if template.MaxSummaryLength > 0 {
-					summary = truncateToCompleteSentence(summary, template.MaxSummaryLength)
+					// Use strict word enforcement for scannable format (20-25 words)
+					summary = truncateToScannableFormat(summary, 20, template.MaxSummaryLength)
 				}
 				content.WriteString(fmt.Sprintf("%s\n\n", summary))
 			}
 
-			// Link with clear call to action
+			// Link with clear call to action and reference URL
 			if template.IncludeSourceLinks {
-				content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+				content.WriteString(fmt.Sprintf("%s\n", formatScannableLink(item.URL)))
+				content.WriteString(fmt.Sprintf("*Reference: %s*\n\n", item.URL))
 			}
 		}
 	}
 
 	return content.String()
+}
+
+// calculatePriorityScore computes a priority score for article ordering in scannable format
+// Score is based on multiple factors: sentiment, alerts, topic confidence, content type, etc.
+func calculatePriorityScore(item render.DigestData) float64 {
+	score := 0.5 // Base score
+	
+	// Alert factor (highest priority) - articles that triggered alerts are most important
+	if item.AlertTriggered {
+		score += 0.3
+	}
+	
+	// Sentiment factor - positive articles get slight boost, negative get attention too
+	sentimentBoost := 0.0
+	switch item.SentimentLabel {
+	case "positive":
+		sentimentBoost = 0.1
+	case "negative":
+		sentimentBoost = 0.05 // Negative news can be important too
+	case "neutral":
+		sentimentBoost = 0.0
+	}
+	score += sentimentBoost
+	
+	// Topic confidence factor - higher confidence means better categorization
+	if item.TopicConfidence > 0 {
+		score += item.TopicConfidence * 0.15 // Scale confidence (0-1) to contribute up to 0.15
+	}
+	
+	// Content type factor - certain content types are more valuable
+	switch item.ContentType {
+	case "pdf": // Research papers, whitepapers are high value
+		score += 0.1
+	case "youtube": // Video content often has unique insights
+		score += 0.05
+	default: // Web articles
+		score += 0.0
+	}
+	
+	// Title length factor - longer titles often indicate more substantial content
+	titleWords := len(strings.Fields(item.Title))
+	if titleWords >= 8 { // Substantial titles
+		score += 0.05
+	} else if titleWords <= 3 { // Very short titles might be less informative
+		score -= 0.05
+	}
+	
+	// Research queries factor - articles that generated more research queries are more interesting
+	if len(item.ResearchQueries) > 0 {
+		// Scale based on number of research queries (max 5)
+		queryBoost := float64(len(item.ResearchQueries)) * 0.02
+		if queryBoost > 0.1 {
+			queryBoost = 0.1
+		}
+		score += queryBoost
+	}
+	
+	// Ensure score stays within bounds [0.0, 1.0]
+	if score > 1.0 {
+		score = 1.0
+	} else if score < 0.0 {
+		score = 0.0
+	}
+	
+	return score
+}
+
+// SortByPriority sorts DigestData items by priority score (highest first)
+func SortByPriority(items []render.DigestData) []render.DigestData {
+	// Calculate priority scores if not already set
+	for i := range items {
+		if items[i].PriorityScore == 0.0 { // Only calculate if not already set
+			items[i].PriorityScore = calculatePriorityScore(items[i])
+		}
+	}
+	
+	// Create a copy to avoid modifying the original slice
+	sorted := make([]render.DigestData, len(items))
+	copy(sorted, items)
+	
+	// Simple bubble sort by priority score (descending)
+	for i := 0; i < len(sorted)-1; i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[i].PriorityScore < sorted[j].PriorityScore {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+	
+	return sorted
+}
+
+// generateLinkedInHook creates an engaging 2-3 line hook for LinkedIn posts
+func generateLinkedInHook(digestItems []render.DigestData, pattern string) string {
+	if len(digestItems) == 0 {
+		return "This week's tech highlights worth your attention 👇"
+	}
+
+	// Sort by priority to get the most impactful items
+	sortedItems := SortByPriority(digestItems)
+	topItem := sortedItems[0]
+	
+	// Extract key themes from top articles
+	var themes []string
+	for i, item := range sortedItems {
+		if i >= 3 { // Only look at top 3 for themes
+			break
+		}
+		
+		// Extract technology names and themes from titles
+		title := strings.ToLower(item.Title)
+		if strings.Contains(title, "ai") || strings.Contains(title, "artificial intelligence") {
+			themes = append(themes, "AI")
+		}
+		if strings.Contains(title, "gemini") || strings.Contains(title, "claude") || strings.Contains(title, "gpt") {
+			themes = append(themes, "LLM development")
+		}
+		if strings.Contains(title, "coding") || strings.Contains(title, "code") || strings.Contains(title, "developer") {
+			themes = append(themes, "coding tools")
+		}
+		if strings.Contains(title, "google") || strings.Contains(title, "anthropic") || strings.Contains(title, "openai") {
+			themes = append(themes, "big tech moves")
+		}
+	}
+	
+	// Generate hook based on pattern
+	switch pattern {
+	case "Pattern1":
+		// "X happened this week that changes Y"
+		if len(themes) > 0 {
+			return fmt.Sprintf("%s breakthroughs this week that change how engineers work.\n\n%s just made complex tasks instant. Here's what you need to know 👇", 
+				themes[0], extractProductName(topItem.Title))
+		}
+		return fmt.Sprintf("%s just changed the game for engineering teams.\n\nHere's what happened this week that you can't ignore 👇",
+			extractProductName(topItem.Title))
+			
+	case "Pattern2":
+		// "The gap between [leader] and [followers] just widened"
+		leader := extractCompanyName(topItem.Title)
+		if leader != "" {
+			return fmt.Sprintf("The gap between %s and everyone else just widened.\n\nWhile competitors catch up, here's what engineering leaders are already using 👇", leader)
+		}
+		return fmt.Sprintf("The gap between AI leaders and followers just widened.\n\n%s is proof. Here's this week's developments 👇",
+			extractProductName(topItem.Title))
+			
+	case "Pattern3":
+		// "While everyone talks about X, Y quietly shipped Z"
+		if len(sortedItems) >= 2 {
+			return fmt.Sprintf("While everyone talks about %s, %s quietly shipped game-changing updates.\n\nHere's what you missed this week 👇",
+				extractTopic(sortedItems[1].Title), extractProductName(topItem.Title))
+		}
+		return fmt.Sprintf("While everyone talks about AI hype, real engineering breakthroughs happened this week.\n\nHere's what actually matters 👇")
+		
+	default:
+		// Default engaging hook
+		return fmt.Sprintf("%s developments this week that engineering teams are already using.\n\nFrom %s to practical applications - here's what you need to know 👇",
+			themes[0], extractProductName(topItem.Title))
+	}
+}
+
+// extractProductName extracts product name from article title for hooks
+func extractProductName(title string) string {
+	title = strings.ToLower(title)
+	
+	// Common product patterns
+	products := []string{
+		"gemini", "claude", "chatgpt", "copilot", "jules",
+		"deep think", "opus", "gpt-4", "llama", "midjourney",
+	}
+	
+	for _, product := range products {
+		if strings.Contains(title, product) {
+			// Capitalize first letter
+			return strings.Title(product)
+		}
+	}
+	
+	// Fall back to first significant word
+	words := strings.Fields(title)
+	for _, word := range words {
+		if len(word) > 3 && !isStopWord(word) {
+			return strings.Title(word)
+		}
+	}
+	
+	return "AI tools"
+}
+
+// extractCompanyName extracts company name from article title for hooks  
+func extractCompanyName(title string) string {
+	title = strings.ToLower(title)
+	
+	companies := []string{
+		"google", "anthropic", "openai", "microsoft", "meta",
+		"apple", "amazon", "nvidia", "deepmind",
+	}
+	
+	for _, company := range companies {
+		if strings.Contains(title, company) {
+			return strings.Title(company)
+		}
+	}
+	
+	return ""
+}
+
+// extractTopic extracts general topic from title for contrast hooks
+func extractTopic(title string) string {
+	title = strings.ToLower(title)
+	
+	if strings.Contains(title, "ai") || strings.Contains(title, "artificial intelligence") {
+		return "AI"
+	}
+	if strings.Contains(title, "code") || strings.Contains(title, "coding") || strings.Contains(title, "programming") {
+		return "coding"
+	}
+	if strings.Contains(title, "cloud") || strings.Contains(title, "infrastructure") {
+		return "cloud infrastructure"
+	}
+	
+	return "tech developments"
+}
+
+// isStopWord checks if word should be ignored in product name extraction
+func isStopWord(word string) bool {
+	stopWords := []string{
+		"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", 
+		"of", "with", "by", "is", "are", "was", "were", "has", "have", "had",
+		"now", "new", "just", "here", "this", "that", "your", "you", "can",
+	}
+	
+	word = strings.ToLower(word)
+	for _, stopWord := range stopWords {
+		if word == stopWord {
+			return true
+		}
+	}
+	return false
+}
+
+// extractDomainFromURL extracts the domain name from a URL for source attribution
+func extractDomainFromURL(url string) string {
+	// Remove protocol
+	domain := strings.TrimPrefix(url, "https://")
+	domain = strings.TrimPrefix(domain, "http://")
+	
+	// Remove www prefix
+	domain = strings.TrimPrefix(domain, "www.")
+	
+	// Extract domain before first slash
+	if slashIndex := strings.Index(domain, "/"); slashIndex != -1 {
+		domain = domain[:slashIndex]
+	}
+	
+	// Clean up common subdomains for better readability
+	if strings.HasPrefix(domain, "blog.") {
+		domain = strings.TrimPrefix(domain, "blog.")
+	} else if strings.HasPrefix(domain, "docs.") {
+		domain = strings.TrimPrefix(domain, "docs.")
+	}
+	
+	return domain
+}
+
+// selectGameChanger identifies the most impactful article for "This Week's Game-Changer" section
+func selectGameChanger(digestItems []render.DigestData) *render.DigestData {
+	if len(digestItems) == 0 {
+		return nil
+	}
+
+	// Sort by priority to get the most impactful items
+	sortedItems := SortByPriority(digestItems)
+	
+	// Look for the highest impact item that's not just breaking news
+	for _, item := range sortedItems {
+		// Skip items with generic or unclear summaries
+		if strings.Contains(strings.ToLower(item.SummaryText), "no identifiable information") ||
+		   len(item.SummaryText) < 50 {
+			continue
+		}
+		
+		// Prefer items with clear practical impact
+		title := strings.ToLower(item.Title)
+		summary := strings.ToLower(item.SummaryText)
+		
+		// Boost score for items with practical impact keywords
+		impactScore := item.PriorityScore
+		
+		if strings.Contains(title, "launch") || strings.Contains(title, "available") || 
+		   strings.Contains(title, "release") || strings.Contains(summary, "now available") {
+			impactScore += 0.2 // Production-ready tools
+		}
+		
+		if strings.Contains(summary, "developer") || strings.Contains(summary, "coding") || 
+		   strings.Contains(summary, "programming") || strings.Contains(summary, "engineer") {
+			impactScore += 0.15 // Direct relevance to engineers
+		}
+		
+		if item.AlertTriggered {
+			impactScore += 0.1 // Alert-worthy developments
+		}
+		
+		// Update the item's priority score for comparison
+		item.PriorityScore = impactScore
+		
+		// Return the first high-impact item
+		if impactScore > 0.6 {
+			return &item
+		}
+	}
+	
+	// Fallback to highest priority item
+	return &sortedItems[0]
+}
+
+// formatGameChanger formats the game-changer section with winner details
+func formatGameChanger(gameChanger *render.DigestData) string {
+	if gameChanger == nil {
+		return ""
+	}
+	
+	var content strings.Builder
+	content.WriteString("## 🔥 This Week's Game-Changer\n\n")
+	
+	// Winner - use the actual article title (shortened if needed)
+	winnerTitle := gameChanger.Title
+	if len(winnerTitle) > 60 {
+		// Truncate long titles but preserve meaning
+		winnerTitle = winnerTitle[:57] + "..."
+	}
+	content.WriteString(fmt.Sprintf("**Winner:** %s\n\n", winnerTitle))
+	
+	// Why It Matters - extract key benefit from summary
+	whyItMatters := generateWhyItMatters(gameChanger.SummaryText)
+	content.WriteString(fmt.Sprintf("**Why It Matters:** %s\n\n", whyItMatters))
+	
+	// Try It - generate actionable suggestion
+	tryIt := generateTryItSuggestion(gameChanger.Title, gameChanger.SummaryText)
+	content.WriteString(fmt.Sprintf("**Try It:** %s\n\n", tryIt))
+	
+	// Reality Check - add balanced perspective
+	realityCheck := generateRealityCheck(gameChanger.SummaryText)
+	content.WriteString(fmt.Sprintf("**Reality Check:** %s\n\n", realityCheck))
+	
+	// User Take - add personal commentary if available
+	if gameChanger.UserTakeText != "" {
+		content.WriteString(fmt.Sprintf("**Your Take:** %s\n\n", gameChanger.UserTakeText))
+	}
+	
+	return content.String()
+}
+
+// generateWhyItMatters extracts the key benefit for engineers from article summary
+func generateWhyItMatters(summary string) string {
+	summary = strings.ToLower(summary)
+	
+	// Look for key impact phrases
+	if strings.Contains(summary, "parallel thinking") || strings.Contains(summary, "complex") {
+		return "Parallel thinking for complex code = junior dev tasks automated"
+	}
+	if strings.Contains(summary, "coding") && strings.Contains(summary, "assistant") {
+		return "AI coding assistance reaches production-ready quality"
+	}
+	if strings.Contains(summary, "beta") || strings.Contains(summary, "available") {
+		return "Production-ready tool for immediate team adoption"
+	}
+	if strings.Contains(summary, "improve") && (strings.Contains(summary, "coding") || strings.Contains(summary, "development")) {
+		return "Significant productivity gains for development workflows"
+	}
+	if strings.Contains(summary, "breakthrough") || strings.Contains(summary, "advance") {
+		return "Major capability leap that changes what's possible"
+	}
+	
+	// Fallback to generic but engaging message
+	return "Game-changing capability that engineering teams can use today"
+}
+
+// generateTryItSuggestion creates actionable advice for testing the tool/feature
+func generateTryItSuggestion(title, summary string) string {
+	title = strings.ToLower(title)
+	summary = strings.ToLower(summary)
+	
+	if strings.Contains(title, "deep think") || strings.Contains(summary, "complex") {
+		return "Upload your gnarliest legacy codebase section and ask for refactoring suggestions"
+	}
+	if strings.Contains(title, "jules") || strings.Contains(summary, "coding agent") {
+		return "Connect to your GitHub and let it handle a simple PR workflow"
+	}
+	if strings.Contains(title, "claude") && strings.Contains(summary, "coding") {
+		return "Test it on a complex debugging session with multi-file context"
+	}
+	if strings.Contains(title, "copilot") || strings.Contains(summary, "assistant") {
+		return "Try it on your most challenging algorithm implementation this week"
+	}
+	if strings.Contains(summary, "text-to-speech") || strings.Contains(summary, "voice") {
+		return "Generate voice narration for your technical documentation"
+	}
+	
+	// Extract product name and create generic suggestion
+	product := extractProductName(title)
+	return fmt.Sprintf("Test %s on your current project's biggest technical challenge", product)
+}
+
+// generateRealityCheck provides balanced perspective on limitations
+func generateRealityCheck(summary string) string {
+	summary = strings.ToLower(summary)
+	
+	if strings.Contains(summary, "beta") || strings.Contains(summary, "preview") {
+		return "Still in beta - expect some rough edges but worth exploring"
+	}
+	if strings.Contains(summary, "ultra") || strings.Contains(summary, "subscription") {
+		return "Requires premium subscription - evaluate ROI for your team first"
+	}
+	if strings.Contains(summary, "agent") || strings.Contains(summary, "autonomous") {
+		return "Great for exploration, still needs human validation for production"
+	}
+	if strings.Contains(summary, "improvement") || strings.Contains(summary, "upgrade") {
+		return "Incremental improvement - valuable but not revolutionary"
+	}
+	
+	// Default balanced view
+	return "Promising technology - test thoroughly before production deployment"
+}
+
+// generateDiscussionPrompt creates an engaging question to drive LinkedIn engagement
+func generateDiscussionPrompt(digestItems []render.DigestData) string {
+	if len(digestItems) == 0 {
+		return "What's the biggest AI development you're testing in your workflow this week? Share your experience below 👇"
+	}
+	
+	// Sort by priority to get the most discussion-worthy items
+	sortedItems := SortByPriority(digestItems)
+	
+	// Look for controversial, interesting, or practical topics
+	for _, item := range sortedItems {
+		title := strings.ToLower(item.Title)
+		summary := strings.ToLower(item.SummaryText)
+		
+		// Agent/automation discussions
+		if strings.Contains(title, "agent") || strings.Contains(summary, "autonomous") {
+			product := extractProductName(item.Title)
+			return fmt.Sprintf("%s claims to handle entire workflows autonomously.\n\nWho's already using AI agents for real work? What's working and what still needs human oversight?", product)
+		}
+		
+		// Coding tools discussions
+		if strings.Contains(summary, "coding") || strings.Contains(summary, "developer") {
+			return "AI coding tools are getting impressive results in demos.\n\nWhat's your experience with them on real projects? Where do they excel vs. fall short?"
+		}
+		
+		// Performance/speed claims
+		if strings.Contains(summary, "10x") || strings.Contains(summary, "faster") || strings.Contains(summary, "speed") {
+			return "Another week, another \"10x faster\" AI tool claim.\n\nWhich tools have actually made your team measurably more productive? Looking for real examples."
+		}
+		
+		// Beta/new releases
+		if strings.Contains(summary, "beta") || strings.Contains(summary, "launch") {
+			product := extractProductName(item.Title)
+			return fmt.Sprintf("%s just launched publicly after beta testing.\n\nWho tried it during beta? How does it compare to alternatives for your use cases?", product)
+		}
+		
+		// Subscription/pricing model
+		if strings.Contains(summary, "subscription") || strings.Contains(summary, "premium") {
+			return "More AI tools moving to premium tiers and higher pricing.\n\nHow do you evaluate ROI on AI subscriptions for your team? What's your decision framework?"
+		}
+	}
+	
+	// Topic-based fallbacks
+	themes := extractTopicThemes(sortedItems)
+	if len(themes) > 0 {
+		switch themes[0] {
+		case "AI":
+			return "AI capabilities are advancing rapidly, but adoption varies widely.\n\nWhat's the biggest gap between AI demos and production reality in your experience?"
+		case "coding tools":
+			return "Engineering teams are experimenting with more AI coding assistants.\n\nWhich tools have stuck in your workflow vs. which were just hype? Why?"
+		case "big tech moves":
+			return "Big tech companies are racing to ship AI features.\n\nWhich company's AI strategy do you think will win for enterprise adoption? Why?"
+		default:
+			return "This week brought several interesting tech developments.\n\nWhich one are you most likely to try with your team? What's your evaluation process?"
+		}
+	}
+	
+	// Default engaging question
+	return "Another week of rapid AI development across the industry.\n\nWhat's the most interesting tool or development you're considering for your workflow? Why that one?"
+}
+
+// extractTopicThemes extracts common themes from top articles for discussion prompts
+func extractTopicThemes(digestItems []render.DigestData) []string {
+	var themes []string
+	themeCount := make(map[string]int)
+	
+	for i, item := range digestItems {
+		if i >= 5 { // Only check top 5 articles
+			break
+		}
+		
+		title := strings.ToLower(item.Title)
+		summary := strings.ToLower(item.SummaryText)
+		
+		if strings.Contains(title, "ai") || strings.Contains(summary, "artificial intelligence") {
+			themeCount["AI"]++
+		}
+		if strings.Contains(title, "code") || strings.Contains(summary, "coding") || strings.Contains(summary, "developer") {
+			themeCount["coding tools"]++
+		}
+		if strings.Contains(title, "google") || strings.Contains(title, "anthropic") || strings.Contains(title, "openai") {
+			themeCount["big tech moves"]++
+		}
+		if strings.Contains(title, "agent") || strings.Contains(summary, "autonomous") {
+			themeCount["AI agents"]++
+		}
+	}
+	
+	// Sort themes by frequency
+	type themeFreq struct {
+		theme string
+		count int
+	}
+	
+	var sortedThemes []themeFreq
+	for theme, count := range themeCount {
+		sortedThemes = append(sortedThemes, themeFreq{theme, count})
+	}
+	
+	// Simple sort by count (descending)
+	for i := 0; i < len(sortedThemes)-1; i++ {
+		for j := i + 1; j < len(sortedThemes); j++ {
+			if sortedThemes[i].count < sortedThemes[j].count {
+				sortedThemes[i], sortedThemes[j] = sortedThemes[j], sortedThemes[i]
+			}
+		}
+	}
+	
+	// Extract theme names
+	for _, tf := range sortedThemes {
+		themes = append(themes, tf.theme)
+	}
+	
+	return themes
+}
+
+// formatScannableLink formats links with source attribution for scannable format
+func formatScannableLink(url string) string {
+	domain := extractDomainFromURL(url)
+	
+	// Format with domain and subtle styling
+	return fmt.Sprintf("🔗 [Read more](%s) *(%s)*", url, domain)
 }
 
 // getContentTypeEmoji returns appropriate emoji based on content type and title
@@ -644,37 +1295,6 @@ func getContentTypeEmoji(contentType, title string) string {
 }
 
 // generateWhyItMatters creates a default "why it matters" statement when MyTake is not available
-func generateWhyItMatters(item render.DigestData) string {
-	titleLower := strings.ToLower(item.Title)
-
-	// AI/ML related
-	if strings.Contains(titleLower, "ai") || strings.Contains(titleLower, "llm") || strings.Contains(titleLower, "machine learning") {
-		return "Key development in AI that could impact how we work with intelligent systems"
-	}
-
-	// Tools/platforms
-	if strings.Contains(titleLower, "tool") || strings.Contains(titleLower, "platform") {
-		return "New tool that could enhance productivity and development workflows"
-	}
-
-	// Security
-	if strings.Contains(titleLower, "security") || strings.Contains(titleLower, "vulnerability") {
-		return "Security insight important for protecting systems and data"
-	}
-
-	// Performance/optimization
-	if strings.Contains(titleLower, "performance") || strings.Contains(titleLower, "optimization") {
-		return "Performance insight that could improve system efficiency"
-	}
-
-	// Research/studies
-	if strings.Contains(titleLower, "research") || strings.Contains(titleLower, "study") {
-		return "Research findings that provide data-driven insights for decision making"
-	}
-
-	// Generic fallback
-	return "Important development worth understanding for staying current in tech"
-}
 
 // capitalizeFirst capitalizes the first letter of a string
 func capitalizeFirst(s string) string {
@@ -1201,6 +1821,13 @@ func RenderWithTemplateAndMyTakeReturnContentWithTitle(digestItems []render.Dige
 	// Process each article using helper function
 	content.WriteString(renderArticlesSection(digestItems, template))
 
+	// Discussion prompt section for LinkedIn engagement
+	if template.IncludeDiscussionPrompt && len(digestItems) > 0 {
+		content.WriteString("\n\n## 💭 Your Take?\n\n")
+		content.WriteString(generateDiscussionPrompt(digestItems))
+		content.WriteString("\n\n")
+	}
+
 	// Conclusion
 	if template.ConclusionText != "" {
 		content.WriteString(template.SectionSeparator)
@@ -1228,12 +1855,7 @@ func RenderWithTemplateAndMyTakeReturnContentWithTitle(digestItems []render.Dige
 		content.WriteString("\n")
 	}
 
-	// References section
-	referencesSection := renderReferencesSection(digestItems)
-	if referencesSection != "" {
-		content.WriteString("\n\n---\n\n")
-		content.WriteString(referencesSection)
-	}
+	// References removed - now included in Featured Articles section with numbering
 
 	// Write to file and return both content and path
 	filePath, err := render.WriteDigestToFile(content.String(), outputDir, filename)
@@ -1473,12 +2095,7 @@ func RenderWithStructuredContent(digestItems []render.DigestData, outputDir stri
 		}
 	}
 
-	// References section (up to 7 references)
-	referencesSection := renderReferencesSection(digestItems)
-	if referencesSection != "" {
-		content.WriteString("\n\n---\n\n")
-		content.WriteString(referencesSection)
-	}
+	// References removed - now included in article listings with numbering
 
 	// Write to file and return both content and path
 	filePath, err := render.WriteDigestToFile(content.String(), outputDir, filename)
@@ -1514,16 +2131,37 @@ func RenderWithBannerAndInsights(digestItems []render.DigestData, outputDir stri
 		content.WriteString(fmt.Sprintf("%s\n\n", template.IntroductionText))
 	}
 
+	// LinkedIn Hook (LinkedIn optimization)
+	if template.IncludeLinkedInHook && len(digestItems) > 0 {
+		linkedInHook := generateLinkedInHook(digestItems, "Pattern1")
+		if linkedInHook != "" {
+			content.WriteString(linkedInHook)
+			content.WriteString("\n\n")
+		}
+	}
+
 	// Final digest summary (if provided)
 	if finalDigest != "" {
 		content.WriteString("## Executive Summary\n\n")
-		// v2.0: Limit executive summary to 100-150 words
+		// v2.0: For scannable format, allow full executive summary without truncation
+		// Other formats can have reasonable limits to maintain digestibility
 		executiveSummary := finalDigest
-		if template.MaxDigestWords > 0 {
-			executiveSummary = truncateToWordLimit(finalDigest, 150) // Max 150 words for executive summary
+		if template.MaxDigestWords > 0 && template.Format != FormatScannableNewsletter {
+			// Allow generous executive summary length for most formats, but not scannable
+			executiveSummary = truncateToWordLimit(finalDigest, 250) // Increased from 150 to 250 words
 		}
+		// For scannable format, use the complete executive summary without truncation
 		content.WriteString(executiveSummary)
 		content.WriteString("\n\n")
+	}
+
+	// Game-Changer section (LinkedIn optimization)
+	if template.IncludeGameChanger && len(digestItems) > 0 {
+		gameChanger := selectGameChanger(digestItems)
+		if gameChanger != nil {
+			content.WriteString(formatGameChanger(gameChanger))
+			content.WriteString("---\n\n")
+		}
 	}
 
 	// Alert Monitoring Section (moved up for prominence) - skip for scannable format
@@ -1561,6 +2199,13 @@ func RenderWithBannerAndInsights(digestItems []render.DigestData, outputDir stri
 		content.WriteString(articlesSection)
 	}
 
+	// Discussion prompt section for LinkedIn engagement
+	if template.IncludeDiscussionPrompt && len(digestItems) > 0 {
+		content.WriteString("\n\n## 💭 Your Take?\n\n")
+		content.WriteString(generateDiscussionPrompt(digestItems))
+		content.WriteString("\n\n")
+	}
+
 	// Conclusion
 	if template.ConclusionText != "" {
 		content.WriteString("\n\n")
@@ -1589,12 +2234,7 @@ func RenderWithBannerAndInsights(digestItems []render.DigestData, outputDir stri
 		content.WriteString("\n")
 	}
 
-	// References section
-	referencesSection := renderReferencesSection(digestItems)
-	if referencesSection != "" {
-		content.WriteString("\n\n---\n\n")
-		content.WriteString(referencesSection)
-	}
+	// References removed - now included in Featured Articles section with numbering
 
 	// v2.0: Add word count and read time statistics
 	digestContent := content.String()

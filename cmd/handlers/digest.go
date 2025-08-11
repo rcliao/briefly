@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -254,7 +255,7 @@ func runDigest(cmd *cobra.Command, inputFile, outputDir, format string, dryRun, 
 	}
 
 	// Generate final digest based on format
-	digestPath, err := generateOutput(cmd, digestItems, processedArticles, insightsData, outputDir, format, styleGuide, withBanner)
+	digestPath, err := generateOutput(cmd, digestItems, processedArticles, insightsData, outputDir, format, styleGuide, withBanner, interactive)
 	if err != nil {
 		return fmt.Errorf("failed to generate output: %w", err)
 	}
@@ -989,7 +990,7 @@ func loadStyleGuide(cmd *cobra.Command) (string, error) {
 	return string(content), nil
 }
 
-func generateOutput(cmd *cobra.Command, digestItems []render.DigestData, processedArticles []core.Article, insightsData *InsightsData, outputDir, format, styleGuide string, withBanner bool) (string, error) {
+func generateOutput(cmd *cobra.Command, digestItems []render.DigestData, processedArticles []core.Article, insightsData *InsightsData, outputDir, format, styleGuide string, withBanner, interactive bool) (string, error) {
 	switch format {
 	case "brief":
 		return generateTeamFriendlyBrief(digestItems, outputDir)
@@ -1002,7 +1003,7 @@ func generateOutput(cmd *cobra.Command, digestItems []render.DigestData, process
 	case "condensed":
 		return generateCondensedOutput(digestItems, outputDir, insightsData)
 	default:
-		return generateStandardOutput(digestItems, processedArticles, insightsData, outputDir, format, styleGuide, withBanner)
+		return generateStandardOutput(digestItems, processedArticles, insightsData, outputDir, format, styleGuide, withBanner, interactive)
 	}
 }
 
@@ -1206,7 +1207,7 @@ func generateCondensedOutput(digestItems []render.DigestData, outputDir string, 
 	return filepath, nil
 }
 
-func generateStandardOutput(digestItems []render.DigestData, processedArticles []core.Article, insightsData *InsightsData, outputDir, format, styleGuide string, withBanner bool) (string, error) {
+func generateStandardOutput(digestItems []render.DigestData, processedArticles []core.Article, insightsData *InsightsData, outputDir, format, styleGuide string, withBanner, interactive bool) (string, error) {
 	// Initialize LLM client for final digest generation
 	llmClient, err := llm.NewClient("")
 	if err != nil {
@@ -1235,6 +1236,9 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 	}
 
 	template := templates.GetTemplate(digestFormat)
+
+	// Handle interactive article selection if enabled  
+	digestItems = handleInteractiveSelection(digestItems, interactive)
 
 	// Generate final digest summary using LLM
 	fmt.Printf("Generating final digest summary using %s format...\n", format)
@@ -1845,4 +1849,120 @@ func getUncategorizedItems(digestItems []render.DigestData, categoryGroups map[s
 	}
 	
 	return uncategorized
+}
+
+// handleInteractiveSelection manages the interactive article selection workflow
+func handleInteractiveSelection(digestItems []render.DigestData, enableInteractive bool) []render.DigestData {
+	if !enableInteractive {
+		return digestItems
+	}
+	
+	fmt.Println("\n🎯 Starting interactive article selection...")
+	
+	// For now, implement a simple interactive flow using built-in Go packages
+	// This will avoid the import issue and provide basic functionality
+	
+	// Sort articles by priority score using proper calculation (highest first)
+	digestItems = templates.SortByPriority(digestItems)
+	
+	fmt.Printf("\n📖 Select Game-Changer Article (%d articles processed)\n", len(digestItems))
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// Display articles with priority scores and summaries
+	for i, article := range digestItems {
+		// Truncate long titles
+		title := article.Title
+		if len(title) > 60 {
+			title = title[:57] + "..."
+		}
+		
+		// Truncate summary for readability
+		summary := article.SummaryText
+		if len(summary) > 120 {
+			summary = summary[:117] + "..."
+		}
+		
+		// Get category emoji from MyTake
+		categoryEmoji := extractCategoryEmoji(article.MyTake)
+		
+		fmt.Printf("[%d] %s %s (Score: %.2f)\n", 
+			i+1, categoryEmoji, title, article.PriorityScore)
+		fmt.Printf("    📝 %s\n\n", summary)
+	}
+	
+	fmt.Printf("\nEnter number (1-%d), or 'a' for auto-selection: ", len(digestItems))
+	
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		if !scanner.Scan() {
+			logger.Warn("Failed to read input, using auto-selection")
+			break
+		}
+		
+		input := strings.TrimSpace(scanner.Text())
+		
+		// Handle auto-selection
+		if strings.ToLower(input) == "a" || strings.ToLower(input) == "auto" {
+			selectedArticle := &digestItems[0] // Highest priority
+			selectedArticle.UserSelected = false // Mark as auto-selected
+			fmt.Printf("✅ Auto-selected: %s\n", selectedArticle.Title)
+			return digestItems
+		}
+		
+		// Parse number selection
+		num, err := strconv.Atoi(input)
+		if err != nil || num < 1 || num > len(digestItems) {
+			fmt.Printf("Invalid selection. Enter number (1-%d) or 'a' for auto: ", len(digestItems))
+			continue
+		}
+		
+		// Select the article
+		selectedArticle := &digestItems[num-1]
+		selectedArticle.UserSelected = true // Mark as user-selected
+		selectedArticle.PriorityScore = 1.0 // Maximum priority to ensure it becomes Game-Changer
+		
+		fmt.Printf("✅ Selected: %s\n", selectedArticle.Title)
+		
+		// Simple user take input
+		fmt.Printf("\n📝 Add your personal take (optional, press Enter to skip):\n> ")
+		if scanner.Scan() {
+			userTake := strings.TrimSpace(scanner.Text())
+			if userTake != "" {
+				selectedArticle.UserTakeText = userTake
+				fmt.Printf("✅ Take captured (%d characters)\n", len(userTake))
+			}
+		}
+		
+		// Update the article in slice
+		digestItems[num-1] = *selectedArticle
+		
+		fmt.Printf("✅ Interactive selection complete. Selected: %s\n", selectedArticle.Title)
+		return digestItems
+	}
+	
+	return digestItems
+}
+
+// extractCategoryEmoji extracts emoji from category info in MyTake field
+func extractCategoryEmoji(myTake string) string {
+	if myTake == "" {
+		return "📄"
+	}
+	
+	// Extract emoji from format like "🔥 Breaking & Hot | insight"
+	parts := strings.Split(myTake, " ")
+	if len(parts) > 0 {
+		// Check if first part contains emoji
+		emoji := parts[0]
+		if len(emoji) > 0 {
+			// Basic emoji detection (Unicode range for common emojis)
+			for _, r := range emoji {
+				if r >= 0x1F300 && r <= 0x1F9FF {
+					return emoji
+				}
+			}
+		}
+	}
+	
+	return "📄" // Default document emoji
 }
