@@ -1342,7 +1342,7 @@ The articles have been organized into categories (Breaking & Hot, Product Update
 	prompt := fmt.Sprintf(`You are creating a cohesive, professionally-written digest that synthesizes multiple article summaries into one flowing narrative. Generate the COMPLETE digest content as a unified piece of writing.
 
 TARGET FORMAT: %s (%s)
-STRUCTURAL GUIDANCE: %s
+STRUCTURAL GUIDANCE: %s%s
 
 YOUR TASK:
 Create a complete digest that flows naturally from insight to insight, avoiding the disconnected "section-by-section" approach. The content should feel like a single, coherent piece of analysis written by a knowledgeable professional.
@@ -1451,4 +1451,78 @@ Remember: Respond with EXACTLY the format above, nothing else.`, text)
 	}
 
 	return score, label, emoji, nil
+}
+
+// ChatSession represents an active chat session with the LLM
+type ChatSession struct {
+	model   *genai.GenerativeModel
+	session *genai.ChatSession
+	context string
+}
+
+// StartChatSession initializes a new chat session with the given context
+func (c *Client) StartChatSession(ctx context.Context, initialContext string) (*ChatSession, error) {
+	// Create a new model instance for this chat session
+	model := c.gClient.GenerativeModel(c.modelName)
+	
+	// Configure the model for chat
+	model.SetTemperature(0.7)
+	model.SetTopK(40)
+	model.SetTopP(0.95)
+	model.SetMaxOutputTokens(2048)
+	
+	// Start the chat session with initial context
+	chatSession := model.StartChat()
+	
+	// Send the initial context as a system message
+	resp, err := chatSession.SendMessage(ctx, genai.Text(initialContext))
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize chat session: %w", err)
+	}
+	
+	// Verify we got a response
+	if resp == nil || len(resp.Candidates) == 0 {
+		return nil, fmt.Errorf("no response from model during initialization")
+	}
+	
+	return &ChatSession{
+		model:   model,
+		session: chatSession,
+		context: initialContext,
+	}, nil
+}
+
+// SendChatMessage sends a message to the chat session and returns the response
+func (c *Client) SendChatMessage(ctx context.Context, session *ChatSession, message string) (string, error) {
+	if session == nil || session.session == nil {
+		return "", fmt.Errorf("invalid chat session")
+	}
+	
+	// Send the message
+	resp, err := session.session.SendMessage(ctx, genai.Text(message))
+	if err != nil {
+		return "", fmt.Errorf("failed to send message: %w", err)
+	}
+	
+	// Extract response text
+	if resp == nil || len(resp.Candidates) == 0 {
+		return "", fmt.Errorf("no response from model")
+	}
+	
+	var responseText string
+	for _, candidate := range resp.Candidates {
+		if candidate.Content != nil {
+			for _, part := range candidate.Content.Parts {
+				if text, ok := part.(genai.Text); ok {
+					responseText += string(text)
+				}
+			}
+		}
+	}
+	
+	if responseText == "" {
+		return "", fmt.Errorf("empty response from model")
+	}
+	
+	return strings.TrimSpace(responseText), nil
 }

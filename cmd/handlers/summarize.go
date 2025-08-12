@@ -4,6 +4,7 @@ import (
 	"briefly/internal/config"
 	"briefly/internal/core"
 	"briefly/internal/fetch"
+	"briefly/internal/interactive"
 	"briefly/internal/llm"
 	"briefly/internal/logger"
 	"briefly/internal/store"
@@ -38,21 +39,21 @@ func NewSummarizeCmd() *cobra.Command {
 		Long: `Summarize a single article or webpage with AI-powered analysis.
 
 This command fetches content from a URL, extracts the main text, and generates
-both a concise summary and key highlights/moments from the article.
+a detailed summary with key highlights/moments from the article by default.
 
 Features:
 - Smart content extraction from web pages, PDFs, and YouTube videos
-- Concise summary generation optimized for quick reading
+- Detailed summary generation with key highlights (default)
 - Key moments extraction with quotes and explanations
 - Multiple output formats: terminal display, JSON, or markdown file
 - Intelligent caching to avoid redundant API calls
 
 Examples:
-  # Basic summarization to terminal
+  # Basic summarization with highlights and detailed style (default)
   briefly summarize https://example.com/article
 
-  # Get key highlights/moments  
-  briefly summarize https://example.com/article --highlights
+  # Disable highlights for a simpler summary
+  briefly summarize https://example.com/article --highlights=false
 
   # Output as JSON for integration
   briefly summarize https://example.com/article --format json
@@ -60,19 +61,20 @@ Examples:
   # Save to markdown file
   briefly summarize https://example.com/article --format markdown --output summary.md
 
-  # Specify summary style
-  briefly summarize https://example.com/article --style brief
-  briefly summarize https://example.com/article --style detailed`,
+  # Use a different summary style (only applies when highlights are disabled)
+  briefly summarize https://example.com/article --highlights=false --style brief
+  briefly summarize https://example.com/article --highlights=false --style standard`,
 		Args: cobra.ExactArgs(1),
 		Run:  summarizeRunFunc,
 	}
 
 	// Add flags
-	summarizeCmd.Flags().Bool("highlights", false, "Extract key moments and highlights with quotes")
+	summarizeCmd.Flags().Bool("highlights", true, "Extract key moments and highlights with quotes")
 	summarizeCmd.Flags().StringP("format", "f", "terminal", "Output format: terminal, json, markdown")
 	summarizeCmd.Flags().StringP("output", "o", "", "Output file path (for json/markdown formats)")
-	summarizeCmd.Flags().String("style", "standard", "Summary style: brief, standard, detailed")
+	summarizeCmd.Flags().String("style", "detailed", "Summary style: brief, standard, detailed")
 	summarizeCmd.Flags().Bool("no-cache", false, "Skip cache and force fresh content fetch")
+	summarizeCmd.Flags().Bool("chat", false, "Start interactive chat session after summary")
 
 	return summarizeCmd
 }
@@ -92,6 +94,7 @@ func summarizeRunFunc(cmd *cobra.Command, args []string) {
 	outputFile, _ := cmd.Flags().GetString("output")
 	style, _ := cmd.Flags().GetString("style")
 	noCache, _ := cmd.Flags().GetBool("no-cache")
+	chatMode, _ := cmd.Flags().GetBool("chat")
 
 	// Validate format
 	validFormats := []string{"terminal", "json", "markdown"}
@@ -137,14 +140,14 @@ func summarizeRunFunc(cmd *cobra.Command, args []string) {
 	// Initialize fetcher
 	fetcher := fetch.NewContentProcessor()
 
-	if err := runSummarization(url, style, highlights, format, outputFile, fetcher, llmClient, cacheStore); err != nil {
+	if err := runSummarization(url, style, highlights, format, outputFile, chatMode, fetcher, llmClient, cacheStore); err != nil {
 		logger.Error("Failed to summarize article", err, "url", url)
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func runSummarization(url, style string, highlights bool, format, outputFile string, 
+func runSummarization(url, style string, highlights bool, format, outputFile string, chatMode bool,
 	fetcher *fetch.ContentProcessor, llmClient *llm.Client, cacheStore *store.Store) error {
 	
 	fmt.Printf("🔍 Fetching content from: %s\n", url)
@@ -199,17 +202,23 @@ func runSummarization(url, style string, highlights bool, format, outputFile str
 
 	// Generate summary if not cached
 	if summary == nil {
-		fmt.Printf("🤖 Generating %s summary...\n", style)
+		// When highlights are enabled, always use detailed style
+		actualStyle := style
+		if highlights {
+			actualStyle = "detailed"
+		}
+		
+		fmt.Printf("🤖 Generating %s summary with highlights...\n", actualStyle)
 		
 		var generatedSummary core.Summary
 		var err error
 
 		if highlights {
-			// Use key moments extraction
+			// Use key moments extraction with detailed format
 			generatedSummary, err = llmClient.SummarizeArticleWithKeyMoments(*article)
 		} else {
 			// Use format-specific summarization
-			generatedSummary, err = llmClient.SummarizeArticleTextWithFormat(*article, style)
+			generatedSummary, err = llmClient.SummarizeArticleTextWithFormat(*article, actualStyle)
 		}
 
 		if err != nil {
@@ -247,12 +256,31 @@ func runSummarization(url, style string, highlights bool, format, outputFile str
 	// Output based on format
 	switch format {
 	case "json":
-		return outputJSON(result, outputFile)
+		if err := outputJSON(result, outputFile); err != nil {
+			return err
+		}
 	case "markdown":
-		return outputMarkdown(result, outputFile, highlights)
+		if err := outputMarkdown(result, outputFile, highlights); err != nil {
+			return err
+		}
 	default: // terminal
-		return outputTerminal(result, highlights, fromCache, summaryFromCache)
+		if err := outputTerminal(result, highlights, fromCache, summaryFromCache); err != nil {
+			return err
+		}
 	}
+
+	// Start interactive chat if requested
+	if chatMode && format == "terminal" {
+		chatHandler := interactive.NewChatHandler(llmClient)
+		if err := chatHandler.StartChatSession(article, url, summary); err != nil {
+			return fmt.Errorf("failed to start chat session: %w", err)
+		}
+		if err := chatHandler.RunChatLoop(); err != nil {
+			return fmt.Errorf("chat session error: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func outputTerminal(result SummarizeResult, highlights bool, fromCache, summaryFromCache bool) error {

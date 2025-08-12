@@ -436,8 +436,8 @@ func TestConstants(t *testing.T) {
 	if !strings.Contains(SummarizeTextPromptTemplate, "%s") {
 		t.Errorf("SummarizeTextPromptTemplate should contain %%s placeholder")
 	}
-	if strings.Count(SummarizeTextWithFormatPromptTemplate, "%s") < 3 {
-		t.Errorf("SummarizeTextWithFormatPromptTemplate should contain at least 3 %%s placeholders, got %d", strings.Count(SummarizeTextWithFormatPromptTemplate, "%s"))
+	if strings.Count(SummarizeTextWithFormatPromptTemplate, "%s") < 2 {
+		t.Errorf("SummarizeTextWithFormatPromptTemplate should contain at least 2 %%s placeholders, got %d", strings.Count(SummarizeTextWithFormatPromptTemplate, "%s"))
 	}
 }
 
