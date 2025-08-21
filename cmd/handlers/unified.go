@@ -43,10 +43,14 @@ type UnifiedHandler struct {
 
 // NewUnifiedHandler creates a new unified command handler
 func NewUnifiedHandler() *UnifiedHandler {
-	// TODO: Initialize services properly in Phase 2
+	// Initialize services for Phase 2
+	// Note: This is a simplified initialization for Phase 2
+	// Phase 3 will add proper dependency injection
+	
+	// For now, return handler with nil services and implement basic functionality
 	return &UnifiedHandler{
-		// intelligenceService: services.NewIntelligenceService(),
-		// cacheService:        services.NewCacheService(),
+		intelligenceService: nil, // Will initialize when needed
+		cacheService:        nil, // Will initialize when needed
 	}
 }
 
@@ -224,21 +228,68 @@ func (h *UnifiedHandler) processInteractive(ctx context.Context, cmd *Command) e
 }
 
 func (h *UnifiedHandler) processDigest(ctx context.Context, cmd *Command) error {
-	fmt.Printf("📄 Processing digest request...\n")
+	fmt.Printf("📄 Processing digest with Signal+Sources format...\n")
+	
+	// Phase 2: Use existing digest command but with new output format
+	// This provides immediate value while we build the full pipeline
 	
 	if cmd.Input != "" {
 		fmt.Printf("Input file: %s\n", cmd.Input)
+		return h.processDigestFile(ctx, cmd)
 	}
 	
 	if len(cmd.URLs) > 0 {
 		fmt.Printf("URLs to process: %v\n", cmd.URLs)
+		return h.processDigestURLs(ctx, cmd)
 	}
 	
-	// TODO: Implement unified digest processing in Phase 2-4
-	fmt.Println("Unified digest processing will be implemented in Phase 2-4")
-	fmt.Println("For now, use the existing 'digest' command")
+	return fmt.Errorf("no input file or URLs provided")
+}
+
+// processDigestFile handles file-based digest generation
+func (h *UnifiedHandler) processDigestFile(ctx context.Context, cmd *Command) error {
+	// Delegate to existing digest command for Phase 2
+	// But modify output format
 	
-	return nil
+	fmt.Printf("🔄 Processing file with enhanced format...\n")
+	
+	// Use existing digest command with scannable format
+	digestCmd := NewDigestCmd()
+	args := []string{cmd.Input, "--format", "scannable"}
+	
+	// Apply word limit if specified (default is 300)
+	if cmd.Options.MaxWordCount > 0 {
+		args = append(args, "--max-words", fmt.Sprintf("%d", cmd.Options.MaxWordCount))
+	}
+	
+	digestCmd.SetArgs(args)
+	
+	fmt.Printf("📊 Word limit: %d | Quality threshold: %.1f\n", 
+		cmd.Options.MaxWordCount, cmd.Options.QualityThreshold)
+	
+	return digestCmd.Execute()
+}
+
+// processDigestURLs handles URL-based digest generation  
+func (h *UnifiedHandler) processDigestURLs(ctx context.Context, cmd *Command) error {
+	// For Phase 2, create a temporary file with URLs and process it
+	
+	tempFile := "/tmp/briefly_urls.md"
+	
+	// Write URLs to temp file
+	var content strings.Builder
+	content.WriteString("# Temporary URL List\n\n")
+	for _, url := range cmd.URLs {
+		content.WriteString(fmt.Sprintf("- %s\n", url))
+	}
+	
+	if err := os.WriteFile(tempFile, []byte(content.String()), 0644); err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	
+	// Process the temp file
+	cmd.Input = tempFile
+	return h.processDigestFile(ctx, cmd)
 }
 
 func (h *UnifiedHandler) processResearch(ctx context.Context, cmd *Command) error {
