@@ -19,34 +19,52 @@ const (
 	ContentTypeYouTube ContentType = "youtube"
 )
 
-// Article represents the content fetched and processed from a Link.
+// Article represents the content fetched and processed from a Link (v3.0 simplified)
 type Article struct {
-	ID              string      `json:"id"`               // Unique identifier for the article
-	LinkID          string      `json:"link_id"`          // Identifier of the source Link
-	Title           string      `json:"title"`            // Title of the article
-	ContentType     ContentType `json:"content_type"`     // Type of content (html, pdf, youtube)
-	FetchedHTML     string      `json:"fetched_html"`     // Raw HTML content fetched
-	RawContent      string      `json:"raw_content"`      // Raw content for non-HTML types (PDF text, YouTube transcript)
-	CleanedText     string      `json:"cleaned_text"`     // Cleaned and parsed text content
-	DateFetched     time.Time   `json:"date_fetched"`     // Timestamp when the article was fetched
-	MyTake          string      `json:"my_take"`          // Optional user's note on the article (can be empty)
-	Embedding       []float64   `json:"embedding"`        // Vector embedding of the article content
-	TopicCluster    string      `json:"topic_cluster"`    // Assigned topic cluster label
-	TopicConfidence float64     `json:"topic_confidence"` // Confidence score for topic assignment
-	// Content-specific metadata
-	Duration  int    `json:"duration,omitempty"`   // Video duration in seconds (YouTube only)
-	Channel   string `json:"channel,omitempty"`    // Channel name (YouTube only)
-	FileSize  int64  `json:"file_size,omitempty"`  // File size in bytes (PDF only)
-	PageCount int    `json:"page_count,omitempty"` // Number of pages (PDF only)
-	// v0.4 Insights fields
-	SentimentScore  float64  `json:"sentiment_score"`  // Sentiment analysis score (-1.0 to 1.0)
-	SentimentLabel  string   `json:"sentiment_label"`  // Sentiment label (positive, negative, neutral)
-	SentimentEmoji  string   `json:"sentiment_emoji"`  // Emoji representation of sentiment
-	AlertTriggered  bool     `json:"alert_triggered"`  // Whether this article triggered any alerts
-	AlertConditions []string `json:"alert_conditions"` // List of alert conditions that matched
-	ResearchQueries []string `json:"research_queries"` // Generated research queries for this article
-	// v2.0 Relevance scoring
-	RelevanceScore float64 `json:"relevance_score"` // Relevance score (0.0 to 1.0) for content filtering
+	// Core identity
+	ID              string      `json:"id"`
+	URL             string      `json:"url"`              // Direct URL (no LinkID indirection)
+	Title           string      `json:"title"`
+	ContentType     ContentType `json:"content_type"`     // html, pdf, youtube
+	
+	// Content
+	CleanedText     string    `json:"cleaned_text"`
+	RawContent      string    `json:"raw_content,omitempty"` // For non-HTML
+	
+	// Processing metadata
+	DateFetched     time.Time `json:"date_fetched"`
+	ProcessingMode  string    `json:"processing_mode"` // local, cloud, hybrid
+	
+	// Intelligence
+	TopicCluster      string  `json:"topic_cluster"`
+	ClusterConfidence float64 `json:"cluster_confidence"`
+	QualityScore      float64 `json:"quality_score"`    // 0.0-1.0
+	SignalStrength    float64 `json:"signal_strength"`  // 0.0-1.0 (replaces RelevanceScore)
+	
+	// Content-specific metadata (conditional)
+	Duration  int    `json:"duration,omitempty"`   // YouTube only
+	Channel   string `json:"channel,omitempty"`    // YouTube only
+	PageCount int    `json:"page_count,omitempty"` // PDF only
+	
+	// User interaction
+	ExplorationCount int       `json:"exploration_count"` // How often user clicked through
+	UserRating       *float64  `json:"user_rating,omitempty"` // 1-5 stars
+	Notes            string    `json:"notes,omitempty"`
+	
+	// Backward compatibility (deprecated in v3.0)
+	LinkID           string    `json:"link_id,omitempty"`        // Legacy
+	FetchedHTML      string    `json:"fetched_html,omitempty"`   // Legacy
+	MyTake           string    `json:"my_take,omitempty"`        // Legacy
+	Embedding        []float64 `json:"embedding,omitempty"`      // Legacy (expensive)
+	TopicConfidence  float64   `json:"topic_confidence,omitempty"` // Legacy naming
+	SentimentScore   float64   `json:"sentiment_score,omitempty"`  // Legacy
+	SentimentLabel   string    `json:"sentiment_label,omitempty"`  // Legacy
+	SentimentEmoji   string    `json:"sentiment_emoji,omitempty"`  // Legacy
+	AlertTriggered   bool      `json:"alert_triggered,omitempty"`  // Legacy
+	AlertConditions  []string  `json:"alert_conditions,omitempty"` // Legacy
+	ResearchQueries  []string  `json:"research_queries,omitempty"` // Legacy
+	RelevanceScore   float64   `json:"relevance_score,omitempty"`  // Legacy
+	FileSize         int64     `json:"file_size,omitempty"`        // Legacy
 }
 
 // Summary represents a summarized version of one or more articles.
@@ -64,22 +82,34 @@ type Summary struct {
 	TopicConfidence float64   `json:"topic_confidence"` // Confidence score for topic assignment
 }
 
-// Digest represents a complete digest with user's take
+// Digest represents a complete digest with user's take (v3.0 simplified)
 type Digest struct {
-	ID            string    `json:"id"`             // Unique identifier for the digest
-	Title         string    `json:"title"`          // Title of the digest
-	Content       string    `json:"content"`        // The full digest content
-	DigestSummary string    `json:"digest_summary"` // Executive summary of the digest
-	MyTake        string    `json:"my_take"`        // User's take on the entire digest
-	ArticleURLs   []string  `json:"article_urls"`   // URLs of articles included in this digest
-	ModelUsed     string    `json:"model_used"`     // LLM model used for digest generation
-	Format        string    `json:"format"`         // Format used (brief, standard, detailed, newsletter)
-	DateGenerated time.Time `json:"date_generated"` // Timestamp when the digest was generated
-	// v0.4 Insights fields
-	OverallSentiment    string   `json:"overall_sentiment"`    // Overall sentiment of the digest (positive, negative, neutral, mixed)
-	AlertsSummary       string   `json:"alerts_summary"`       // Summary of alerts triggered in this digest
-	TrendsSummary       string   `json:"trends_summary"`       // Summary of trends identified in this digest
-	ResearchSuggestions []string `json:"research_suggestions"` // Suggested research queries for follow-up
+	ID               string         `json:"id"`
+	
+	// v3.0 new structure
+	Signal           Signal         `json:"signal,omitempty"`            // Primary insight
+	ArticleGroups    []ArticleGroup `json:"article_groups,omitempty"`    // Clustered articles
+	Metadata         DigestMetadata `json:"metadata,omitempty"`
+	
+	// User interaction
+	UserFeedback     *UserFeedback  `json:"user_feedback,omitempty"`
+	ExplorationPaths []string       `json:"exploration_paths,omitempty"` // What user clicked
+	
+	// Legacy fields (maintained for backward compatibility)
+	Title         string    `json:"title,omitempty"`          // Legacy title
+	Content       string    `json:"content,omitempty"`        // Legacy full digest content
+	DigestSummary string    `json:"digest_summary,omitempty"` // Legacy executive summary
+	MyTake        string    `json:"my_take,omitempty"`        // Legacy user take
+	ArticleURLs   []string  `json:"article_urls,omitempty"`   // Legacy URL list
+	ModelUsed     string    `json:"model_used,omitempty"`     // Legacy model info
+	Format        string    `json:"format,omitempty"`         // Legacy format
+	DateGenerated time.Time `json:"date_generated,omitempty"` // Legacy timestamp
+	
+	// Legacy insights fields  
+	OverallSentiment    string   `json:"overall_sentiment,omitempty"`    // Legacy sentiment
+	AlertsSummary       string   `json:"alerts_summary,omitempty"`       // Legacy alerts
+	TrendsSummary       string   `json:"trends_summary,omitempty"`       // Legacy trends
+	ResearchSuggestions []string `json:"research_suggestions,omitempty"` // Legacy research
 }
 
 // Prompt represents a generic prompt that can be used for various LLM interactions.
@@ -203,4 +233,112 @@ type ContentTheme struct {
 	Confidence  float64  `json:"confidence"`  // Confidence score (0-1)
 	Category    string   `json:"category"`    // Visual category (🔧 Dev, 📚 Research, 💡 Insight)
 	Description string   `json:"description"` // Theme description for prompt generation
+}
+
+// ProcessingCost tracks AI usage and costs
+type ProcessingCost struct {
+	LocalTokens  int     `json:"local_tokens"`
+	CloudTokens  int     `json:"cloud_tokens"`
+	EstimatedUSD float64 `json:"estimated_usd"`
+}
+
+// ActionItem represents a suggested action for the user
+type ActionItem struct {
+	Description string `json:"description"` // What to do
+	Effort      string `json:"effort"`      // low, medium, high
+	Timeline    string `json:"timeline"`    // immediate, this_week, this_month
+}
+
+// Signal represents synthesized insight from multiple articles (v3.0)
+type Signal struct {
+	ID              string         `json:"id"`
+	Content         string         `json:"content"`          // The synthesized insight (60-80 words)
+	SourceArticles  []string       `json:"source_articles"`  // Article IDs
+	Confidence      float64        `json:"confidence"`       // 0.0-1.0
+	Theme           string         `json:"theme"`            // Primary theme
+	Implications    []string       `json:"implications"`     // What it means
+	Actions         []ActionItem   `json:"actions"`          // Suggested actions
+	RelatedSignals  []string       `json:"related_signals"`  // For connection building
+	DateGenerated   time.Time      `json:"date_generated"`
+	ProcessingCost  ProcessingCost `json:"processing_cost"`  // Track AI usage
+}
+
+// ArticleGroup represents a cluster of related articles (v3.0)
+type ArticleGroup struct {
+	Category    string    `json:"category"`    // "Breaking", "Tools", "Analysis"
+	Theme       string    `json:"theme"`       // "AI Context Scaling", "Cost Optimization"
+	Articles    []Article `json:"articles"`
+	Summary     string    `json:"summary"`     // Group-level insight (50 words max)
+	Priority    int       `json:"priority"`    // 1-5 for ordering
+}
+
+// DigestMetadata contains digest processing information (v3.0)
+type DigestMetadata struct {
+	Title           string         `json:"title"`
+	DateGenerated   time.Time      `json:"date_generated"`
+	WordCount       int            `json:"word_count"`
+	ArticleCount    int            `json:"article_count"`
+	ProcessingTime  time.Duration  `json:"processing_time"`
+	ProcessingCost  ProcessingCost `json:"processing_cost"`
+	QualityScore    float64        `json:"quality_score"`    // Overall digest quality
+}
+
+// UserFeedback captures user ratings and comments (v3.0)
+type UserFeedback struct {
+	Rating          int       `json:"rating"`           // 1-5 stars
+	SignalQuality   int       `json:"signal_quality"`   // 1-5 stars
+	Completeness    int       `json:"completeness"`     // 1-5 stars
+	Actionability   int       `json:"actionability"`    // 1-5 stars
+	Comments        string    `json:"comments"`
+	DateProvided    time.Time `json:"date_provided"`
+}
+
+// UserProfile represents user preferences and context (v3.0)
+type UserProfile struct {
+	PreferLocal      bool    `json:"prefer_local"`       // Prefer local when possible
+	MaxCloudCost     float64 `json:"max_cloud_cost"`     // USD per operation
+	QualityThreshold float64 `json:"quality_threshold"`  // Minimum acceptable quality
+}
+
+// ResearchSession represents an interactive research session (v3.0)
+type ResearchSession struct {
+	ID              string             `json:"id"`
+	InitialQuery    string             `json:"initial_query"`
+	CurrentState    ResearchState      `json:"current_state"`
+	ConversationLog []ConversationTurn `json:"conversation_log"`
+	DiscoveredItems []ResearchItem     `json:"discovered_items"`
+	QueuedForDigest []string           `json:"queued_for_digest"`  // Article URLs
+	StartTime       time.Time          `json:"start_time"`
+	LastActivity    time.Time          `json:"last_activity"`
+	ProcessingCost  ProcessingCost     `json:"processing_cost"`
+}
+
+// ResearchState tracks current research session state
+type ResearchState struct {
+	Phase            string   `json:"phase"`             // "overview", "deep_dive", "exploration"
+	CurrentTopic     string   `json:"current_topic"`
+	AvailableActions []string `json:"available_actions"` // What user can do next
+	Progress         float64  `json:"progress"`          // 0.0-1.0
+}
+
+// ConversationTurn represents one exchange in research session
+type ConversationTurn struct {
+	Timestamp      time.Time `json:"timestamp"`
+	UserInput      string    `json:"user_input"`
+	SystemAction   string    `json:"system_action"`   // "search", "analyze", "synthesize"
+	Response       string    `json:"response"`
+	ProcessingMode string    `json:"processing_mode"` // "local", "cloud"
+}
+
+// ResearchItem represents discovered content during research
+type ResearchItem struct {
+	URL             string    `json:"url"`
+	Title           string    `json:"title"`
+	Summary         string    `json:"summary"`
+	Relevance       float64   `json:"relevance"`
+	QualityScore    float64   `json:"quality_score"`
+	Category        string    `json:"category"`
+	UserInterest    *int      `json:"user_interest,omitempty"` // 1-5 if rated
+	AddedToQueue    bool      `json:"added_to_queue"`
+	DateDiscovered  time.Time `json:"date_discovered"`
 }

@@ -25,19 +25,42 @@ import (
 
 var cfgFile string
 
+// CommandOptions holds common command options (shared with unified.go)
+type CommandOptions struct {
+	ForceCloudAI     bool    // Override local processing
+	MaxWordCount     int     // Hard limit (default 300)
+	QualityThreshold float64 // Minimum article quality
+	UserContext      string  // Additional context
+	Interactive      bool    // Force interactive mode
+	OutputFormat     string  // Output format (for backward compatibility)
+}
+
 // NewRootCmd creates the root command with all subcommands attached
 func NewRootCmd() *cobra.Command {
+	var options CommandOptions
+	
 	rootCmd := &cobra.Command{
 		Use:   "briefly",
-		Short: "Briefly is a CLI tool for fetching, summarizing, and managing articles.",
-		Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+		Short: "Intelligent content assistant with unified interface",
+		Long: `Briefly v3.0 - Unified content intelligence
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			// Do Stuff Here
+Briefly transforms articles into actionable insights with AI-powered processing.
+It automatically detects your intent and routes to the appropriate processor.
+
+Examples:
+  briefly                           # Start interactive mode
+  briefly weekly-links.md           # Generate digest from file  
+  briefly https://example.com       # Process single article
+  briefly explore "AI trends"       # Research mode
+  
+The tool uses hybrid AI (local + cloud) to provide fast, cost-effective processing
+while maintaining high-quality output.`,
+		// Use Args to handle unknown commands gracefully
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Use unified handler directly
+			handler := NewUnifiedHandler()
+			return handler.Execute(cmd.Context(), args, options)
 		},
 	}
 
@@ -46,12 +69,47 @@ to quickly create a Cobra application.`,
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.briefly.yaml)")
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	
+	// Add unified command options
+	rootCmd.Flags().BoolVar(&options.ForceCloudAI, "cloud", false, "Force cloud AI processing (override local models)")
+	rootCmd.Flags().IntVar(&options.MaxWordCount, "max-words", 300, "Maximum word count for output")
+	rootCmd.Flags().Float64Var(&options.QualityThreshold, "quality", 0.6, "Minimum quality threshold (0.0-1.0)")
+	rootCmd.Flags().StringVar(&options.UserContext, "context", "", "Additional context for processing")
+	rootCmd.Flags().BoolVarP(&options.Interactive, "interactive", "i", false, "Force interactive mode")
+	rootCmd.Flags().StringVarP(&options.OutputFormat, "format", "f", "scannable", "Output format (backward compatibility)")
+
+	// Custom command handling for unified interface
+	originalRunE := rootCmd.RunE
+	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		// If the first argument matches a known subcommand, let Cobra handle it
+		if len(args) > 0 {
+			for _, subCmd := range cmd.Commands() {
+				if subCmd.Name() == args[0] || subCmd.HasAlias(args[0]) {
+					// This is a real subcommand, not unified args
+					return cmd.Help()
+				}
+			}
+		}
+		// Not a subcommand, handle with unified interface
+		return originalRunE(cmd, args)
+	}
 
 	// Add subcommands
-	rootCmd.AddCommand(NewDigestCmd())
-	rootCmd.AddCommand(NewSummarizeCmd())
-	rootCmd.AddCommand(NewResearchCmd())
+	
+	// Legacy commands (backward compatibility)
+	digestCmd := NewDigestCmd()
+	digestCmd.Hidden = true // Hide from help but keep functional
+	rootCmd.AddCommand(digestCmd)
+	
+	summarizeCmd := NewSummarizeCmd()
+	summarizeCmd.Hidden = true
+	rootCmd.AddCommand(summarizeCmd)
+	
+	researchCmd := NewResearchCmd()
+	researchCmd.Hidden = true
+	rootCmd.AddCommand(researchCmd)
+	
+	// Utility commands (remain visible)
 	rootCmd.AddCommand(NewCacheCmd())
 	rootCmd.AddCommand(NewTUICmd())
 
