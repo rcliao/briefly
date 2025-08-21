@@ -43,13 +43,27 @@ type UnifiedHandler struct {
 
 // NewUnifiedHandler creates a new unified command handler
 func NewUnifiedHandler() *UnifiedHandler {
-	// Initialize services for Phase 2
-	// Note: This is a simplified initialization for Phase 2
-	// Phase 3 will add proper dependency injection
+	// Phase 3: Initialize hybrid AI services
 	
-	// For now, return handler with nil services and implement basic functionality
+	// Initialize local model service (Ollama)
+	localModel := services.NewOllamaService("http://localhost:11434", "llama3.2:3b")
+	
+	// Initialize cost controller
+	costController := services.NewCostController(".briefly-cache", 1.0) // $1/day budget
+	
+	// Initialize AI router (cloud LLM will be nil for now)
+	aiRouter := services.NewAIRouter(localModel, nil, costController)
+	
+	// Initialize intelligence service with AI router
+	intelligenceService := services.NewIntelligenceService(
+		nil, // articleProcessor - will use existing
+		nil, // llmService - will use existing  
+		nil, // cacheService - will use existing
+		aiRouter,
+	)
+
 	return &UnifiedHandler{
-		intelligenceService: nil, // Will initialize when needed
+		intelligenceService: intelligenceService,
 		cacheService:        nil, // Will initialize when needed
 	}
 }
@@ -144,6 +158,21 @@ func (h *UnifiedHandler) ParseCommand(args []string, options CommandOptions) (*C
 		return &Command{
 			Mode:    ModeExplore,
 			Query:   strings.Join(args[1:], " "),
+			Options: options,
+		}, nil
+		
+	// Phase 3: AI management commands
+	case "ai-status", "ai-capabilities", "ollama-status":
+		return &Command{
+			Mode:    ModeCache, // Reuse cache mode for AI commands
+			Input:   strings.Join(args, " "), // Full command
+			Options: options,
+		}, nil
+		
+	case "cost-analytics", "cost-report":
+		return &Command{
+			Mode:    ModeCache, // Reuse cache mode for cost commands
+			Input:   strings.Join(args, " "), // Full command
 			Options: options,
 		}, nil
 		
@@ -312,11 +341,26 @@ func (h *UnifiedHandler) processExplore(ctx context.Context, cmd *Command) error
 }
 
 func (h *UnifiedHandler) processCache(ctx context.Context, cmd *Command) error {
-	fmt.Printf("💾 Cache operation: %s\n", cmd.Input)
-	
-	// Delegate to existing cache command for now
-	cacheCmd := NewCacheCmd()
+	// Check for special Phase 3 AI management commands
 	args := strings.Fields(cmd.Input)
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "ollama-status", "ai-status":
+			return h.checkOllamaStatus(ctx)
+		case "cost-analytics", "cost-report":
+			return h.showCostAnalytics(ctx)
+		case "ai-capabilities":
+			return h.showAICapabilities(ctx)
+		}
+	}
+	
+	// For traditional cache commands, show what we're doing
+	if len(args) > 0 {
+		fmt.Printf("💾 Cache operation: %s\n", args[0])
+	}
+	
+	// Delegate to existing cache command for other operations
+	cacheCmd := NewCacheCmd()
 	cacheCmd.SetArgs(args)
 	return cacheCmd.Execute()
 }
@@ -331,10 +375,149 @@ func (h *UnifiedHandler) processTUI(ctx context.Context, cmd *Command) error {
 
 // getUserProfile loads user preferences and context
 func (h *UnifiedHandler) getUserProfile(ctx context.Context) *core.UserProfile {
-	// TODO: Implement user profile loading in Phase 2
+	// Phase 3: Enhanced user profile with cost awareness
 	return &core.UserProfile{
 		PreferLocal:      true,
-		MaxCloudCost:     1.0, // $1 per operation
+		MaxCloudCost:     0.5, // $0.50 per operation to encourage local usage
 		QualityThreshold: 0.6,
 	}
+}
+
+// Phase 3 helper methods for AI system management
+
+// checkOllamaStatus checks if Ollama is running and available
+func (h *UnifiedHandler) checkOllamaStatus(ctx context.Context) error {
+	fmt.Println("🔍 Checking Ollama Status...")
+	
+	// Create local model service to check status
+	localModel := services.NewOllamaService("http://localhost:11434", "llama3.2:3b")
+	
+	available, err := localModel.IsAvailable(ctx)
+	if err != nil {
+		fmt.Printf("❌ Ollama connection failed: %v\n", err)
+		fmt.Println("\n💡 To install Ollama:")
+		fmt.Println("   1. Visit: https://ollama.ai")
+		fmt.Println("   2. Download and install")
+		fmt.Println("   3. Run: ollama pull llama3.2:3b")
+		return err
+	}
+	
+	if !available {
+		fmt.Println("❌ Ollama is not available")
+		return fmt.Errorf("ollama not available")
+	}
+	
+	fmt.Println("✅ Ollama is running and available")
+	
+	// Check model availability
+	if err := localModel.Initialize(ctx); err != nil {
+		fmt.Printf("⚠️ Model not available: %v\n", err)
+		fmt.Println("\n💡 To install required model:")
+		fmt.Println("   ollama pull llama3.2:3b")
+		return err
+	}
+	
+	fmt.Println("✅ Model llama3.2:3b is available")
+	fmt.Println("\n🎯 Local AI is ready for cost-effective processing!")
+	
+	return nil
+}
+
+// showCostAnalytics displays current cost analytics
+func (h *UnifiedHandler) showCostAnalytics(ctx context.Context) error {
+	fmt.Println("💰 Cost Analytics (Last 7 Days)")
+	fmt.Println("================================")
+	
+	costController := services.NewCostController(".briefly-cache", 1.0)
+	
+	analytics, err := costController.GetCostAnalytics(ctx, 7)
+	if err != nil {
+		return fmt.Errorf("failed to get cost analytics: %w", err)
+	}
+	
+	fmt.Printf("📊 Total Spent: $%.4f\n", analytics.TotalSpent)
+	fmt.Printf("🏠 Local Processing: $%.4f (%.1f%%)\n", 
+		analytics.LocalVsCloud["local"],
+		(analytics.LocalVsCloud["local"]/analytics.TotalSpent)*100)
+	fmt.Printf("☁️ Cloud Processing: $%.4f (%.1f%%)\n", 
+		analytics.LocalVsCloud["cloud"],
+		(analytics.LocalVsCloud["cloud"]/analytics.TotalSpent)*100)
+	
+	fmt.Println("\n📈 Cost by Task:")
+	for task, cost := range analytics.CostByTask {
+		if cost > 0 {
+			fmt.Printf("   %s: $%.4f\n", task, cost)
+		}
+	}
+	
+	if len(analytics.Recommendations) > 0 {
+		fmt.Println("\n💡 Recommendations:")
+		for _, rec := range analytics.Recommendations {
+			fmt.Printf("   • %s\n", rec)
+		}
+	}
+	
+	// Show daily breakdown if available
+	if len(analytics.DailyCosts) > 0 {
+		fmt.Println("\n📅 Daily Breakdown:")
+		for _, daily := range analytics.DailyCosts {
+			total := daily.LocalCost + daily.CloudCost
+			if total > 0 {
+				fmt.Printf("   %s: $%.4f (%d tasks)\n", 
+					daily.Date.Format("Jan 02"), total, daily.TaskCount)
+			}
+		}
+	}
+	
+	return nil
+}
+
+// showAICapabilities displays current AI system capabilities
+func (h *UnifiedHandler) showAICapabilities(ctx context.Context) error {
+	fmt.Println("🤖 AI System Capabilities")
+	fmt.Println("=========================")
+	
+	localModel := services.NewOllamaService("http://localhost:11434", "llama3.2:3b")
+	costController := services.NewCostController(".briefly-cache", 1.0)
+	aiRouter := services.NewAIRouter(localModel, nil, costController)
+	
+	capabilities, err := aiRouter.GetCapabilities(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get capabilities: %w", err)
+	}
+	
+	fmt.Printf("🏠 Local Models: %s\n", formatAvailable(capabilities.LocalModelsAvailable))
+	fmt.Printf("☁️ Cloud Models: %s\n", formatAvailable(capabilities.CloudModelsAvailable))
+	fmt.Printf("🎯 Max Local Complexity: %.1f/1.0\n", capabilities.MaxLocalComplexity)
+	fmt.Printf("💰 Cost Per Token: $%.8f\n", capabilities.CostPerToken)
+	
+	fmt.Println("\n🔧 Supported Tasks:")
+	for _, task := range capabilities.SupportedTasks {
+		fmt.Printf("   • %s\n", task)
+	}
+	
+	// Show routing strategy
+	fmt.Println("\n🔀 Routing Strategy:")
+	fmt.Println("   • Simple tasks (categorize, analyze): Local preferred")
+	fmt.Println("   • Medium tasks (summarize): Local for cost, Cloud for quality")
+	fmt.Println("   • Complex tasks (synthesize, generate): Cloud required")
+	
+	// Show current budget status
+	budget, _ := costController.GetDailyBudget(ctx)
+	spent, _ := costController.GetSpentToday(ctx)
+	remaining := budget - spent
+	
+	fmt.Printf("\n💳 Daily Budget: $%.2f\n", budget)
+	fmt.Printf("💸 Spent Today: $%.4f\n", spent)
+	fmt.Printf("💰 Remaining: $%.4f\n", remaining)
+	
+	return nil
+}
+
+// formatAvailable formats availability status
+func formatAvailable(available bool) string {
+	if available {
+		return "✅ Available"
+	}
+	return "❌ Not Available"
 }
