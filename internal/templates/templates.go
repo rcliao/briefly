@@ -27,6 +27,8 @@ const (
 	FormatScannableNewsletter DigestFormat = "scannable"
 	// FormatEmail creates HTML email format
 	FormatEmail DigestFormat = "email"
+	// FormatSignal creates Signal+Sources format with concise insights
+	FormatSignal DigestFormat = "signal"
 )
 
 // DigestTemplate holds template configuration for different formats
@@ -174,6 +176,25 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IntroductionText:          "Here's your personalized digest with today's most important insights:",
 			ConclusionText:            "Stay informed and keep exploring!",
 			SectionSeparator:          "\n\n---\n\n",
+		}
+	case FormatSignal:
+		return &DigestTemplate{
+			Format:                    FormatSignal,
+			Title:                     "Signal Digest",
+			IncludeSummaries:          false, // Signal format uses structured insights
+			IncludeKeyInsights:        true,
+			IncludeActionItems:        true,
+			IncludeSourceLinks:        true,
+			IncludePromptCorner:       false,
+			IncludeIndividualArticles: false, // Signal format groups sources differently
+			IncludeTopicClustering:    true,  // Essential for Signal+Sources format
+			IncludeBanner:             false, // Keep Signal format clean and focused
+			IncludeDiscussionPrompt:   false, // Signal format has action items instead
+			MaxSummaryLength:          0,     // No traditional summaries in Signal format
+			MaxDigestWords:            80,    // Signal insight should be 60-80 words
+			IntroductionText:          "",    // Signal format has its own structure
+			ConclusionText:            "",    // Signal format uses action items for conclusion
+			SectionSeparator:          "\n\n",
 		}
 	default:
 		return GetTemplate(FormatStandard)
@@ -2004,13 +2025,15 @@ func extractOneLineDescription(summary string) string {
 	sentences := strings.Split(summary, ".")
 	if len(sentences) > 0 && len(sentences[0]) > 0 {
 		cleaned := strings.TrimSpace(sentences[0])
-		if len(cleaned) > 80 {
-			return cleaned[:77] + "..."
+		// Allow longer descriptions for better comprehensiveness
+		if len(cleaned) > 200 {
+			return cleaned[:197] + "..."
 		}
 		return cleaned
 	}
-	if len(summary) > 80 {
-		return summary[:77] + "..."
+	// Allow longer single-sentence summaries
+	if len(summary) > 200 {
+		return summary[:197] + "..."
 	}
 	return summary
 }
@@ -2019,8 +2042,9 @@ func extractOneLineDescription(summary string) string {
 func extractCoreConceptDescription(summary string) string {
 	// Look for technical keywords and extract relevant sentences
 	summary = strings.TrimSpace(summary)
-	if len(summary) > 100 {
-		return summary[:97] + "..."
+	// Allow longer concept descriptions for better clarity
+	if len(summary) > 250 {
+		return summary[:247] + "..."
 	}
 	return summary
 }
@@ -2029,8 +2053,9 @@ func extractCoreConceptDescription(summary string) string {
 func extractImplementationDescription(summary string) string {
 	// Similar to extractCoreConceptDescription but focused on implementations
 	summary = strings.TrimSpace(summary)
-	if len(summary) > 100 {
-		return summary[:97] + "..."
+	// Allow longer implementation descriptions for better detail
+	if len(summary) > 250 {
+		return summary[:247] + "..."
 	}
 	return summary
 }
@@ -2325,5 +2350,313 @@ func GetAvailableFormats() []string {
 		string(FormatNewsletter),
 		string(FormatScannableNewsletter),
 		string(FormatEmail),
+		string(FormatSignal),
 	}
+}
+
+// RenderSignalStyleDigest renders a Signal-style digest using existing data structures
+// This is a Phase 4 bridge function until full Signal+Sources implementation
+func RenderSignalStyleDigest(digestItems []render.DigestData, outputDir string, finalDigest string, template *DigestTemplate, customTitle string) (string, string, error) {
+	var content strings.Builder
+	
+	// Generate Signal-style title
+	title := customTitle
+	if title == "" {
+		title = generateSignalStyleTitle(digestItems)
+	}
+	
+	// Signal Header
+	content.WriteString(fmt.Sprintf("# %s\n\n", title))
+	content.WriteString(fmt.Sprintf("📊 %d sources • ⏱️ 2m read\n\n", len(digestItems)))
+	
+	// Signal Insight (60-80 words)
+	signalInsight := generateSignalInsight(digestItems, finalDigest)
+	content.WriteString("## 🔍 Signal\n\n")
+	content.WriteString(signalInsight)
+	content.WriteString("\n\n")
+	
+	// Implications
+	implications := generateSignalImplications(digestItems)
+	if len(implications) > 0 {
+		content.WriteString("### 💡 Implications\n\n")
+		for _, implication := range implications {
+			content.WriteString(fmt.Sprintf("- %s\n", implication))
+		}
+		content.WriteString("\n")
+	}
+	
+	// Action Items
+	actions := generateSignalActions(digestItems)
+	if len(actions) > 0 {
+		content.WriteString("### 🎯 Actions\n\n")
+		for _, action := range actions {
+			content.WriteString(fmt.Sprintf("- **%s** (%s)\n", action.Description, action.Timeline))
+		}
+		content.WriteString("\n")
+	}
+	
+	// Sources Section
+	content.WriteString("## 📚 Sources\n\n")
+	
+	// Use items in the exact order they were passed - they are already ordered consistently with LLM input
+	// Track categories we've already shown to avoid duplicate headers
+	categoriesShown := make(map[string]bool)
+	currentCategory := ""
+	referenceNumber := 1
+	
+	for _, item := range digestItems {
+		// Determine category for this item using the same logic as ordering
+		category := extractCategoryFromItem(item)
+		
+		// Add category header only if we haven't shown this category yet, or if it's different from current
+		if category != currentCategory {
+			if !categoriesShown[category] {
+				content.WriteString(fmt.Sprintf("### %s\n\n", category))
+				categoriesShown[category] = true
+				currentCategory = category
+			}
+		}
+		
+		// Render the item with its sequential reference number
+		content.WriteString(fmt.Sprintf("**[%d] %s**\n", referenceNumber, item.Title))
+		referenceNumber++
+		
+		// Use full summary for better comprehensiveness, only truncate if extremely long
+		summaryText := item.SummaryText
+		if len(strings.Fields(summaryText)) > 100 {
+			summaryText = truncateToWords(summaryText, 100)
+		}
+		content.WriteString(fmt.Sprintf("%s\n\n", summaryText))
+		content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
+	}
+	
+	// Footer
+	content.WriteString("---\n\n")
+	content.WriteString("*Generated using hybrid AI processing*\n")
+	
+	// Write to file
+	filename := fmt.Sprintf("digest_signal_%s.md", time.Now().Format("2006-01-02"))
+	filePath, err := render.WriteDigestToFile(content.String(), outputDir, filename)
+	
+	return content.String(), filePath, err
+}
+
+// Helper functions for Signal-style digest
+
+func generateSignalStyleTitle(digestItems []render.DigestData) string {
+	if len(digestItems) == 0 {
+		return "Signal Digest"
+	}
+	
+	// Extract key themes from article titles
+	themes := extractSignalThemes(digestItems)
+	if len(themes) > 0 {
+		return fmt.Sprintf("Signal: %s", strings.Join(themes[:min(2, len(themes))], " & "))
+	}
+	
+	return fmt.Sprintf("Signal: %d Key Developments", len(digestItems))
+}
+
+func generateSignalInsight(digestItems []render.DigestData, finalDigest string) string {
+	if finalDigest != "" && len(finalDigest) > 100 {
+		// Use full digest content for signal without truncation
+		// Only ensure it's well-formatted
+		words := strings.Fields(finalDigest)
+		if len(words) > 150 {
+			// Only truncate if extremely long (150+ words), but use sentence boundaries
+			return strings.Join(words[:150], " ") + "."
+		}
+		return finalDigest
+	}
+	
+	// Generate basic insight from article titles
+	if len(digestItems) == 0 {
+		return "No articles to analyze."
+	}
+	
+	themes := extractSignalThemes(digestItems)
+	insight := fmt.Sprintf("Today's developments highlight %d key areas", len(digestItems))
+	
+	if len(themes) > 0 {
+		insight += fmt.Sprintf(" including %s", strings.Join(themes, ", "))
+	}
+	
+	insight += ". These changes signal evolving priorities in technology adoption and strategic decision-making across the industry."
+	
+	return insight
+}
+
+func generateSignalImplications(digestItems []render.DigestData) []string {
+	implications := []string{}
+	
+	if len(digestItems) > 3 {
+		implications = append(implications, "Multiple concurrent developments suggest accelerating change")
+	}
+	
+	// Check for AI-related content
+	aiCount := 0
+	for _, item := range digestItems {
+		if strings.Contains(strings.ToLower(item.Title), "ai") || strings.Contains(strings.ToLower(item.SummaryText), "ai") {
+			aiCount++
+		}
+	}
+	
+	if aiCount > 0 {
+		implications = append(implications, "AI integration remains a key strategic priority")
+	}
+	
+	// Default implications
+	if len(implications) == 0 {
+		implications = append(implications, "Technology landscape continues evolving rapidly")
+	}
+	
+	return implications[:min(3, len(implications))]
+}
+
+func generateSignalActions(digestItems []render.DigestData) []SignalAction {
+	actions := []SignalAction{}
+	
+	// Generate actions based on content
+	if len(digestItems) > 0 {
+		actions = append(actions, SignalAction{
+			Description: "Review highlighted developments for strategic relevance",
+			Timeline:    "this week",
+		})
+	}
+	
+	if len(digestItems) > 2 {
+		actions = append(actions, SignalAction{
+			Description: "Assess impact on current technology roadmap",
+			Timeline:    "this month",
+		})
+	}
+	
+	return actions[:min(3, len(actions))]
+}
+
+func extractSignalThemes(digestItems []render.DigestData) []string {
+	themes := make(map[string]int)
+	
+	for _, item := range digestItems {
+		words := strings.Fields(strings.ToLower(item.Title))
+		for _, word := range words {
+			if len(word) > 4 && !isSignalStopWord(word) {
+				themes[word]++
+			}
+		}
+	}
+	
+	// Get most common themes
+	var sortedThemes []string
+	for theme, count := range themes {
+		if count >= 1 {
+			sortedThemes = append(sortedThemes, theme)
+		}
+	}
+	
+	return sortedThemes[:min(3, len(sortedThemes))]
+}
+
+func isSignalStopWord(word string) bool {
+	stopWords := map[string]bool{
+		"the": true, "and": true, "for": true, "with": true, "from": true,
+		"this": true, "that": true, "your": true, "you": true, "are": true,
+		"how": true, "why": true, "what": true, "when": true, "where": true,
+	}
+	return stopWords[word]
+}
+
+// groupSignalItemsByCategory groups digest items by category for Signal format
+func groupSignalItemsByCategory(digestItems []render.DigestData) map[string][]render.DigestData {
+	categoryGroups := make(map[string][]render.DigestData)
+	
+	for _, item := range digestItems {
+		category := extractCategoryFromItem(item)
+		categoryGroups[category] = append(categoryGroups[category], item)
+	}
+	
+	return categoryGroups
+}
+
+// extractCategoryFromItem extracts category from digest item
+func extractCategoryFromItem(item render.DigestData) string {
+	// Try to extract from MyTake first (which may contain category info)
+	if item.MyTake != "" && strings.Contains(item.MyTake, "🔥") {
+		return "🔥 Breaking & Hot"
+	}
+	if item.MyTake != "" && strings.Contains(item.MyTake, "🛠️") {
+		return "🛠️ Tools & Platforms"
+	}
+	if item.MyTake != "" && strings.Contains(item.MyTake, "📊") {
+		return "📊 Analysis & Research"
+	}
+	if item.MyTake != "" && strings.Contains(item.MyTake, "💰") {
+		return "💰 Business & Economics"
+	}
+	
+	// Fallback to keyword-based categorization
+	title := strings.ToLower(item.Title)
+	summary := strings.ToLower(item.SummaryText)
+	
+	if containsAny(title, []string{"breaking", "urgent", "announcement", "released", "launched"}) {
+		return "🔥 Breaking & Hot"
+	}
+	if containsAny(title, []string{"tool", "github", "framework", "library", "sdk"}) || 
+	   containsAny(summary, []string{"developer", "coding", "programming"}) {
+		return "🛠️ Tools & Platforms"
+	}
+	if containsAny(title, []string{"analysis", "research", "study", "report", "survey"}) {
+		return "📊 Analysis & Research"
+	}
+	if containsAny(title, []string{"business", "market", "revenue", "funding", "cost"}) {
+		return "💰 Business & Economics"
+	}
+	
+	return "💡 Additional Items"
+}
+
+func truncateToWords(text string, maxWords int) string {
+	words := strings.Fields(text)
+	if len(words) <= maxWords {
+		return text
+	}
+	
+	// Try to find a sentence boundary near the word limit
+	truncated := strings.Join(words[:maxWords], " ")
+	
+	// Look for the last complete sentence within the truncated text
+	lastPeriod := strings.LastIndex(truncated, ". ")
+	lastQuestion := strings.LastIndex(truncated, "? ")
+	lastExclamation := strings.LastIndex(truncated, "! ")
+	
+	// Find the latest sentence ending
+	lastSentence := lastPeriod
+	if lastQuestion > lastSentence {
+		lastSentence = lastQuestion
+	}
+	if lastExclamation > lastSentence {
+		lastSentence = lastExclamation
+	}
+	
+	// If we found a sentence boundary and it's at least 70% of the target length, use it
+	if lastSentence > 0 && lastSentence > len(truncated)*7/10 {
+		return truncated[:lastSentence+1]
+	}
+	
+	// Otherwise, truncate at word boundary with ellipsis
+	return truncated + "..."
+}
+
+// SignalAction represents an action item in Signal format
+type SignalAction struct {
+	Description string
+	Timeline    string
+}
+
+// min returns the smaller of two integers (utility function)
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

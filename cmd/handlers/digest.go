@@ -177,18 +177,13 @@ func runSingleArticle(cmd *cobra.Command, url string) error {
 	}
 	defer llmClient.Close()
 
-	// Create link from URL
-	link := core.Link{URL: url}
+	// Create content processor
+	processor := fetch.NewContentProcessor()
 
-	// Fetch article
-	article, err := fetch.FetchArticle(link)
+	// Process article using proper content type detection (handles YouTube, PDF, HTML)
+	article, err := processor.ProcessArticle(cmd.Context(), url)
 	if err != nil {
-		return fmt.Errorf("failed to fetch article: %w", err)
-	}
-
-	// Clean article content
-	if err := fetch.CleanArticleHTML(&article); err != nil {
-		return fmt.Errorf("failed to clean article HTML: %w", err)
+		return fmt.Errorf("failed to process article: %w", err)
 	}
 
 	// Get format for summarization
@@ -198,7 +193,12 @@ func runSingleArticle(cmd *cobra.Command, url string) error {
 	}
 
 	// Generate summary
-	summary, err := llmClient.SummarizeArticleTextWithFormat(article, format)
+	// Use scannable format for signal digests to get concise 20-40 word summaries
+	summaryFormat := format
+	if format == "signal" {
+		summaryFormat = "scannable"
+	}
+	summary, err := llmClient.SummarizeArticleTextWithFormat(*article, summaryFormat)
 	if err != nil {
 		return fmt.Errorf("failed to summarize article: %w", err)
 	}
@@ -379,7 +379,12 @@ func processArticles(cmd *cobra.Command, links []core.Link, format string) ([]re
 
 		// Generate summary if not cached
 		if !summaryFromCache {
-			generatedSummary, err := llmClient.SummarizeArticleTextWithFormat(article, format)
+			// Use scannable format for signal digests to get concise 20-40 word summaries
+			summaryFormat := format
+			if format == "signal" {
+				summaryFormat = "scannable"
+			}
+			generatedSummary, err := llmClient.SummarizeArticleTextWithFormat(article, summaryFormat)
 			if err != nil {
 				logger.Error("Failed to summarize article", err, "url", link.URL)
 				fmt.Printf("❌ Failed to summarize: %s\n", link.URL)
@@ -1244,42 +1249,53 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 	fmt.Printf("Generating final digest summary using %s format...\n", format)
 	logger.Info("Generating final digest summary", "format", format)
 
+	// Order items consistently for both LLM input and Sources rendering
+	// This ensures reference numbers match between the digest text and Sources section
+	orderedItems := orderItemsForSources(digestItems, format)
+	
 	// Prepare combined summaries for final digest with category information
 	var combinedSummaries strings.Builder
 	
 	// Check if articles are categorized by looking for category info in MyTake
-	categorized := checkIfCategorized(digestItems)
+	categorized := checkIfCategorized(orderedItems)
 	
 	if categorized {
-		// Group by categories and include category context
-		categoryGroups := groupItemsByCategory(digestItems)
-		categoryOrder := []string{"🔥 Breaking & Hot", "🚀 Product Updates", "🛠️ Dev Tools & Techniques", "📊 Research & Analysis", "💡 Ideas & Inspiration", "🔍 Worth Monitoring"}
+		// Use the SAME categorization logic as the Sources section to ensure reference numbers match
+		categoryGroups := groupSignalItemsByCategory(orderedItems)
+		// Use the SAME category order as the Sources section
+		categoryOrder := []string{"🔥 Breaking & Hot", "🛠️ Tools & Platforms", "📊 Analysis & Research", "💰 Business & Economics", "💡 Additional Items"}
+		
+		// Create a global reference number counter that matches final Sources section numbering
+		globalRefNum := 1
 		
 		for _, categoryName := range categoryOrder {
 			if items, exists := categoryGroups[categoryName]; exists && len(items) > 0 {
 				combinedSummaries.WriteString(fmt.Sprintf("**Category: %s** (%d articles)\n", categoryName, len(items)))
-				for i, item := range items {
-					combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, item.Title))
+				for _, item := range items {
+					combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", globalRefNum, item.Title))
 					combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
 					combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
+					globalRefNum++
 				}
 				combinedSummaries.WriteString("\n")
 			}
 		}
 		
-		// Handle uncategorized items
-		uncategorized := getUncategorizedItems(digestItems, categoryGroups)
+		// Handle uncategorized items - but note that groupSignalItemsByCategory should categorize all items
+		// Keep this as a safety fallback
+		uncategorized := getUncategorizedItemsForSignal(orderedItems, categoryGroups)
 		if len(uncategorized) > 0 {
 			combinedSummaries.WriteString("**Category: Other** (uncategorized)\n")
-			for i, item := range uncategorized {
-				combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, item.Title))
+			for _, item := range uncategorized {
+				combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", globalRefNum, item.Title))
 				combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
 				combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
+				globalRefNum++
 			}
 		}
 	} else {
 		// Fallback to original flat format
-		for i, item := range digestItems {
+		for i, item := range orderedItems {
 			combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, item.Title))
 			combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
 			combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
@@ -1398,13 +1414,20 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 	var renderedContent, digestPath string
 	var renderErr error
 
-	if format == "email" {
-		renderedContent, digestPath, renderErr = templates.RenderHTMLEmailWithBanner(digestItems, outputDir, finalDigest, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, "default", banner)
+	if format == "signal" {
+		// Phase 4: Use Signal+Sources template for signal format
+		// Note: This is a simplified version using existing data structures
+		// Full implementation will use the new core.Digest with Signal structure
+		
+		// Use orderedItems to ensure Sources section matches LLM input order
+		renderedContent, digestPath, renderErr = templates.RenderSignalStyleDigest(orderedItems, outputDir, finalDigest, template, generatedTitle)
+	} else if format == "email" {
+		renderedContent, digestPath, renderErr = templates.RenderHTMLEmailWithBanner(orderedItems, outputDir, finalDigest, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, "default", banner)
 	} else if useStructuredGeneration {
 		// Use new structured rendering approach
-		renderedContent, digestPath, renderErr = templates.RenderWithStructuredContent(digestItems, outputDir, finalDigest, template, generatedTitle, banner)
+		renderedContent, digestPath, renderErr = templates.RenderWithStructuredContent(orderedItems, outputDir, finalDigest, template, generatedTitle, banner)
 	} else {
-		renderedContent, digestPath, renderErr = templates.RenderWithBannerAndInsights(digestItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, banner)
+		renderedContent, digestPath, renderErr = templates.RenderWithBannerAndInsights(orderedItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, banner)
 	}
 
 	if renderErr != nil {
@@ -1796,6 +1819,40 @@ func generateBannerImage(digestContent, outputDir, format string) *core.BannerIm
 	return banner
 }
 
+// orderItemsForSources orders items the same way the Sources section will display them
+// This ensures reference numbers in the LLM-generated text match the Sources section
+func orderItemsForSources(items []render.DigestData, format string) []render.DigestData {
+	// Only signal format currently uses special ordering
+	// Other formats keep original order
+	if format != "signal" && format != "scannable" && format != "newsletter" {
+		return items
+	}
+	
+	// Use the same categorization as Sources section
+	categoryGroups := groupSignalItemsByCategory(items)
+	categoryOrder := []string{
+		"🔥 Breaking & Hot",
+		"🛠️ Tools & Platforms",
+		"📊 Analysis & Research",
+		"💰 Business & Economics",
+		"💡 Additional Items",
+	}
+	
+	// Build ordered list
+	ordered := []render.DigestData{}
+	for _, category := range categoryOrder {
+		if categoryItems, exists := categoryGroups[category]; exists {
+			ordered = append(ordered, categoryItems...)
+		}
+	}
+	
+	// Handle any uncategorized items
+	uncategorized := getUncategorizedItemsForSignal(items, categoryGroups)
+	ordered = append(ordered, uncategorized...)
+	
+	return ordered
+}
+
 // checkIfCategorized checks if articles have category information in MyTake
 func checkIfCategorized(digestItems []render.DigestData) bool {
 	for _, item := range digestItems {
@@ -1966,3 +2023,97 @@ func extractCategoryEmoji(myTake string) string {
 	
 	return "📄" // Default document emoji
 }
+
+// groupSignalItemsByCategory groups digest items by category for Signal format
+// This mirrors the logic used in the Sources section to ensure reference numbers match
+func groupSignalItemsByCategory(digestItems []render.DigestData) map[string][]render.DigestData {
+	categoryGroups := make(map[string][]render.DigestData)
+	
+	for _, item := range digestItems {
+		category := extractCategoryFromItemForSignal(item)
+		categoryGroups[category] = append(categoryGroups[category], item)
+	}
+	
+	return categoryGroups
+}
+
+// extractCategoryFromItemForSignal extracts category from digest item using the same logic as Sources section
+func extractCategoryFromItemForSignal(item render.DigestData) string {
+	// Try to extract from MyTake first (which may contain category info)
+	if item.MyTake != "" && strings.Contains(item.MyTake, "🔥") {
+		return "🔥 Breaking & Hot"
+	}
+	if item.MyTake != "" && strings.Contains(item.MyTake, "🛠️") {
+		return "🛠️ Tools & Platforms"
+	}
+	if item.MyTake != "" && strings.Contains(item.MyTake, "📊") {
+		return "📊 Analysis & Research"
+	}
+	if item.MyTake != "" && strings.Contains(item.MyTake, "💰") {
+		return "💰 Business & Economics"
+	}
+	
+	// Fallback to keyword-based categorization
+	title := strings.ToLower(item.Title)
+	summary := strings.ToLower(item.SummaryText)
+	
+	// Breaking news and hot topics
+	if strings.Contains(title, "breaking") || strings.Contains(title, "announce") ||
+		strings.Contains(title, "launch") || strings.Contains(title, "release") ||
+		strings.Contains(summary, "just announced") || strings.Contains(summary, "breaking") {
+		return "🔥 Breaking & Hot"
+	}
+	
+	// Tools and platforms
+	if strings.Contains(title, "tool") || strings.Contains(title, "platform") ||
+		strings.Contains(title, "framework") || strings.Contains(title, "api") ||
+		strings.Contains(title, "sdk") || strings.Contains(title, "library") ||
+		strings.Contains(summary, "development") || strings.Contains(summary, "coding") {
+		return "🛠️ Tools & Platforms"
+	}
+	
+	// Analysis and research
+	if strings.Contains(title, "analysis") || strings.Contains(title, "research") ||
+		strings.Contains(title, "report") || strings.Contains(title, "study") ||
+		strings.Contains(title, "survey") || strings.Contains(summary, "analysis") ||
+		strings.Contains(summary, "research") || strings.Contains(summary, "study") {
+		return "📊 Analysis & Research"
+	}
+	
+	// Business and economics
+	if strings.Contains(title, "business") || strings.Contains(title, "economic") ||
+		strings.Contains(title, "funding") || strings.Contains(title, "investment") ||
+		strings.Contains(title, "revenue") || strings.Contains(summary, "business") ||
+		strings.Contains(summary, "economic") || strings.Contains(summary, "funding") {
+		return "💰 Business & Economics"
+	}
+	
+	// Default category
+	return "💡 Additional Items"
+}
+
+// getUncategorizedItemsForSignal returns items that don't belong to any signal category group
+func getUncategorizedItemsForSignal(digestItems []render.DigestData, categoryGroups map[string][]render.DigestData) []render.DigestData {
+	var uncategorized []render.DigestData
+	
+	for _, item := range digestItems {
+		found := false
+		for _, articles := range categoryGroups {
+			for _, catItem := range articles {
+				if catItem.URL == item.URL {
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			uncategorized = append(uncategorized, item)
+		}
+	}
+	
+	return uncategorized
+}
+
