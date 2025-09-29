@@ -1,0 +1,271 @@
+# Data Model Specification - Content Digest System
+
+entities:
+  # Core content entity
+  Article:
+    fields:
+      id: uuid
+      url: string
+      title: string
+      content: string  # Clean extracted text
+      contentType: enum[HTML, PDF, YOUTUBE]
+      fetchedAt: timestamp
+      contentHash: string  # For cache validation
+      metadata:
+        author: string?
+        publishDate: date?
+        source: string?  # Domain or channel
+        duration: integer?  # For videos in seconds
+    validations:
+      - url: valid_url_format
+      - content: min_length_100_chars
+      - contentType: must_be_valid_enum
+    storage: cache
+    ttl: 604800  # 7 days in seconds
+    indexes: [url, contentHash]
+
+  # AI-generated summary
+  Summary:
+    fields:
+      id: uuid
+      articleId: uuid
+      summary: string  # 150-word summary
+      keyPoints: string[]  # 3-5 bullet points
+      theme: string  # Main topic/theme
+      generatedAt: timestamp
+      llmModel: string  # Track which model generated
+      embedding: float[]  # 768-dimensional vector
+    validations:
+      - summary: max_words_200
+      - keyPoints: min_items_3_max_items_5
+      - embedding: dimension_768
+    storage: cache
+    ttl: 604800  # 7 days
+    indexes: [articleId]
+    relationships:
+      article: Article
+
+  # Topic cluster for grouping
+  Cluster:
+    fields:
+      id: uuid
+      theme: string  # Cluster theme/topic
+      articles: uuid[]  # Article IDs in cluster
+      centroid: float[]  # Cluster center embedding
+      avgSimilarity: float  # Average similarity score
+      createdAt: timestamp
+    validations:
+      - articles: min_items_2
+      - avgSimilarity: range_0_to_1
+      - centroid: dimension_768
+    storage: session
+    ttl: 3600  # 1 hour session
+    relationships:
+      articles: Article[]
+
+  # Final digest output
+  Digest:
+    fields:
+      id: uuid
+      title: string  # Generated digest title
+      executiveSummary: string  # 200-word narrative
+      clusters: ClusterSection[]
+      totalArticles: integer
+      generatedAt: timestamp
+      bannerImage: string?  # Optional image path
+      metadata:
+        dateRange: DateRange?
+        topThemes: string[]
+        readingTime: integer  # Estimated minutes
+    validations:
+      - executiveSummary: max_words_250
+      - clusters: min_items_1_max_items_5
+    storage: persistent
+    indexes: [generatedAt]
+
+  # Cluster section in digest
+  ClusterSection:
+    fields:
+      theme: string
+      articles: DigestArticle[]
+      clusterSummary: string?  # Optional per-cluster summary
+      orderIndex: integer  # Display order
+    validations:
+      - articles: min_items_2
+      - orderIndex: positive_integer
+    storage: embedded  # Part of Digest
+
+  # Article as displayed in digest
+  DigestArticle:
+    fields:
+      title: string
+      url: string
+      summary: string
+      keyPoints: string[]
+      source: string?
+      publishDate: date?
+      orderIndex: integer  # Display order within cluster
+    validations:
+      - url: valid_url_format
+      - keyPoints: max_items_5
+      - orderIndex: positive_integer
+    storage: embedded  # Part of ClusterSection
+
+  # Quick read result
+  QuickSummary:
+    fields:
+      id: uuid
+      url: string
+      title: string
+      summary: string  # 150-word summary
+      keyPoints: string[]  # 3-5 points
+      readingTime: integer  # Estimated minutes for full article
+      generatedAt: timestamp
+    validations:
+      - url: valid_url_format
+      - summary: max_words_200
+      - keyPoints: min_items_3_max_items_5
+    storage: cache
+    ttl: 86400  # 24 hours
+    indexes: [url]
+
+  # Processing job tracking
+  ProcessingJob:
+    fields:
+      id: uuid
+      type: enum[DIGEST, QUICK_READ]
+      status: enum[PENDING, PROCESSING, CLUSTERING, RENDERING, COMPLETE, FAILED]
+      input:
+        urls: string[]?
+        markdownFile: string?
+      output:
+        digestId: uuid?
+        markdownPath: string?
+        errorMessage: string?
+      progress:
+        articlesProcessed: integer
+        totalArticles: integer
+        currentStep: string
+      startedAt: timestamp
+      completedAt: timestamp?
+    validations:
+      - type: must_be_valid_enum
+      - status: must_be_valid_enum
+      - urls: min_items_1_or_markdown_file_required
+    storage: session
+    ttl: 3600
+    indexes: [status, startedAt]
+
+  # Cache entry for content
+  CacheEntry:
+    fields:
+      key: string  # URL or content hash
+      value: string  # Serialized content
+      dataType: enum[ARTICLE, SUMMARY, EMBEDDING]
+      createdAt: timestamp
+      expiresAt: timestamp
+      hitCount: integer
+      lastAccessedAt: timestamp
+    validations:
+      - key: not_empty
+      - expiresAt: must_be_future
+    storage: persistent
+    indexes: [key, dataType, expiresAt]
+
+# Value objects (not stored independently)
+value_objects:
+  DateRange:
+    fields:
+      start: date
+      end: date
+    validations:
+      - end: must_be_after_start
+
+  EmbeddingVector:
+    fields:
+      values: float[]
+      model: string  # Model used for generation
+      dimension: integer
+    validations:
+      - dimension: equals_768
+      - values: length_equals_dimension
+
+# Enumerations
+enums:
+  ContentType:
+    values: [HTML, PDF, YOUTUBE]
+
+  JobStatus:
+    values: [PENDING, PROCESSING, CLUSTERING, RENDERING, COMPLETE, FAILED]
+
+  JobType:
+    values: [DIGEST, QUICK_READ]
+
+  CacheDataType:
+    values: [ARTICLE, SUMMARY, EMBEDDING]
+
+# Storage configurations
+storage_configs:
+  cache:
+    type: key_value
+    backend: sqlite
+    location: .cache/digest.db
+    eviction: ttl_based
+    max_size: 500MB
+
+  session:
+    type: memory
+    eviction: ttl_based
+    max_items: 100
+
+  persistent:
+    type: sqlite
+    location: .data/digests.db
+    backup: daily
+
+  embedded:
+    type: json
+    description: Stored as part of parent entity
+
+# Relationship rules
+relationships:
+  Article_to_Summary:
+    type: one_to_one
+    cascade_delete: true
+
+  Cluster_to_Articles:
+    type: one_to_many
+    min_articles: 2
+    max_articles: 20
+
+  Digest_to_Clusters:
+    type: one_to_many
+    min_clusters: 1
+    max_clusters: 5
+
+# Data lifecycle
+lifecycle:
+  Article:
+    creation: On fetch from URL
+    update: Never (immutable after creation)
+    deletion: After TTL expiration or cache eviction
+
+  Summary:
+    creation: After article processing
+    update: Never (regenerate if needed)
+    deletion: With parent article
+
+  Cluster:
+    creation: During digest generation
+    update: Never (session only)
+    deletion: After session expiration
+
+  Digest:
+    creation: On successful pipeline completion
+    update: Never (immutable)
+    deletion: Manual or after 30 days
+
+  QuickSummary:
+    creation: On quick read request
+    update: Never (regenerate if needed)
+    deletion: After TTL expiration

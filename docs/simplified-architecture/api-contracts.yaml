@@ -1,0 +1,407 @@
+# API Contract Specification - Content Digest System
+
+contracts:
+  # Primary workflow contracts
+
+  ParseURLs:
+    description: Extract URLs from markdown file
+    input:
+      markdownContent: string
+      options:
+        deduplicateURLs: boolean
+        normalizeURLs: boolean
+    output:
+      success:
+        urls: string[]
+        count: integer
+        skipped: string[]  # Invalid/duplicate URLs
+      errors:
+        - code: NO_URLS_FOUND
+          message: "No valid URLs found in markdown"
+        - code: INVALID_MARKDOWN
+          message: "Unable to parse markdown content"
+    idempotent: true
+    state_transition: none
+
+  FetchContent:
+    description: Retrieve content from a single URL
+    input:
+      url: string
+      options:
+        timeout: integer  # seconds, default 30
+        retryCount: integer  # default 3
+        userAgent: string?
+    output:
+      success:
+        url: string
+        contentType: enum[HTML, PDF, YOUTUBE]
+        rawContent: string
+        contentLength: integer
+        fetchedAt: timestamp
+        metadata:
+          title: string?
+          statusCode: integer
+          redirects: string[]
+      errors:
+        - code: FETCH_TIMEOUT
+          message: "Request timed out after {timeout} seconds"
+        - code: FETCH_FAILED
+          message: "Failed to fetch after {retryCount} attempts"
+        - code: CONTENT_TOO_LARGE
+          message: "Content exceeds 10MB limit"
+        - code: INVALID_CONTENT_TYPE
+          message: "Unsupported content type: {contentType}"
+    idempotent: false  # Network operation
+    state_transition: none
+
+  ExtractText:
+    description: Extract clean text from raw content
+    input:
+      contentType: enum[HTML, PDF, YOUTUBE]
+      rawContent: string
+      options:
+        minLength: integer  # default 100
+        maxLength: integer  # default 10000
+        preserveStructure: boolean
+    output:
+      success:
+        cleanText: string
+        extractedLength: integer
+        metadata:
+          title: string?
+          author: string?
+          publishDate: date?
+          source: string?
+      errors:
+        - code: EXTRACTION_FAILED
+          message: "Failed to extract text from {contentType}"
+        - code: CONTENT_TOO_SHORT
+          message: "Extracted text below minimum length"
+        - code: NO_TRANSCRIPT
+          message: "No transcript available for YouTube video"
+    idempotent: true
+    state_transition: none
+
+  GenerateSummary:
+    description: Create AI summary from article text
+    input:
+      articleId: uuid
+      text: string
+      metadata:
+        url: string
+        title: string?
+      options:
+        maxWords: integer  # default 150
+        keyPointCount: integer  # default 4
+        includeTheme: boolean
+    output:
+      success:
+        summaryId: uuid
+        summary: string
+        keyPoints: string[]
+        theme: string
+        wordCount: integer
+        llmModel: string
+        generatedAt: timestamp
+      errors:
+        - code: LLM_API_ERROR
+          message: "LLM API unavailable or error"
+        - code: RATE_LIMIT_EXCEEDED
+          message: "API rate limit exceeded"
+        - code: INSUFFICIENT_CONTENT
+          message: "Text too short for meaningful summary"
+    idempotent: false  # LLM generation varies
+    state_transition: "article.pending → article.summarized"
+
+  GenerateEmbeddings:
+    description: Create vector embeddings for text
+    input:
+      texts: string[]  # Batch processing
+      model: string  # default "text-embedding-ada-002"
+    output:
+      success:
+        embeddings:
+          - textIndex: integer
+            vector: float[]
+            dimension: integer
+        model: string
+        tokensUsed: integer
+      errors:
+        - code: EMBEDDING_API_ERROR
+          message: "Embedding API unavailable"
+        - code: TEXT_TOO_LONG
+          message: "Text exceeds token limit for embedding"
+        - code: BATCH_TOO_LARGE
+          message: "Batch exceeds maximum size of 100"
+    idempotent: true  # Same text → same embedding
+    state_transition: none
+
+  ClusterArticles:
+    description: Group articles by topic similarity
+    input:
+      articles:
+        - id: uuid
+          embedding: float[]
+          summary: string
+      options:
+        minClusterSize: integer  # default 2
+        maxClusters: integer  # default 5
+        similarityThreshold: float  # default 0.7
+    output:
+      success:
+        clusters:
+          - clusterId: uuid
+            theme: string
+            articleIds: uuid[]
+            centroid: float[]
+            avgSimilarity: float
+        unclusteredArticles: uuid[]  # Outliers
+        clusterCount: integer
+      errors:
+        - code: INSUFFICIENT_ARTICLES
+          message: "Need at least 2 articles to cluster"
+        - code: CLUSTERING_FAILED
+          message: "Unable to form valid clusters"
+    idempotent: true  # Deterministic clustering
+    state_transition: none
+
+  ReorderArticles:
+    description: Order articles within clusters
+    input:
+      clusters:
+        - clusterId: uuid
+          articleIds: uuid[]
+          centroid: float[]
+      articles:
+        - id: uuid
+          embedding: float[]
+          publishDate: date?
+      orderingStrategy: enum[RELEVANCE, CHRONOLOGICAL, HYBRID]
+    output:
+      success:
+        orderedClusters:
+          - clusterId: uuid
+            theme: string
+            orderedArticleIds: uuid[]  # In display order
+        globalOrder: uuid[]  # All articles in final order
+      errors:
+        - code: INVALID_CLUSTER_DATA
+          message: "Cluster data incomplete or invalid"
+    idempotent: true
+    state_transition: none
+
+  GenerateExecutiveSummary:
+    description: Create narrative summary from top articles
+    input:
+      clusters:
+        - theme: string
+          topArticles:  # Top 3 per cluster
+            - title: string
+              summary: string
+              keyPoints: string[]
+      options:
+        maxWords: integer  # default 200
+        style: enum[NARRATIVE, EXECUTIVE, TECHNICAL]
+    output:
+      success:
+        narrative: string
+        themes: string[]  # Identified cross-cutting themes
+        wordCount: integer
+        generatedAt: timestamp
+      errors:
+        - code: LLM_API_ERROR
+          message: "Failed to generate narrative"
+        - code: INSUFFICIENT_CONTENT
+          message: "Not enough article content for summary"
+    idempotent: false  # LLM generation varies
+    state_transition: none
+
+  RenderMarkdown:
+    description: Generate final markdown output
+    input:
+      digest:
+        title: string
+        executiveSummary: string
+        clusters:
+          - theme: string
+            articles:
+              - title: string
+                url: string
+                summary: string
+                keyPoints: string[]
+                source: string?
+      template: enum[STANDARD, LINKEDIN, MINIMAL]
+      options:
+        includeTableOfContents: boolean
+        includeMetadata: boolean
+        includeDate: boolean
+    output:
+      success:
+        markdown: string
+        wordCount: integer
+        characterCount: integer
+        linkCount: integer
+      errors:
+        - code: TEMPLATE_ERROR
+          message: "Failed to render template"
+        - code: INVALID_DIGEST_DATA
+          message: "Digest data incomplete"
+    idempotent: true
+    state_transition: "digest.rendering → digest.complete"
+
+  GenerateBanner:
+    description: Create banner image for social sharing
+    input:
+      content:
+        title: string
+        themes: string[]
+        topArticleTitles: string[]
+      options:
+        width: integer  # default 1200
+        height: integer  # default 627
+        style: enum[MODERN, MINIMAL, TECH, PROFESSIONAL]
+    output:
+      success:
+        imagePath: string
+        imageUrl: string?  # If uploaded
+        format: string  # "png" or "jpg"
+        size: integer  # bytes
+      errors:
+        - code: IMAGE_API_ERROR
+          message: "Image generation API unavailable"
+        - code: GENERATION_FAILED
+          message: "Failed to generate image"
+    idempotent: false  # Image generation varies
+    state_transition: none
+
+  # Secondary workflow contracts
+
+  QuickSummarize:
+    description: Generate quick summary for single URL
+    input:
+      url: string
+      options:
+        maxWords: integer  # default 150
+        includeKeyPoints: boolean
+    output:
+      success:
+        title: string
+        summary: string
+        keyPoints: string[]
+        readingTime: integer  # minutes
+        source: string
+      errors:
+        - code: FETCH_FAILED
+          message: "Unable to fetch content"
+        - code: SUMMARY_FAILED
+          message: "Unable to generate summary"
+    idempotent: false
+    state_transition: none
+
+  # Cache management contracts
+
+  CacheCheck:
+    description: Check if content exists in cache
+    input:
+      key: string
+      dataType: enum[ARTICLE, SUMMARY, EMBEDDING]
+    output:
+      success:
+        exists: boolean
+        value: string?
+        createdAt: timestamp?
+        expiresAt: timestamp?
+        hitCount: integer?
+      errors:
+        - code: CACHE_ERROR
+          message: "Cache unavailable"
+    idempotent: true
+    state_transition: none
+
+  CacheStore:
+    description: Store content in cache
+    input:
+      key: string
+      value: string
+      dataType: enum[ARTICLE, SUMMARY, EMBEDDING]
+      ttl: integer  # seconds
+    output:
+      success:
+        stored: boolean
+        expiresAt: timestamp
+      errors:
+        - code: CACHE_FULL
+          message: "Cache storage limit reached"
+        - code: CACHE_ERROR
+          message: "Failed to store in cache"
+    idempotent: true
+    state_transition: none
+
+# Service dependencies
+service_dependencies:
+  DigestService:
+    depends_on:
+      - URLParser
+      - ContentFetcher
+      - TextExtractor
+      - Summarizer
+      - EmbeddingGenerator
+      - Clusterer
+      - ArticleReorderer
+      - NarrativeGenerator
+      - MarkdownRenderer
+      - CacheManager
+    optional:
+      - BannerGenerator
+
+  QuickReadService:
+    depends_on:
+      - ContentFetcher
+      - TextExtractor
+      - Summarizer
+      - MarkdownRenderer
+      - CacheManager
+
+# Rate limits
+rate_limits:
+  LLM_API:
+    requests_per_minute: 60
+    tokens_per_minute: 150000
+
+  EMBEDDING_API:
+    requests_per_minute: 200
+    tokens_per_minute: 1000000
+
+  IMAGE_API:
+    requests_per_minute: 5
+    requests_per_day: 50
+
+  WEB_FETCH:
+    concurrent_requests: 5
+    delay_between_requests: 100  # milliseconds
+
+# SLA requirements
+sla_requirements:
+  ParseURLs:
+    max_latency: 50ms
+    availability: 99.99%
+
+  FetchContent:
+    max_latency: 3000ms
+    availability: 95%
+
+  GenerateSummary:
+    max_latency: 5000ms
+    availability: 99%
+
+  ClusterArticles:
+    max_latency: 1000ms
+    availability: 99.9%
+
+  RenderMarkdown:
+    max_latency: 100ms
+    availability: 99.99%
+
+  EndToEndDigest:
+    max_latency: 30000ms  # 30 seconds for 10 articles
+    availability: 95%
