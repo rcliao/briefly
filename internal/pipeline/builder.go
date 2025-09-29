@@ -3,10 +3,9 @@ package pipeline
 import (
 	"briefly/internal/core"
 	"briefly/internal/llm"
+	"briefly/internal/summarize"
 	"context"
 	"fmt"
-	"strings"
-	"time"
 )
 
 // Builder helps construct a fully configured Pipeline
@@ -110,10 +109,10 @@ func (b *Builder) Build() (*Pipeline, error) {
 		banner = NewBannerAdapter()
 	}
 
-	// Create summarizer adapter
-	// Note: We'll need to create this once we build the summarize package
-	// For now, use a placeholder that will be implemented
-	summarizer := &PlaceholderSummarizer{llmClient: b.llmClient}
+	// Create summarizer adapter using the new summarize package
+	llmClientForSummarize := &LLMClientForSummarize{client: b.llmClient}
+	summarizerCore := summarize.NewSummarizerWithDefaults(llmClientForSummarize)
+	summarizer := &SummarizerAdapter{summarizer: summarizerCore}
 
 	// Build pipeline
 	pipeline := NewPipeline(
@@ -133,83 +132,28 @@ func (b *Builder) Build() (*Pipeline, error) {
 	return pipeline, nil
 }
 
-// PlaceholderSummarizer is a temporary implementation until we create internal/summarize
-type PlaceholderSummarizer struct {
-	llmClient *llm.Client
+// SummarizerAdapter wraps internal/summarize to implement pipeline.ArticleSummarizer
+type SummarizerAdapter struct {
+	summarizer *summarize.Summarizer
 }
 
-func (s *PlaceholderSummarizer) SummarizeArticle(ctx context.Context, article *core.Article) (*core.Summary, error) {
-	// Temporary implementation using existing LLM client
-	// This will be replaced by proper summarize package
-	prompt := fmt.Sprintf(`Summarize this article in 150 words and provide 3-5 key points.
-
-Title: %s
-Content: %s
-
-Format your response as:
-SUMMARY:
-[150-word summary here]
-
-KEY POINTS:
-- [point 1]
-- [point 2]
-- [point 3]
-`, article.Title, truncateForPrompt(article.CleanedText, 3000))
-
-	response, err := s.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate summary: %w", err)
-	}
-
-	// Parse response to extract summary and key points
-	summary := &core.Summary{
-		ID:            generateID(),
-		ArticleIDs:    []string{article.ID},
-		SummaryText:   response, // Simplified for now
-		ModelUsed:     "gemini-2.5-flash-preview-05-20",
-		DateGenerated: time.Now(),
-	}
-
-	return summary, nil
+func (s *SummarizerAdapter) SummarizeArticle(ctx context.Context, article *core.Article) (*core.Summary, error) {
+	return s.summarizer.SummarizeArticle(ctx, article)
 }
 
-func (s *PlaceholderSummarizer) GenerateKeyPoints(ctx context.Context, content string) ([]string, error) {
-	prompt := fmt.Sprintf(`Extract 3-5 key points from this content:
-
-%s
-
-Provide key points as a bulleted list.`, truncateForPrompt(content, 2000))
-
-	response, err := s.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	// Simple parsing - split by lines starting with - or *
-	points := []string{}
-	for _, line := range strings.Split(response, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "*") {
-			points = append(points, strings.TrimSpace(line[1:]))
-		}
-	}
-
-	return points, nil
+func (s *SummarizerAdapter) GenerateKeyPoints(ctx context.Context, content string) ([]string, error) {
+	return s.summarizer.GenerateKeyPoints(ctx, content)
 }
 
-func (s *PlaceholderSummarizer) ExtractTitle(ctx context.Context, content string) (string, error) {
-	prompt := fmt.Sprintf(`Generate a concise, descriptive title (5-10 words) for this content:
-
-%s
-
-Title:`, truncateForPrompt(content, 1000))
-
-	return s.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
+func (s *SummarizerAdapter) ExtractTitle(ctx context.Context, content string) (string, error) {
+	return s.summarizer.ExtractTitle(ctx, content)
 }
 
-func truncateForPrompt(text string, maxChars int) string {
-	if len(text) <= maxChars {
-		return text
-	}
-	return text[:maxChars] + "..."
+// LLMClientForSummarize adapts llm.Client to summarize.LLMClient interface
+type LLMClientForSummarize struct {
+	client *llm.Client
+}
+
+func (l *LLMClientForSummarize) GenerateText(ctx context.Context, prompt string, options interface{}) (string, error) {
+	return l.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
 }
