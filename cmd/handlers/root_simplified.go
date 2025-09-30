@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var cfgFile string // Configuration file path
+
 // NewSimplifiedRootCmd creates the new simplified root command
 // This replaces the complex root.go with a clean, focused interface
 func NewSimplifiedRootCmd() *cobra.Command {

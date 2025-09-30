@@ -160,7 +160,7 @@ func digestSimplifiedRun(cmd *cobra.Command, args []string) {
 		fmt.Println("   3. Optional: Re-run with --with-banner to generate social image")
 	}
 
-	fmt.Println("\n" + "═══════════════════════════════════════\n")
+	fmt.Println("\n" + "═══════════════════════════════════════")
 
 	// Log completion
 	logger.Info("Digest generation completed",

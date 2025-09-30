@@ -246,6 +246,7 @@ func TestGetAvailableFormats(t *testing.T) {
 		"newsletter",
 		"scannable",
 		"email",
+		"signal",
 	}
 
 	if len(formats) != len(expectedFormats) {

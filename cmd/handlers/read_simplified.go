@@ -166,7 +166,7 @@ func printQuickReadResult(result *pipeline.QuickReadResult, elapsed time.Duratio
 		fmt.Printf("   • Video Duration: %d min\n", result.Article.Duration/60)
 	}
 
-	fmt.Println("\n═══════════════════════════════════════\n")
+	fmt.Println("\n═══════════════════════════════════════")
 }
 
 // wrapText wraps text to a specified width
