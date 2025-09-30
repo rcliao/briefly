@@ -242,6 +242,11 @@ func (a *CacheAdapter) GetArticleWithSummary(url string, ttl time.Duration) (*co
 		return nil, nil, err
 	}
 
+	// Check if article was found in cache
+	if article == nil {
+		return nil, nil, nil // Cache miss - no article found
+	}
+
 	// Generate content hash for summary lookup
 	contentHash := fmt.Sprintf("%x", article.CleanedText)
 
