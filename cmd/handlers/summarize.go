@@ -218,7 +218,12 @@ func runSummarization(url, style string, highlights bool, format, outputFile str
 			generatedSummary, err = llmClient.SummarizeArticleWithKeyMoments(*article)
 		} else {
 			// Use format-specific summarization
-			generatedSummary, err = llmClient.SummarizeArticleTextWithFormat(*article, actualStyle)
+			// Use scannable format for signal digests to get concise 20-40 word summaries
+			summaryFormat := actualStyle
+			if actualStyle == "signal" {
+				summaryFormat = "scannable"
+			}
+			generatedSummary, err = llmClient.SummarizeArticleTextWithFormat(*article, summaryFormat)
 		}
 
 		if err != nil {

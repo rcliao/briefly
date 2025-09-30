@@ -11,11 +11,13 @@ import (
 	"briefly/internal/llm"
 	"briefly/internal/logger"
 	"briefly/internal/messaging"
+	"briefly/internal/ordering"
 	"briefly/internal/relevance"
 	"briefly/internal/render"
 	"briefly/internal/sentiment"
 	"briefly/internal/services"
 	"briefly/internal/store"
+	"briefly/internal/summaries"
 	"briefly/internal/templates"
 	"briefly/internal/tts"
 	"briefly/internal/visual"
@@ -78,7 +80,7 @@ Examples:
 
 	// Add flags
 	digestCmd.Flags().StringP("output", "o", "digests", "Output directory for digest file")
-	digestCmd.Flags().StringP("format", "f", "standard", "Digest format: brief, standard, detailed, newsletter, scannable, email, slack, discord, audio, condensed")
+	digestCmd.Flags().StringP("format", "f", "standard", "Digest format: brief, standard, detailed, newsletter, scannable, signal, email, slack, discord, audio, condensed")
 	digestCmd.Flags().Bool("dry-run", false, "Estimate costs without making API calls")
 	digestCmd.Flags().Bool("list-formats", false, "List available output formats")
 	digestCmd.Flags().Bool("single", false, "Process single URL instead of input file")
@@ -159,6 +161,8 @@ func printAvailableFormats() {
 	fmt.Println("  standard   - Standard digest with full summaries")
 	fmt.Println("  detailed   - Detailed digest with analysis")
 	fmt.Println("  newsletter - Newsletter format with executive summary")
+	fmt.Println("  scannable  - Scannable newsletter format with prominent links")
+	fmt.Println("  signal     - Signal+Sources format with concise insights")
 	fmt.Println("  condensed  - Bite-size format for 30-second reading")
 	fmt.Println("  email      - HTML email format")
 	fmt.Println("  slack      - Slack messaging format")
@@ -1231,6 +1235,8 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 		digestFormat = templates.FormatNewsletter
 	case "scannable":
 		digestFormat = templates.FormatScannableNewsletter
+	case "signal":
+		digestFormat = templates.FormatSignal
 	case "email":
 		digestFormat = templates.FormatEmail
 	case "standard", "":
@@ -1249,63 +1255,37 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 	fmt.Printf("Generating final digest summary using %s format...\n", format)
 	logger.Info("Generating final digest summary", "format", format)
 
-	// Order items consistently for both LLM input and Sources rendering
-	// This ensures reference numbers match between the digest text and Sources section
-	orderedItems := orderItemsForSources(digestItems, format)
+	// Create ordering service with categorization
+	categorizationService := categorization.NewService(llmClient)
+	orderingService := ordering.NewService(categorizationService, nil) // No clustering service for now
 	
-	// Prepare combined summaries for final digest with category information
-	var combinedSummaries strings.Builder
-	
-	// Check if articles are categorized by looking for category info in MyTake
-	categorized := checkIfCategorized(orderedItems)
-	
-	if categorized {
-		// Use the SAME categorization logic as the Sources section to ensure reference numbers match
-		categoryGroups := groupSignalItemsByCategory(orderedItems)
-		// Use the SAME category order as the Sources section
-		categoryOrder := []string{"🔥 Breaking & Hot", "🛠️ Tools & Platforms", "📊 Analysis & Research", "💰 Business & Economics", "💡 Additional Items"}
-		
-		// Create a global reference number counter that matches final Sources section numbering
-		globalRefNum := 1
-		
-		for _, categoryName := range categoryOrder {
-			if items, exists := categoryGroups[categoryName]; exists && len(items) > 0 {
-				combinedSummaries.WriteString(fmt.Sprintf("**Category: %s** (%d articles)\n", categoryName, len(items)))
-				for _, item := range items {
-					combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", globalRefNum, item.Title))
-					combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
-					combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
-					globalRefNum++
-				}
-				combinedSummaries.WriteString("\n")
-			}
-		}
-		
-		// Handle uncategorized items - but note that groupSignalItemsByCategory should categorize all items
-		// Keep this as a safety fallback
-		uncategorized := getUncategorizedItemsForSignal(orderedItems, categoryGroups)
-		if len(uncategorized) > 0 {
-			combinedSummaries.WriteString("**Category: Other** (uncategorized)\n")
-			for _, item := range uncategorized {
-				combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", globalRefNum, item.Title))
-				combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
-				combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
-				globalRefNum++
-			}
-		}
-	} else {
-		// Fallback to original flat format
-		for i, item := range orderedItems {
-			combinedSummaries.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, item.Title))
-			combinedSummaries.WriteString(fmt.Sprintf("   Summary: %s\n", item.SummaryText))
-			combinedSummaries.WriteString(fmt.Sprintf("   Reference URL: %s\n\n", item.URL))
-		}
+	// Create ordered structure - single source of truth for article ordering
+	fmt.Printf("🔄 Creating ordered structure for %s format...\n", format)
+	orderedStructure, err := orderingService.CreateOrderedStructure(context.Background(), processedArticles, digestItems, format)
+	if err != nil {
+		logger.Error("Failed to create ordered structure", err)
+		// Fallback to old ordering system
+		orderedItems := orderItemsForSources(digestItems, format)
+		return generateFallbackDigest(orderedItems, template, format, outputDir)
 	}
+	
+	// Create structured summary builder for LLM input
+	summaryBuilder := summaries.NewStructuredBuilder()
+	
+	// Build LLM input with proper reference numbering
+	fmt.Printf("📝 Building structured LLM input...\n")
+	llmInput, referenceMap, err := summaryBuilder.BuildLLMInput(orderedStructure, format)
+	if err != nil {
+		logger.Error("Failed to build LLM input", err)
+		// Fallback to old method
+		orderedItems := orderItemsForSources(digestItems, format)
+		return generateFallbackDigest(orderedItems, template, format, outputDir)
+	}
+	
+	fmt.Printf("   ✅ Structured input created with %d references\n", len(referenceMap))
 
-	// Use new structured generation approach for newsletter and standard formats
-	// For scannable format, we want enhanced summary but keep the categorized Featured Articles section
+	// Use new structured generation approach for all formats
 	var finalDigest string
-	var useStructuredGeneration = (format == "newsletter" || format == "standard")
 	var useEnhancedSummary = (format == "newsletter" || format == "standard" || format == "scannable")
 
 	if useEnhancedSummary {
@@ -1329,17 +1309,17 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 		}
 
 		finalDigest, err = llmClient.GenerateStructuredDigest(
-			combinedSummaries.String(),
+			llmInput,
 			format,
 			alertsContext,
 			sentimentContext,
 			researchQueries)
 	} else if styleGuide != "" {
 		// Enhanced prompt with style guide
-		finalDigest, err = generateDigestWithStyleGuide(llmClient, combinedSummaries.String(), format, *template, styleGuide)
+		finalDigest, err = generateDigestWithStyleGuide(llmClient, llmInput, format, *template, styleGuide)
 	} else {
 		// Standard digest generation
-		finalDigest, err = generateStandardDigest(llmClient, combinedSummaries.String(), format, *template)
+		finalDigest, err = generateStandardDigest(llmClient, llmInput, format, *template)
 	}
 
 	var generatedTitle string
@@ -1353,7 +1333,7 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 	fmt.Printf("🎯 Generating Smart Headline...\n")
 	contentForTitle := finalDigest
 	if contentForTitle == "" {
-		contentForTitle = combinedSummaries.String()
+		contentForTitle = llmInput
 	}
 
 	title, titleErr := llmClient.GenerateDigestTitle(contentForTitle, format)
@@ -1372,8 +1352,8 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 	if insightsData != nil {
 		teamContext := config.GenerateTeamContextPrompt()
 		var articleTitles []string
-		for _, item := range digestItems {
-			articleTitles = append(articleTitles, item.Title)
+		for _, item := range orderedStructure.OrderedItems {
+			articleTitles = append(articleTitles, item.DigestData.Title)
 		}
 
 		digestResearchQueries, err := llmClient.GenerateDigestResearchQueries(finalDigest, teamContext, articleTitles)
@@ -1387,19 +1367,7 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 		}
 	}
 
-	// Prepare insights data for rendering
-	var overallSentimentText, alertsSummaryText, trendsSummaryText string
-	if insightsData != nil {
-		overallSentimentText = fmt.Sprintf("Overall: %s (%.2f)",
-			insightsData.OverallSentiment.OverallEmoji, insightsData.OverallSentiment.OverallScore.Overall)
-
-		if len(insightsData.TriggeredAlerts) > 0 {
-			alertManager := alerts.NewAlertManager()
-			alertsSummaryText = alertManager.FormatAlertsSection(insightsData.TriggeredAlerts)
-		} else {
-			alertsSummaryText = "### ✅ Alert Monitoring\nNo alerts triggered for this digest. All articles passed through standard monitoring criteria."
-		}
-	}
+	// Note: Insights data is now handled within the new template rendering system
 
 	// Generate banner image if requested
 	var banner *core.BannerImage
@@ -1414,21 +1382,9 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 	var renderedContent, digestPath string
 	var renderErr error
 
-	if format == "signal" {
-		// Phase 4: Use Signal+Sources template for signal format
-		// Note: This is a simplified version using existing data structures
-		// Full implementation will use the new core.Digest with Signal structure
-		
-		// Use orderedItems to ensure Sources section matches LLM input order
-		renderedContent, digestPath, renderErr = templates.RenderSignalStyleDigest(orderedItems, outputDir, finalDigest, template, generatedTitle)
-	} else if format == "email" {
-		renderedContent, digestPath, renderErr = templates.RenderHTMLEmailWithBanner(orderedItems, outputDir, finalDigest, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, "default", banner)
-	} else if useStructuredGeneration {
-		// Use new structured rendering approach
-		renderedContent, digestPath, renderErr = templates.RenderWithStructuredContent(orderedItems, outputDir, finalDigest, template, generatedTitle, banner)
-	} else {
-		renderedContent, digestPath, renderErr = templates.RenderWithBannerAndInsights(orderedItems, outputDir, finalDigest, "", template, generatedTitle, overallSentimentText, alertsSummaryText, trendsSummaryText, insightsData.ResearchSuggestions, banner)
-	}
+	// Use new order-aware template rendering with structured data
+	fmt.Printf("📄 Rendering digest using structured templates...\n")
+	renderedContent, digestPath, renderErr = templates.RenderWithOrderedStructure(orderedStructure, finalDigest, template, generatedTitle, banner, outputDir)
 
 	if renderErr != nil {
 		return "", fmt.Errorf("failed to render digest with template: %w", renderErr)
@@ -1440,8 +1396,8 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 		defer func() { _ = cacheStore.Close() }()
 		digestID := uuid.NewString()
 		var articleURLs []string
-		for _, item := range digestItems {
-			articleURLs = append(articleURLs, item.URL)
+		for _, item := range orderedStructure.OrderedItems {
+			articleURLs = append(articleURLs, item.DigestData.URL)
 		}
 
 		model := viper.GetString("gemini.model")
@@ -1454,8 +1410,42 @@ func generateStandardOutput(digestItems []render.DigestData, processedArticles [
 		}
 	}
 
+	// Validate references in the generated digest
+	if finalDigest != "" {
+		validationErrors := summaryBuilder.ValidateReferences(finalDigest, referenceMap)
+		if len(validationErrors) > 0 {
+			logger.Warn("Reference validation found issues", "errors", len(validationErrors))
+			for _, err := range validationErrors {
+				fmt.Printf("   ⚠️  Reference issue: %s\n", err.Error())
+			}
+		} else {
+			fmt.Printf("   ✅ All references validated successfully\n")
+		}
+	}
+
 	logger.Info("Digest generated successfully", "path", digestPath, "format", format, "title", generatedTitle)
 	return digestPath, nil
+}
+
+// generateFallbackDigest provides fallback when new ordering system fails
+func generateFallbackDigest(digestItems []render.DigestData, template *templates.DigestTemplate, format, outputDir string) (string, error) {
+	fmt.Printf("⚠️  Using fallback digest generation...\n")
+	
+	// Generate simple digest without LLM
+	var content strings.Builder
+	content.WriteString("# Weekly Digest\n\n")
+	content.WriteString("*Note: This digest was generated using fallback mode due to processing issues.*\n\n")
+	
+	for i, item := range digestItems {
+		content.WriteString(fmt.Sprintf("## %d. %s\n\n", i+1, item.Title))
+		content.WriteString(fmt.Sprintf("%s\n\n", item.SummaryText))
+		content.WriteString(fmt.Sprintf("**Source:** %s\n\n", item.URL))
+		content.WriteString("---\n\n")
+	}
+	
+	filename := fmt.Sprintf("digest_%s_%s.md", format, time.Now().Format("2006-01-02"))
+	
+	return render.WriteDigestToFile(content.String(), outputDir, filename)
 }
 
 func handleInteractiveMyTake(digestPath, styleGuide string) error {

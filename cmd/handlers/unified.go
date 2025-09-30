@@ -1,14 +1,17 @@
 package handlers
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"briefly/internal/core"
 	"briefly/internal/services"
+	"briefly/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -54,12 +57,26 @@ func NewUnifiedHandler() *UnifiedHandler {
 	// Initialize AI router (cloud LLM will be nil for now)
 	aiRouter := services.NewAIRouter(localModel, nil, costController)
 	
-	// Initialize intelligence service with AI router
+	// Initialize research store
+	cacheStore, err := store.NewStore(".briefly-cache")
+	if err != nil {
+		fmt.Printf("⚠️ Failed to initialize cache store: %v\n", err)
+		return nil
+	}
+	
+	researchStore, err := services.NewSQLiteResearchStore(cacheStore.DB())
+	if err != nil {
+		fmt.Printf("⚠️ Failed to initialize research store: %v\n", err)
+		return nil
+	}
+
+	// Initialize intelligence service with AI router and research store
 	intelligenceService := services.NewIntelligenceService(
 		nil, // articleProcessor - will use existing
 		nil, // llmService - will use existing  
 		nil, // cacheService - will use existing
 		aiRouter,
+		researchStore,
 	)
 
 	return &UnifiedHandler{
@@ -277,26 +294,46 @@ func (h *UnifiedHandler) processDigest(ctx context.Context, cmd *Command) error 
 
 // processDigestFile handles file-based digest generation
 func (h *UnifiedHandler) processDigestFile(ctx context.Context, cmd *Command) error {
-	// Delegate to existing digest command for Phase 2
-	// But modify output format
-	
 	fmt.Printf("🔄 Processing file with enhanced format...\n")
 	
-	// Use existing digest command with scannable format
-	digestCmd := NewDigestCmd()
-	args := []string{cmd.Input, "--format", "scannable"}
-	
-	// Apply word limit if specified (default is 300)
-	if cmd.Options.MaxWordCount > 0 {
-		args = append(args, "--max-words", fmt.Sprintf("%d", cmd.Options.MaxWordCount))
+	// Phase 4: Use the new intelligence service for Signal+Sources processing
+	input := services.ContentInput{
+		FilePath: cmd.Input,
+		Options: services.ProcessingOptions{
+			ForceCloudAI:     cmd.Options.ForceCloudAI,
+			MaxWordCount:     cmd.Options.MaxWordCount,
+			QualityThreshold: cmd.Options.QualityThreshold,
+			UserContext:      cmd.Options.UserContext,
+			OutputFormat:     cmd.Options.OutputFormat,
+		},
 	}
-	
-	digestCmd.SetArgs(args)
 	
 	fmt.Printf("📊 Word limit: %d | Quality threshold: %.1f\n", 
 		cmd.Options.MaxWordCount, cmd.Options.QualityThreshold)
 	
-	return digestCmd.Execute()
+	// Check if file has URLs that need to be extracted first
+	if cmd.Input != "" {
+		// For now, delegate to existing digest command for file processing
+		// since we haven't implemented file URL extraction in intelligence service yet
+		digestCmd := NewDigestCmd()
+		args := []string{cmd.Input, "--format", cmd.Options.OutputFormat}
+		
+		if cmd.Options.MaxWordCount > 0 {
+			args = append(args, "--max-words", fmt.Sprintf("%d", cmd.Options.MaxWordCount))
+		}
+		
+		digestCmd.SetArgs(args)
+		return digestCmd.Execute()
+	}
+	
+	digest, err := h.intelligenceService.ProcessContent(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to process content: %w", err)
+	}
+	
+	// Output the digest (Phase 4 will use proper template rendering)
+	fmt.Printf("\n✅ Generated digest: %s\n", digest.Title)
+	return nil
 }
 
 // processDigestURLs handles URL-based digest generation  
@@ -322,22 +359,41 @@ func (h *UnifiedHandler) processDigestURLs(ctx context.Context, cmd *Command) er
 }
 
 func (h *UnifiedHandler) processResearch(ctx context.Context, cmd *Command) error {
-	fmt.Printf("🔍 Research query: %s\n", cmd.Query)
+	fmt.Printf("🔍 Starting research session: %s\n", cmd.Query)
 	
-	// TODO: Implement research processing in Phase 5
-	fmt.Println("Research processing will be implemented in Phase 5")
-	fmt.Println("For now, use the existing 'research' command")
+	// Start a new research session
+	session, err := h.intelligenceService.StartResearchSession(ctx, cmd.Query)
+	if err != nil {
+		return fmt.Errorf("failed to start research session: %w", err)
+	}
 	
-	return nil
+	fmt.Printf("✅ Research session started: %s\n", session.ID)
+	fmt.Printf("📋 Current phase: %s\n", session.CurrentState.Phase)
+	
+	// Show initial conversation
+	if len(session.ConversationLog) > 0 {
+		lastTurn := session.ConversationLog[len(session.ConversationLog)-1]
+		fmt.Printf("\n🤖 System: %s\n", lastTurn.Response)
+	}
+	
+	// Start interactive conversation loop
+	return h.startInteractiveResearch(ctx, session)
 }
 
 func (h *UnifiedHandler) processExplore(ctx context.Context, cmd *Command) error {
 	fmt.Printf("🚀 Exploring topic: %s\n", cmd.Query)
 	
-	// TODO: Implement exploration mode in Phase 5
-	fmt.Println("Exploration mode will be implemented in Phase 5")
+	// Start exploration session - similar to research but with exploration context
+	session, err := h.intelligenceService.ExploreTopicFurther(ctx, cmd.Query, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start exploration session: %w", err)
+	}
 	
-	return nil
+	fmt.Printf("✅ Exploration session started: %s\n", session.ID)
+	fmt.Printf("📋 Phase: %s | Topic: %s\n", session.CurrentState.Phase, session.CurrentState.CurrentTopic)
+	
+	// Start interactive conversation loop
+	return h.startInteractiveResearch(ctx, session)
 }
 
 func (h *UnifiedHandler) processCache(ctx context.Context, cmd *Command) error {
@@ -520,4 +576,364 @@ func formatAvailable(available bool) string {
 		return "✅ Available"
 	}
 	return "❌ Not Available"
+}
+
+// startInteractiveResearch handles the interactive conversation loop
+func (h *UnifiedHandler) startInteractiveResearch(ctx context.Context, session *core.ResearchSession) error {
+	fmt.Printf("\n💬 Interactive Research Session")
+	fmt.Printf("\n📍 Available actions: %s", strings.Join(session.CurrentState.AvailableActions, ", "))
+	fmt.Printf("\n📊 Progress: %.1f%%", session.CurrentState.Progress*100)
+	fmt.Printf("\n\n💡 Type your questions, requests, or commands. Use 'quit' to exit.\n")
+	fmt.Printf("Examples:\n")
+	fmt.Printf("  - 'search for latest developments'\n")
+	fmt.Printf("  - 'explore this topic deeper'\n")
+	fmt.Printf("  - 'refine to focus on security aspects'\n")
+	fmt.Printf("  - 'summarize what we've found'\n\n")
+
+	// Create buffered reader for better input handling
+	reader := bufio.NewReader(os.Stdin)
+
+	// Interactive loop
+	for {
+		fmt.Print("🔍 You: ")
+		
+		// Read user input using buffered reader
+		userInput, err := reader.ReadString('\n')
+		
+		// Handle EOF or error gracefully
+		if err != nil {
+			fmt.Printf("\n✅ Research session saved: %s\n", session.ID)
+			fmt.Printf("💾 Resume later with: briefly continue %s\n", session.ID)
+			break
+		}
+		
+		// Handle special commands
+		userInput = strings.TrimSpace(userInput)
+		if userInput == "" {
+			continue
+		}
+		
+		if strings.ToLower(userInput) == "quit" || strings.ToLower(userInput) == "exit" {
+			fmt.Printf("\n✅ Research session saved: %s\n", session.ID)
+			fmt.Printf("💾 You can resume later with: briefly continue %s\n", session.ID)
+			break
+		}
+		
+		if strings.ToLower(userInput) == "help" {
+			h.showResearchHelp()
+			continue
+		}
+		
+		if strings.ToLower(userInput) == "status" {
+			h.showSessionStatus(session)
+			continue
+		}
+		
+		// Phase 5.4: Queue management commands
+		if strings.HasPrefix(strings.ToLower(userInput), "queue") {
+			if err := h.handleQueueCommand(ctx, session.ID, userInput); err != nil {
+				fmt.Printf("❌ Queue error: %v\n\n", err)
+			}
+			continue
+		}
+		
+		if strings.HasPrefix(strings.ToLower(userInput), "digest") {
+			if err := h.handleDigestFromQueue(ctx, session.ID, userInput); err != nil {
+				fmt.Printf("❌ Digest error: %v\n\n", err)
+			}
+			continue
+		}
+		
+		// Process user input through intelligence service
+		fmt.Printf("\n🤖 Processing...\n")
+		
+		response, err := h.intelligenceService.ContinueResearch(ctx, session.ID, userInput)
+		if err != nil {
+			fmt.Printf("❌ Error: %v\n\n", err)
+			continue
+		}
+		
+		// Display response
+		fmt.Printf("🤖 System: %s\n", response.Message)
+		
+		// Show discovered items if any
+		if len(response.DiscoveredItems) > 0 {
+			fmt.Printf("\n📚 New discoveries:\n")
+			for i, item := range response.DiscoveredItems {
+				fmt.Printf("  %d. %s (relevance: %.2f)\n", i+1, item.Title, item.Relevance)
+				fmt.Printf("     %s\n", item.URL)
+			}
+		}
+		
+		// Show available actions
+		if len(response.Actions) > 0 {
+			fmt.Printf("\n💡 Available actions:\n")
+			for _, action := range response.Actions {
+				fmt.Printf("  • %s: %s\n", action.ID, action.Description)
+			}
+		}
+		
+		// Show cost information
+		if response.ProcessingCost.EstimatedUSD > 0 {
+			fmt.Printf("\n💰 Cost: $%.4f\n", response.ProcessingCost.EstimatedUSD)
+		}
+		
+		// Check if session should continue
+		if !response.ContinueSession {
+			fmt.Printf("\n✅ Research session completed!\n")
+			fmt.Printf("📋 Session ID: %s\n", session.ID)
+			break
+		}
+		
+		fmt.Printf("\n")
+	}
+	
+	return nil
+}
+
+// showResearchHelp displays help for research commands
+func (h *UnifiedHandler) showResearchHelp() {
+	fmt.Printf(`
+📖 Research Session Help
+
+Commands:
+  search [query]    - Search for specific information
+  explore [topic]   - Deep dive into a topic
+  refine [query]    - Refine your research focus
+  queue [items]     - Add items to digest queue
+  summarize         - Summarize research findings
+  status           - Show current session status
+  help             - Show this help
+  quit/exit        - Exit session (saves progress)
+
+Examples:
+  search for security vulnerabilities
+  explore machine learning applications
+  refine to focus on enterprise solutions
+  queue the last 3 items
+  summarize our findings so far
+
+`)
+}
+
+// showSessionStatus displays current session information
+func (h *UnifiedHandler) showSessionStatus(session *core.ResearchSession) {
+	fmt.Printf(`
+📊 Research Session Status
+
+Session ID: %s
+Query: %s
+Phase: %s
+Current Topic: %s
+Progress: %.1f%%
+Conversations: %d turns
+Discovered Items: %d
+Queued for Digest: %d items
+
+Available Actions: %s
+`, 
+		session.ID,
+		session.InitialQuery,
+		session.CurrentState.Phase,
+		session.CurrentState.CurrentTopic,
+		session.CurrentState.Progress*100,
+		len(session.ConversationLog),
+		len(session.DiscoveredItems),
+		len(session.QueuedForDigest),
+		strings.Join(session.CurrentState.AvailableActions, ", "),
+	)
+}
+
+// Phase 5.4: Queue Management Methods
+
+// handleQueueCommand processes queue-related commands
+func (h *UnifiedHandler) handleQueueCommand(ctx context.Context, sessionID string, userInput string) error {
+	parts := strings.Fields(userInput)
+	if len(parts) < 2 {
+		return h.showQueueHelp(ctx, sessionID)
+	}
+
+	subcommand := strings.ToLower(parts[1])
+	
+	switch subcommand {
+	case "list", "show", "status":
+		return h.showQueueStatus(ctx, sessionID)
+	case "process", "review":
+		return h.processQueueInteractively(ctx, sessionID)
+	case "clear", "empty":
+		return h.clearQueue(ctx, sessionID)
+	case "summary":
+		return h.showQueueSummary(ctx, sessionID)
+	default:
+		return h.showQueueHelp(ctx, sessionID)
+	}
+}
+
+// handleDigestFromQueue generates digest from queue items
+func (h *UnifiedHandler) handleDigestFromQueue(ctx context.Context, sessionID string, userInput string) error {
+	parts := strings.Fields(userInput)
+	
+	// Default options
+	options := services.ProcessingOptions{
+		OutputFormat:     "signal",
+		MaxWordCount:     400,
+		QualityThreshold: 0.6,
+	}
+	
+	// Parse additional options
+	for i, part := range parts {
+		switch strings.ToLower(part) {
+		case "--format":
+			if i+1 < len(parts) {
+				options.OutputFormat = parts[i+1]
+			}
+		case "--words":
+			if i+1 < len(parts) {
+				if wordCount, err := strconv.Atoi(parts[i+1]); err == nil {
+					options.MaxWordCount = wordCount
+				}
+			}
+		}
+	}
+
+	fmt.Printf("🔄 Generating digest from research queue...\n")
+	
+	digest, err := h.intelligenceService.GenerateDigestFromQueue(ctx, sessionID, options)
+	if err != nil {
+		return fmt.Errorf("failed to generate digest from queue: %w", err)
+	}
+
+	fmt.Printf("\n✅ Digest generated successfully!\n")
+	fmt.Printf("📊 Signal: %s\n", digest.Signal.Content)
+	fmt.Printf("📰 Sources: %d article groups\n", len(digest.ArticleGroups))
+	fmt.Printf("💰 Cost: $%.4f\n", digest.Metadata.ProcessingCost.EstimatedUSD)
+	
+	return nil
+}
+
+// showQueueHelp displays queue command help
+func (h *UnifiedHandler) showQueueHelp(ctx context.Context, sessionID string) error {
+	fmt.Printf(`
+📋 Queue Management Commands
+
+queue list/show/status    - Show current queue items
+queue process/review      - Interactively process queue items  
+queue clear/empty         - Clear all queue items
+queue summary            - Show queue statistics
+
+digest                   - Generate digest from completed queue items
+digest --format signal   - Generate in Signal+Sources format
+digest --words 200       - Limit to 200 words
+
+Examples:
+  queue list
+  queue process
+  digest --format scannable
+
+`)
+	return h.showQueueSummary(ctx, sessionID)
+}
+
+// showQueueStatus displays current queue items
+func (h *UnifiedHandler) showQueueStatus(ctx context.Context, sessionID string) error {
+	// Get queue items by priority  
+	queueItems, err := h.intelligenceService.GetQueueByPriority(ctx, sessionID, 10)
+	if err != nil {
+		return fmt.Errorf("failed to get queue items: %w", err)
+	}
+
+	if len(queueItems) == 0 {
+		fmt.Printf("📝 Research queue is empty\n")
+		return nil
+	}
+
+	fmt.Printf("\n📋 Research Queue (%d items)\n", len(queueItems))
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+	for i, item := range queueItems {
+		statusIcon := "⏳"
+		switch item.Status {
+		case "completed":
+			statusIcon = "✅"
+		case "processing":
+			statusIcon = "🔄"
+		case "failed":
+			statusIcon = "❌"
+		case "skipped":
+			statusIcon = "⏭️"
+		}
+
+		fmt.Printf("%d. %s Priority %d: %s\n", i+1, statusIcon, item.Priority, item.Title)
+		fmt.Printf("   📍 %s\n", item.URL)
+		fmt.Printf("   📊 Status: %s | Category: %s\n", item.Status, item.Category)
+		if len(item.Tags) > 0 {
+			fmt.Printf("   🏷️ Tags: %s\n", strings.Join(item.Tags, ", "))
+		}
+		if item.Notes != "" {
+			fmt.Printf("   📝 Notes: %s\n", item.Notes)
+		}
+		fmt.Println()
+	}
+
+	return nil
+}
+
+// processQueueInteractively starts interactive queue processing
+func (h *UnifiedHandler) processQueueInteractively(ctx context.Context, sessionID string) error {
+	return h.intelligenceService.ProcessQueueItemsInteractively(ctx, sessionID)
+}
+
+// clearQueue removes all items from the queue
+func (h *UnifiedHandler) clearQueue(ctx context.Context, sessionID string) error {
+	fmt.Print("⚠️ Are you sure you want to clear the entire queue? (y/N): ")
+	var response string
+	fmt.Scanln(&response)
+	
+	if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
+		fmt.Printf("✅ Queue clear cancelled\n")
+		return nil
+	}
+
+	if err := h.intelligenceService.ClearQueue(ctx, sessionID); err != nil {
+		return fmt.Errorf("failed to clear queue: %w", err)
+	}
+
+	fmt.Printf("🗑️ Queue cleared successfully\n")
+	return nil
+}
+
+// showQueueSummary displays queue statistics
+func (h *UnifiedHandler) showQueueSummary(ctx context.Context, sessionID string) error {
+	summary, err := h.intelligenceService.GetQueueSummary(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get queue summary: %w", err)
+	}
+
+	fmt.Printf(`
+📊 Queue Summary for Session: %s
+
+Total Items: %d
+├── ⏳ Pending: %d
+├── 🔄 Processing: %d  
+├── ✅ Completed: %d
+└── ⏭️ Skipped: %d
+
+Ready for Digest: %s
+
+`, 
+		summary.SessionID,
+		summary.TotalItems,
+		summary.PendingCount,
+		summary.ProcessingCount,
+		summary.CompletedCount,
+		summary.SkippedCount,
+		func() string {
+			if summary.ReadyForDigest {
+				return "✅ Yes"
+			}
+			return "❌ No (no completed items)"
+		}(),
+	)
+
+	return nil
 }
