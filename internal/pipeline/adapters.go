@@ -201,12 +201,42 @@ func NewRendererAdapter() *RendererAdapter {
 }
 
 func (a *RendererAdapter) RenderDigest(ctx context.Context, digest *core.Digest, outputPath string) (string, error) {
-	// Use simplified rendering for now
-	// Convert digest to DigestData format for compatibility
+	// Convert digest to DigestData format for compatibility with existing templates
 	digestItems := make([]render.DigestData, 0)
 
-	// For now, create a simple markdown output
-	// This will be enhanced once we merge render/templates packages
+	// Extract articles from ArticleGroups
+	for _, group := range digest.ArticleGroups {
+		for _, article := range group.Articles {
+			item := render.DigestData{
+				Title:           article.Title,
+				URL:             article.URL,
+				SummaryText:     "", // Will be filled from summaries if available
+				TopicCluster:    article.TopicCluster,
+				TopicConfidence: article.ClusterConfidence,
+				ContentType:     string(article.ContentType),
+			}
+
+			// Set content type icons
+			switch article.ContentType {
+			case core.ContentTypeYouTube:
+				item.ContentIcon = "🎥"
+				item.ContentLabel = "Video"
+				item.Duration = article.Duration
+				item.Channel = article.Channel
+			case core.ContentTypePDF:
+				item.ContentIcon = "📄"
+				item.ContentLabel = "PDF"
+				item.PageCount = article.PageCount
+			default:
+				item.ContentIcon = "🔗"
+				item.ContentLabel = "Article"
+			}
+
+			digestItems = append(digestItems, item)
+		}
+	}
+
+	// Configure template for newsletter format
 	template := &templates.DigestTemplate{
 		Format:                    templates.FormatNewsletter,
 		Title:                     digest.Metadata.Title,

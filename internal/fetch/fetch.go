@@ -129,6 +129,7 @@ func FetchArticle(link core.Link) (core.Article, error) {
 
 	article := core.Article{
 		ID:          uuid.NewString(),
+		URL:         link.URL, // Set the URL field
 		LinkID:      link.ID,
 		FetchedHTML: string(bodyBytes),
 		DateFetched: time.Now().UTC(),

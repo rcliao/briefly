@@ -112,6 +112,7 @@ func ProcessPDFContent(link core.Link) (core.Article, error) {
 
 	article := core.Article{
 		ID:          uuid.NewString(),
+		URL:         link.URL, // Set the URL field
 		LinkID:      link.ID,
 		Title:       title,
 		ContentType: core.ContentTypePDF,
