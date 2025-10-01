@@ -96,11 +96,37 @@ func NewClustererAdapter() *ClustererAdapter {
 }
 
 func (a *ClustererAdapter) ClusterArticles(ctx context.Context, articles []core.Article, summaries []core.Summary, embeddings map[string][]float64) ([]core.TopicCluster, error) {
+	// Build a map of article ID to summary for embedding lookup
+	// Since summaries can have multiple article IDs, we need to check ArticleIDs array
+	articleToSummaryID := make(map[string]string)
+	for _, summary := range summaries {
+		// A summary can summarize multiple articles (ArticleIDs is an array)
+		// For digest pipeline, we generate 1 summary per article, so use first ID
+		if len(summary.ArticleIDs) > 0 {
+			for _, articleID := range summary.ArticleIDs {
+				articleToSummaryID[articleID] = summary.ID
+			}
+		}
+	}
+
+	// Populate embeddings into articles
+	articlesWithEmbeddings := make([]core.Article, len(articles))
+	for i, article := range articles {
+		articlesWithEmbeddings[i] = article
+
+		// Find the corresponding summary ID and embedding
+		if summaryID, exists := articleToSummaryID[article.ID]; exists {
+			if embedding, hasEmbedding := embeddings[summaryID]; hasEmbedding {
+				articlesWithEmbeddings[i].Embedding = embedding
+			}
+		}
+	}
+
 	// Determine optimal number of clusters (2-5 based on article count)
 	numClusters := min(5, max(2, len(articles)/3))
 
-	// Use KMeans clustering on articles
-	return a.clusterer.Cluster(articles, numClusters)
+	// Use KMeans clustering on articles with embeddings
+	return a.clusterer.Cluster(articlesWithEmbeddings, numClusters)
 }
 
 func (a *ClustererAdapter) CalculateSimilarity(embedding1, embedding2 []float64) float64 {

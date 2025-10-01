@@ -134,6 +134,7 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 	}
 
 	// Step 1: Parse URLs from markdown file
+	fmt.Printf("📄 Step 1/9: Parsing URLs from %s...\n", opts.InputFile)
 	links, err := p.parser.ParseMarkdownFile(opts.InputFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URLs: %w", err)
@@ -143,8 +144,10 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 	if stats.TotalURLs == 0 {
 		return nil, fmt.Errorf("no valid URLs found in input file")
 	}
+	fmt.Printf("   ✓ Found %d URLs\n\n", stats.TotalURLs)
 
 	// Step 2: Fetch and summarize articles (with caching)
+	fmt.Printf("🔍 Step 2/9: Fetching and summarizing articles...\n")
 	articles, summaries, err := p.processArticles(ctx, links, &stats)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process articles: %w", err)
@@ -156,51 +159,73 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 
 	stats.SuccessfulArticles = len(articles)
 	stats.FailedArticles = stats.TotalURLs - stats.SuccessfulArticles
+	fmt.Printf("   ✓ Successfully processed %d/%d articles\n", stats.SuccessfulArticles, stats.TotalURLs)
+	fmt.Printf("   • Cache hits: %d, Cache misses: %d\n\n", stats.CacheHits, stats.CacheMisses)
 
 	// Step 3: Generate embeddings for clustering
+	fmt.Printf("🧠 Step 3/9: Generating embeddings for clustering...\n")
 	embeddings, err := p.generateEmbeddings(ctx, summaries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embeddings: %w", err)
 	}
+	fmt.Printf("   ✓ Generated %d embeddings\n\n", len(embeddings))
 
 	// Step 4: Cluster articles by topic
+	fmt.Printf("🔗 Step 4/9: Clustering articles by topic...\n")
 	clusters, err := p.clusterer.ClusterArticles(ctx, articles, summaries, embeddings)
 	if err != nil {
 		return nil, fmt.Errorf("failed to cluster articles: %w", err)
 	}
 
 	stats.ClustersGenerated = len(clusters)
+	fmt.Printf("   ✓ Created %d topic clusters\n\n", stats.ClustersGenerated)
 
 	// Step 5: Order articles within clusters
+	fmt.Printf("📊 Step 5/9: Ordering articles within clusters...\n")
 	orderedClusters, err := p.orderer.OrderClusters(ctx, clusters, articles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to order articles: %w", err)
 	}
+	fmt.Printf("   ✓ Ordered %d clusters\n\n", len(orderedClusters))
 
 	// Step 6: Generate executive summary
+	fmt.Printf("📝 Step 6/9: Generating executive summary...\n")
 	executiveSummary, err := p.narrative.GenerateExecutiveSummary(ctx, orderedClusters, articlesToMap(articles), summariesToMap(summaries))
 	if err != nil {
 		// Non-fatal: log and continue without executive summary
+		fmt.Printf("   ⚠️  Executive summary generation failed, continuing without it\n\n")
 		executiveSummary = ""
+	} else {
+		fmt.Printf("   ✓ Generated executive summary (%d words)\n\n", len(executiveSummary)/5)
 	}
 
 	// Step 7: Build digest structure
+	fmt.Printf("🔨 Step 7/9: Building digest structure...\n")
 	digest := p.buildDigest(orderedClusters, articles, summaries, executiveSummary)
+	fmt.Printf("   ✓ Digest structure complete\n\n")
 
 	// Step 8: Render markdown output
+	fmt.Printf("✍️  Step 8/9: Rendering markdown output...\n")
 	markdownPath, err := p.renderer.RenderDigest(ctx, digest, opts.OutputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render digest: %w", err)
 	}
+	fmt.Printf("   ✓ Saved to %s\n\n", markdownPath)
 
 	// Step 9: Optional banner generation
 	var bannerPath string
 	if opts.GenerateBanner && p.banner != nil {
+		fmt.Printf("🎨 Step 9/9: Generating banner image...\n")
 		bannerPath, err = p.banner.GenerateBanner(ctx, digest, opts.BannerStyle)
 		if err != nil {
 			// Non-fatal: log warning and continue without banner
+			fmt.Printf("   ⚠️  Banner generation failed, continuing without it\n\n")
 			bannerPath = ""
+		} else {
+			fmt.Printf("   ✓ Banner saved to %s\n\n", bannerPath)
 		}
+	} else {
+		fmt.Printf("⏭️  Step 9/9: Skipping banner generation\n\n")
 	}
 
 	stats.EndTime = time.Now()
@@ -288,11 +313,14 @@ func (p *Pipeline) processArticles(ctx context.Context, links []core.Link, stats
 	summaries := make([]core.Summary, 0, len(links))
 
 	// Process each link (TODO: Add concurrency control)
-	for _, link := range links {
+	for i, link := range links {
+		fmt.Printf("   [%d/%d] Processing: %s\n", i+1, len(links), link.URL)
+
 		// Check cache first
 		if p.config.CacheEnabled {
 			cachedArticle, cachedSummary, err := p.checkArticleCache(link.URL)
 			if err == nil && cachedArticle != nil && cachedSummary != nil {
+				fmt.Printf("           ✓ Cache hit\n")
 				articles = append(articles, *cachedArticle)
 				summaries = append(summaries, *cachedSummary)
 				stats.CacheHits++
@@ -306,12 +334,14 @@ func (p *Pipeline) processArticles(ctx context.Context, links []core.Link, stats
 		article, err := p.fetcher.FetchArticle(ctx, link.URL)
 		if err != nil {
 			// Log error but continue with other articles
+			fmt.Printf("           ✗ Fetch failed: %v\n", err)
 			continue
 		}
 
 		// Validate article quality
 		if len(article.CleanedText) < p.config.MinArticleLength {
 			// Skip articles that are too short
+			fmt.Printf("           ✗ Article too short (%d chars)\n", len(article.CleanedText))
 			continue
 		}
 
@@ -319,6 +349,7 @@ func (p *Pipeline) processArticles(ctx context.Context, links []core.Link, stats
 		summary, err := p.summarizer.SummarizeArticle(ctx, article)
 		if err != nil {
 			// Log error but continue with other articles
+			fmt.Printf("           ✗ Summarization failed: %v\n", err)
 			continue
 		}
 
@@ -327,6 +358,7 @@ func (p *Pipeline) processArticles(ctx context.Context, links []core.Link, stats
 			_ = p.cacheArticle(article, summary)
 		}
 
+		fmt.Printf("           ✓ Fetched and summarized\n")
 		articles = append(articles, *article)
 		summaries = append(summaries, *summary)
 	}
@@ -337,19 +369,29 @@ func (p *Pipeline) processArticles(ctx context.Context, links []core.Link, stats
 // generateEmbeddings creates vector embeddings for all summaries
 func (p *Pipeline) generateEmbeddings(ctx context.Context, summaries []core.Summary) (map[string][]float64, error) {
 	embeddings := make(map[string][]float64)
+	var failedCount int
 
-	for _, summary := range summaries {
+	for i, summary := range summaries {
+		fmt.Printf("   [%d/%d] Generating embedding for summary %s\n", i+1, len(summaries), summary.ID)
+
 		embedding, err := p.embedder.GenerateEmbedding(ctx, summary.SummaryText)
 		if err != nil {
 			// Log error but continue with other summaries
+			fmt.Printf("           ✗ Embedding generation failed: %v\n", err)
+			failedCount++
 			continue
 		}
 
 		embeddings[summary.ID] = embedding
+		fmt.Printf("           ✓ Embedding generated (%d dimensions)\n", len(embedding))
 	}
 
 	if len(embeddings) == 0 {
-		return nil, fmt.Errorf("failed to generate any embeddings")
+		return nil, fmt.Errorf("failed to generate any embeddings (all %d attempts failed)", failedCount)
+	}
+
+	if failedCount > 0 {
+		fmt.Printf("   ⚠️  Warning: %d/%d embeddings failed to generate\n", failedCount, len(summaries))
 	}
 
 	return embeddings, nil
