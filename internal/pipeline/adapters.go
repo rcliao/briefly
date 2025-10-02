@@ -247,12 +247,13 @@ func (a *RendererAdapter) RenderDigest(ctx context.Context, digest *core.Digest,
 		IncludeTopicClustering:    true,
 	}
 
-	fullPath, _, err := templates.RenderSignalStyleDigest(digestItems, outputPath, digest.DigestSummary, template, digest.Metadata.Title)
+	// RenderSignalStyleDigest returns (content, filePath, error)
+	_, filePath, err := templates.RenderSignalStyleDigest(digestItems, outputPath, digest.DigestSummary, template, digest.Metadata.Title)
 	if err != nil {
 		return "", fmt.Errorf("failed to render digest: %w", err)
 	}
 
-	return fullPath, nil
+	return filePath, nil
 }
 
 func (a *RendererAdapter) RenderQuickRead(ctx context.Context, article *core.Article, summary *core.Summary) (string, error) {
