@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Version Information
+
+**Current Version:** v3.0-simplified (simplify-architecture branch)
+**Architecture:** Clean pipeline-based design focused on weekly digest generation
+
 ## Development Commands
 
 ### Building and Running
@@ -13,7 +18,7 @@ go build -o briefly ./cmd/briefly
 go install ./cmd/briefly
 
 # Run from source during development
-go run ./cmd/briefly digest input/test-links.md
+go run ./cmd/briefly digest input/links.md
 
 # Run tests (standard)
 go test ./...
@@ -36,422 +41,507 @@ go vet ./...
 go mod tidy
 ```
 
-### Key Development Commands
+### Core Commands (v3.0 Simplified)
 
-**Core Digest Generation:**
+**Weekly Digest Generation:**
 ```bash
-# v2.0 Smart Concise Digests with relevance filtering
-briefly digest input/links.md                                   # Standard 400-word digest
-briefly digest --format scannable input/links.md               # New scannable newsletter format
-briefly digest --format brief --max-words 200 input/links.md   # Ultra-concise 200-word digest
+# Generate LinkedIn-ready digest from markdown file with URLs
+briefly digest input/weekly-links.md
 
-# Multi-channel outputs
-briefly digest --format email input/links.md                   # HTML email format
-briefly digest --format slack --slack-webhook "URL" input/links.md
-briefly digest --format discord --discord-webhook "URL" input/links.md
-briefly digest --format audio --tts-provider openai input/links.md
+# Specify custom output directory
+briefly digest --output digests input/weekly-links.md
 
-# AI-powered enhancements
-briefly digest --with-banner --format newsletter input/links.md  # AI banner images
-briefly digest --interactive input/links.md                      # Interactive my-take workflow
-briefly digest --single https://example.com/article             # Single article processing
+# Generate with banner image (not yet implemented)
+briefly digest --with-banner input/weekly-links.md
 
-# Cost estimation and debugging
-briefly digest --dry-run input/links.md                         # Estimate API costs
-briefly digest --list-formats                                   # Show available formats
+# Dry run (cost estimation - not yet implemented)
+briefly digest --dry-run input/weekly-links.md
 ```
 
-**Advanced Research Commands:**
+**Quick Article Summary:**
 ```bash
-# Deep research with multi-stage pipeline
-briefly research --topic "AI development trends" --depth 3      # 3-iteration research
-briefly research --topic "cybersecurity" --max-sources 20      # Extended research
+# Get quick summary of single article
+briefly read https://example.com/article
 
-# Research integration with existing content
-briefly research --integrate-with-digest digest-id             # Enhance existing digest
-briefly research --list                                        # Show research sessions
+# Force fresh fetch (bypass cache)
+briefly read --no-cache https://example.com/article
+
+# Raw output without formatting
+briefly read --raw https://example.com/article
 ```
 
-**Content Management:**
+**Cache Management:**
 ```bash
-# Cache operations with detailed stats
-briefly cache stats                                            # Show cache statistics
-briefly cache clear --confirm                                  # Clear all cached data
+# View cache statistics
+briefly cache stats
 
-# Interactive terminal UI with relevance scoring
-briefly tui                                                    # Browse articles with scoring
-
-# Article processing and analysis
-briefly summarize https://example.com/article                  # Single article summary
-briefly categorize input/links.md                             # Topic categorization analysis
+# Clear all cached data
+briefly cache clear --confirm
 ```
 
-**Personal Commentary System:**
-```bash
-# My Take feature with AI regeneration
-briefly my-take list                                           # Show available digests
-briefly my-take add 1234abcd "Your perspective"               # Add personal commentary
-briefly my-take regenerate 1234abcd                           # AI-powered full regeneration
-```
+## Architecture Overview (v3.0 Simplified)
 
-## Architecture Overview
+### Design Philosophy
+
+The v3.0 architecture is a **breaking refactor** designed around the actual weekly digest workflow:
+
+1. **Collect URLs manually** (outside app)
+2. **Run digest command** to process URLs
+3. **Cluster articles** by topic similarity
+4. **Generate executive summary** from top articles
+5. **Render LinkedIn-ready markdown**
+6. **Copy to LinkedIn** (manual)
 
 ### Project Structure
-- **`cmd/briefly/main.go`**: Main application entry point
-- **`cmd/handlers/`**: CLI command definitions using Cobra framework (root.go, digest.go, etc.)
-- **`internal/`**: Core application modules organized by domain with service-oriented architecture
-- **`llmclient/`**: Legacy Gemini client (being phased out in favor of `internal/llm`)
-- **`research/`**: Generated research reports and session data
-- **`test/`**: Integration tests and mock implementations
-- **`docs/`**: Requirements, configuration guides, and architectural documentation
 
-### Core Architecture Patterns
-
-**Modular Internal Packages**: The application is organized into focused internal packages:
-- `core/`: Central data structures (Article, Summary, Link, Feed, Digest)
-- `fetch/`: Web scraping and content extraction with intelligent HTML parsing (HTML, PDF, YouTube)
-- `llm/`: LLM client abstraction layer for Gemini API interactions
-- `store/`: SQLite-based caching system for articles, summaries, and analytics
-- `templates/`: Digest format templates (brief, standard, detailed, newsletter, scannable, email)
-- `render/`: Output generation and formatting
-- `config/`: Hierarchical configuration management with Viper
-- `services/`: Service layer interfaces and implementations for dependency injection
-- `relevance/`: Unified relevance scoring architecture with multiple scorer implementations
-- `categorization/`: Article categorization and topic detection
-- `interactive/`: Interactive CLI workflows and user input handling
-- `deepresearch/`: Multi-stage research pipeline (planner, fetcher, ranker, synthesizer)
-- `email/`: HTML email template system with responsive design (v1.0)
-- `messaging/`: Slack/Discord integration with webhook support (v1.0)
-- `tts/`: Text-to-Speech audio generation with multiple providers (v1.0)
-- `visual/`: AI banner image generation using DALL-E with content theme analysis (Sprint 3)
-
-**AI-Powered Insights Pipeline**: Comprehensive analytics automatically integrated:
-- `sentiment/`: Sentiment analysis with emoji indicators
-- `alerts/`: Configurable alert monitoring and evaluation
-- `trends/`: Historical trend analysis and comparison
-- `research/`: Deep research with AI-generated queries
-- `deepresearch/`: Advanced deep research pipeline with iterative query generation
-- `clustering/`: Topic clustering and content organization
-- **Smart Headlines**: AI-generated compelling titles based on digest content and format
-
-**Caching Strategy**: Multi-layer SQLite caching system:
-- Article content cached for 24 hours to avoid re-fetching
-- Summaries cached for 7 days with content hash validation
-- Digest metadata and analytics stored for trend analysis
-- RSS feed items tracked for automatic content discovery
-
-### Data Flow
-1. **Input Processing**: URLs extracted from Markdown files
-2. **Content Fetching**: Intelligent HTML parsing with cache-first strategy
-3. **AI Processing**: LLM-powered summarization with format-specific prompts
-4. **Insights Generation**: Parallel processing of sentiment, alerts, trends, and research
-5. **Topic Clustering**: Automatic categorization using embedding-based clustering
-6. **Smart Headline Generation**: AI-powered title creation based on digest content and format
-7. **Template Rendering**: Format-specific output generation with insights integration
-
-### Configuration Management
-The application uses a sophisticated hierarchical configuration system with Viper:
-
-**Configuration Precedence (highest to lowest):**
-1. Command-line flags
-2. Environment variables (loaded from `.env` file via `godotenv`)
-3. Configuration file (`.briefly.yaml` or specified via `--config`)
-4. Default values
-
-**Key Configuration Patterns:**
-- **Centralized Config Module**: `internal/config/config.go` provides unified access via `config.Get()`
-- **Environment Variable Loading**: Automatic `.env` file loading for development
-- **Nested Configuration**: Complex nested structures for AI, search providers, output formats
-- **Provider-Specific Settings**: Separate config blocks for Gemini, OpenAI, Google Search, SerpAPI
-- **Template-Driven Outputs**: Configuration drives template selection and rendering options
-
-### LLM Integration
-- Primary: Gemini API via `internal/llm` package
-- Legacy: Direct client in `llmclient/` (being phased out)
-- Functions: Article summarization, title generation, research query generation, sentiment analysis
-
-### Service Architecture
-The application uses a service-oriented architecture with dependency injection:
-
-**Service Layer (`internal/services/`):**
-- **Interface-Driven Design**: Clean interfaces for all major components (DigestService, ResearchService, etc.)
-- **Dependency Injection**: Services are injected via constructors for testability
-- **Mock Support**: Comprehensive mock implementations for testing (`test/mocks/services_mock.go`)
-
-**Key Service Interfaces:**
-- `DigestService`: Digest generation and processing
-- `ArticleProcessor`: Content fetching and processing
-- `ResearchService`: Deep research and content discovery
-- `LLMService`: AI operations (summarization, embedding, sentiment analysis)
-- `CacheService`: Caching operations with statistics
-- `MessagingService`: Multi-channel output (Slack, Discord)
-- `TTSService`: Text-to-speech generation
-
-### Relevance Scoring Architecture (v2.0)
-Unified scoring system shared across all commands:
-
-**Core Interfaces (`internal/relevance/interfaces.go`):**
-- `Scorer`: Main scoring interface with batch support
-- `Scorable`: Interface for content that can be scored
-- `Criteria`: Scoring parameters with weights and context
-
-**Implementation Strategy:**
-- `KeywordScorer`: Fast keyword-based scoring for digest filtering
-- `ScoringWeights`: Configurable weights for different contexts (digest, research, TUI)
-- **Context-Aware Profiles**: Different weight profiles optimize scoring for specific use cases
-
-### Notable Design Decisions
-- **Cache-First Architecture**: Aggressive caching to minimize API costs and improve performance
-- **Format-Driven Templates**: Template system allows different digest styles while maintaining consistent structure
-- **Insights-First Approach**: Every digest automatically includes comprehensive AI-powered analytics
-- **Embedding-Based Clustering**: Uses LLM embeddings for intelligent topic grouping
-- **Concurrent Processing**: Parallel processing of articles and insights for performance
-- **Service-Oriented Design**: Clean separation of concerns with dependency injection
-- **Interface-First Development**: All major components use interfaces for testability and extensibility
-
-## Development Context
-
-### API Requirements
-- Gemini API key required (set via `GEMINI_API_KEY` environment variable)
-- Optional: OpenAI API key for banner image generation (set via `OPENAI_API_KEY` environment variable)
-- Optional: Google Custom Search API for research features
-- Optional: SerpAPI for enhanced search capabilities
-
-### Testing Strategy
-The application includes comprehensive testing with 15 test files and 185+ test functions:
-
-**Unit Tests:**
-- Core data structures (`internal/core/core_test.go`)
-- LLM operations (`internal/llm/llm_test.go`) 
-- Search functionality (`internal/search/search_test.go`)
-- Cost estimation (`internal/cost/estimation_test.go`)
-- Template rendering (`internal/templates/templates_test.go`)
-- Relevance scoring (`internal/relevance/keyword_scorer_test.go`)
-- Content fetching (`internal/fetch/fetch_test.go`)
-- Store operations (`internal/store/store_test.go`)
-- Email generation (`internal/email/email_test.go`)
-- Sentiment analysis (`internal/sentiment/sentiment_test.go`)
-- Visual components (`internal/visual/banner_test.go`, `internal/visual/dalle_test.go`)
-- Render functionality (`internal/render/render_test.go`)
-
-**Integration Tests:**
-- End-to-end digest generation (`test/integration/digest_test.go`)
-- Multi-format output validation (`test/integration/multiformat_test.go`)
-- Mock service implementations (`test/mocks/services_mock.go`)
-
-**GitHub Actions CI/CD:**
-- Go version 1.21 with module caching
-- Parallel test execution with race detection and coverage reporting
-- Automated linting with golangci-lint
-- Binary build verification
-
-### Linting and Code Quality
-The project uses **golangci-lint** as the primary linting tool:
-- Runs automatically in CI/CD pipeline on every push and PR
-- Uses default golangci-lint configuration (no custom `.golangci.yml`)
-- Includes comprehensive Go linting rules for code quality and consistency
-- Recent commit history shows active linting compliance maintenance
-
-Install golangci-lint locally for development:
-```bash
-# macOS
-brew install golangci-lint
-
-# Linux
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
-
-# Or using go install
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+```
+briefly/
+├── cmd/
+│   ├── briefly/main.go          # Entry point (uses ExecuteSimplified)
+│   └── handlers/                 # Cobra command handlers
+│       ├── root_simplified.go    # 3-command root (digest, read, cache)
+│       ├── digest_simplified.go  # Weekly digest generation
+│       ├── read_simplified.go    # Quick article summary
+│       └── cache.go              # Cache management
+├── internal/
+│   ├── parser/                   # NEW: URL parsing from markdown
+│   ├── summarize/                # NEW: Centralized summarization with prompts
+│   ├── narrative/                # NEW: Executive summary generation
+│   ├── pipeline/                 # NEW: Orchestration layer
+│   │   ├── pipeline.go           # Core orchestrator
+│   │   ├── interfaces.go         # Component contracts
+│   │   ├── adapters.go           # Wrapper adapters for existing packages
+│   │   └── builder.go            # Fluent API for construction
+│   ├── clustering/               # K-means topic clustering
+│   ├── core/                     # Core data structures
+│   ├── fetch/                    # Content fetching (HTML, PDF, YouTube)
+│   ├── llm/                      # LLM client for Gemini API
+│   ├── store/                    # SQLite caching
+│   ├── templates/                # Digest format templates
+│   ├── render/                   # Output formatting
+│   ├── email/                    # HTML email templates
+│   ├── config/                   # Configuration management
+│   └── logger/                   # Structured logging
+├── docs/
+│   └── simplified-architecture/  # Architecture design documents
+│       ├── data-flow.md
+│       ├── components.md
+│       ├── data-model.yaml
+│       ├── api-contracts.yaml
+│       └── UNUSED_PACKAGES.md
+└── test/
+    └── (integration tests removed - pending rewrite)
 ```
 
-### Error Handling
-- Graceful degradation when articles fail to fetch or process
-- Comprehensive logging via `internal/logger` with structured output
-- Cache isolation prevents individual failures from affecting overall operation
+### Removed Packages (v3.0 Cleanup)
 
-### Performance Considerations
-- SQLite caching reduces redundant API calls and improves response times
-- Concurrent processing of articles and insights
-- Intelligent content extraction focuses on main article text
-- Cost estimation features help manage API usage
+**18 packages removed** (~18,797 lines) that were not part of the core weekly digest workflow:
+
+- `alerts/` - Alert monitoring system
+- `categorization/` - Replaced by clustering
+- `cost/` - API cost estimation
+- `deepresearch/` - Multi-stage research pipeline
+- `feeds/` - RSS feed processing
+- `interactive/` - Interactive selection mode
+- `messaging/` - Slack/Discord integration
+- `ordering/` - Article ordering (stubbed in pipeline)
+- `relevance/` - Relevance scoring system
+- `research/` - Research query generation
+- `search/` - Web search integration
+- `sentiment/` - Sentiment analysis
+- `services/` - Service layer (replaced by pipeline interfaces)
+- `summaries/` - Legacy summary handling
+- `trends/` - Trend analysis
+- `tts/` - Text-to-speech generation
+- `tui/` - Terminal UI browser
+- `visual/` - Banner generation (future)
+
+### Pipeline Architecture (v3.0)
+
+**Core Concept:** Clean separation of concerns with adapter pattern
+
+**9-Step Processing Pipeline:**
+
+1. **Parse URLs** - Extract URLs from markdown file (parser)
+2. **Fetch & Summarize** - Retrieve content and generate summaries (fetch, summarize)
+3. **Generate Embeddings** - Create 768-dim vectors for clustering (llm)
+4. **Cluster Articles** - Group by topic similarity using K-means (clustering)
+5. **Order Articles** - Sort articles within clusters (stubbed)
+6. **Executive Summary** - Generate narrative from top 3 per cluster (narrative)
+7. **Build Digest** - Construct final digest structure (pipeline)
+8. **Render Markdown** - Create LinkedIn-ready output (templates, render)
+9. **Generate Banner** - Optional AI image generation (future)
+
+**Key Files:**
+
+- `internal/pipeline/pipeline.go` - Central orchestrator with comprehensive logging
+- `internal/pipeline/interfaces.go` - Component contracts (URLParser, ContentFetcher, etc.)
+- `internal/pipeline/adapters.go` - Wrappers for existing packages
+- `internal/pipeline/builder.go` - Fluent API for pipeline construction
+
+### Data Flow
+
+```
+Markdown File → Parser → URLs
+    ↓
+URLs → Fetcher → Articles (with cache)
+    ↓
+Articles → Summarizer → Summaries (with cache)
+    ↓
+Summaries → LLM → Embeddings (768-dim vectors)
+    ↓
+Articles + Embeddings → Clusterer → TopicClusters (K-means)
+    ↓
+Clusters → Orderer → OrderedClusters (priority-based)
+    ↓
+Clusters + Articles + Summaries → Narrative → Executive Summary
+    ↓
+All Data → Builder → Digest Structure
+    ↓
+Digest → Renderer → Markdown File
+    ↓
+Output: digests/digest_signal_2025-10-01.md
+```
+
+### Core Data Structures
+
+**Article** (`internal/core/core.go`):
+- `ID`, `URL`, `Title`, `ContentType` (html, pdf, youtube)
+- `CleanedText`, `RawContent`
+- `TopicCluster`, `ClusterConfidence`
+- `Embedding` []float64 (populated during pipeline)
+
+**Summary** (`internal/core/core.go`):
+- `ID`, `ArticleIDs` []string
+- `SummaryText`, `ModelUsed`
+- Used for both article summaries and executive summaries
+
+**TopicCluster** (`internal/core/core.go`):
+- `Label` - Auto-generated cluster name
+- `ArticleIDs` []string - Articles in this cluster
+- `Centroid` []float64 - K-means centroid
+
+**Digest** (`internal/core/core.go`):
+- `ArticleGroups` []ArticleGroup - Clustered articles
+- `DigestSummary` string - Executive summary
+- `Metadata` - Title, date, article count
+
+### Component Interfaces (v3.0)
+
+All major components implement clean interfaces defined in `internal/pipeline/interfaces.go`:
+
+```go
+type URLParser interface {
+    ParseMarkdownFile(filePath string) ([]core.Link, error)
+}
+
+type ContentFetcher interface {
+    FetchArticle(ctx context.Context, url string) (*core.Article, error)
+}
+
+type ArticleSummarizer interface {
+    SummarizeArticle(ctx context.Context, article *core.Article) (*core.Summary, error)
+}
+
+type EmbeddingGenerator interface {
+    GenerateEmbedding(ctx context.Context, text string) ([]float64, error)
+}
+
+type TopicClusterer interface {
+    ClusterArticles(ctx context.Context, articles []core.Article,
+        summaries []core.Summary, embeddings map[string][]float64) ([]core.TopicCluster, error)
+}
+
+type NarrativeGenerator interface {
+    GenerateExecutiveSummary(ctx context.Context, clusters []core.TopicCluster,
+        articles map[string]core.Article, summaries map[string]core.Summary) (string, error)
+}
+
+type MarkdownRenderer interface {
+    RenderDigest(ctx context.Context, digest *core.Digest, outputPath string) (string, error)
+    RenderQuickRead(ctx context.Context, article *core.Article, summary *core.Summary) (string, error)
+}
+```
+
+### Configuration Management
+
+**Hierarchical Configuration (Viper):**
+
+1. Command-line flags (highest priority)
+2. Environment variables (loaded from `.env` via `godotenv`)
+3. Configuration file (`.briefly.yaml` or `--config`)
+4. Default values (lowest priority)
+
+**Key Settings:**
+```yaml
+ai:
+  gemini:
+    api_key: "your-gemini-api-key"
+    model: "gemini-2.5-flash-preview-05-20"
+
+cache:
+  enabled: true
+  directory: ".briefly-cache"
+  ttl: 24h
+
+clustering:
+  min_clusters: 2
+  max_clusters: 5
+  algorithm: "kmeans"
+```
+
+### Caching Strategy
+
+**Multi-layer SQLite caching** (`.briefly-cache/`):
+
+- **Articles**: 24-hour TTL, content hash validation
+- **Summaries**: 7-day TTL, linked to article content hash
+- **Digest metadata**: Persistent for trend analysis
+
+**Cache Commands:**
+```bash
+briefly cache stats   # View statistics
+briefly cache clear --confirm  # Clear all data
+```
+
+### Testing
+
+**Test Coverage (v3.0):**
+- `internal/parser/parser_test.go` - 7 test suites (✓ passing)
+- `internal/summarize/summarizer_test.go` - 14 test suites (✓ passing)
+- `internal/core/core_test.go` - Core data structures
+- `internal/llm/llm_test.go` - LLM operations
+- `internal/templates/templates_test.go` - Template rendering
+- `internal/fetch/fetch_test.go` - Content fetching
+- `internal/store/store_test.go` - Store operations
+- `internal/email/email_test.go` - Email generation
+- `internal/render/render_test.go` - Render functionality
+
+**Note:** Integration tests were removed during simplification and need rewrite.
+
+**Run Tests:**
+```bash
+# Run all unit tests
+go test ./...
+
+# Run specific package tests
+go test ./internal/parser
+go test ./internal/summarize
+
+# Run with race detection (CI mode)
+go test -race ./...
+```
+
+### Development Patterns
+
+**Pipeline Construction:**
+```go
+// Build pipeline with dependencies
+builder := pipeline.NewBuilder().
+    WithLLMClient(llmClient).
+    WithCacheDir(".briefly-cache").
+    Build()
+
+pipe, err := builder.Build()
+
+// Execute digest generation
+result, err := pipe.GenerateDigest(ctx, pipeline.DigestOptions{
+    InputFile:      "input/links.md",
+    OutputPath:     "digests",
+    GenerateBanner: false,
+})
+```
+
+**Error Handling:**
+- Graceful degradation: article failures don't stop pipeline
+- Non-fatal errors: executive summary failure continues execution
+- Comprehensive logging: every step shows progress
+
+**Context Propagation:**
+```go
+// All service methods accept context for cancellation
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+defer cancel()
+result, err := pipe.GenerateDigest(ctx, opts)
+```
 
 ## Common Workflows
 
-### Adding New Digest Formats
-1. Define template in `internal/templates/templates.go`
-2. Add format handling in `cmd/cmd/root.go` digest command
-3. Update format validation in CLI
-4. For email formats, add templates to `internal/email/email.go`
-5. Add corresponding unit tests in `internal/templates/templates_test.go`
+### Adding New Content Fetchers
 
-### Extending Insights Features
-1. Create new analyzer in appropriate `internal/` package
-2. Integrate into digest generation pipeline in `runDigest()`
-3. Add CLI commands for standalone usage
-4. Write unit tests for new functionality
-5. Update core data structures in `internal/core/core.go` if needed
-
-### Adding New Multi-Channel Output
-1. Create new package in `internal/` (e.g., `internal/newchannel/`)
-2. Implement converter functions for digest data
-3. Add CLI commands in `cmd/handlers/digest.go`
-4. Add configuration options to `internal/config/config.go`
-5. Update service interfaces in `internal/services/interfaces.go`
-6. Add corresponding unit tests
-
-### Extending the Deep Research Pipeline
-The deep research system (`internal/deepresearch/`) uses a multi-stage architecture:
-
-**Pipeline Stages:**
-1. **Planner** (`planner.go`): Decomposes topics into research sub-queries using LLM
-2. **Search** (`search.go`): Executes queries using configured search providers
-3. **Fetcher** (`fetcher.go`): Retrieves full content from discovered URLs
-4. **Ranker** (`ranker.go`): Ranks sources by relevance using unified scoring system
-5. **Synthesizer** (`synthesizer.go`): Generates comprehensive research briefs
-
-**Extension Points:**
-- Implement `Planner` interface for custom query generation strategies
-- Add new search providers by implementing `SearchProvider` interface
-- Extend `ContentFetcher` for new content types (beyond HTML, PDF, YouTube)
-- Create custom ranking algorithms via `Ranker` interface
-
-### Integrating with Relevance Scoring
-All content processing should use the unified relevance system:
-
-```go
-// Example: Adding relevance scoring to a new feature
-import "briefly/internal/relevance"
-
-scorer := relevance.NewKeywordScorer()
-criteria := relevance.Criteria{
-    Query: "your topic",
-    Context: "digest", // or "research", "tui"
-    Threshold: 0.6,
-}
-score, err := scorer.Score(ctx, article, criteria)
-```
-
-**Key Integration Patterns:**
-- Use `relevance.Criteria` with appropriate context for your use case
-- Leverage existing scoring profiles from `profiles.go`
-- Implement `relevance.Scorable` interface for new content types
-
-### Configuring Banner Image Generation (Sprint 3)
-1. Set OpenAI API key: `OPENAI_API_KEY` environment variable or `visual.openai.api_key` in config
-2. Configure banner settings in `.briefly.yaml`:
-   ```yaml
-   visual:
-     openai:
-       api_key: "your-openai-api-key-here"
-       model: "gpt-image-1"  # Latest image generation model
-     banners:
-       default_style: "tech"  # minimalist, tech, professional
-       width: 1536           # Landscape format (3:2 ratio)
-       height: 1024          # Supported sizes: 1024x1024, 1024x1536, 1536x1024
+1. Implement content detection in `internal/fetch/processor.go`:
+   ```go
+   func (cp *ContentProcessor) detectContentType(url string) (core.ContentType, error)
    ```
-3. Use `--with-banner` flag: `briefly digest --with-banner --format newsletter input/links.md`
-4. Banner images are automatically included in newsletter and email formats when enabled
-5. Images are generated using the latest OpenAI image generation API with base64 encoding
-6. Supported image sizes: 1024x1024 (square), 1536x1024 (landscape), 1024x1536 (portrait)
 
-### Cache Management
-- Cache is stored in `.briefly-cache/` directory (SQLite database)
-- Use `briefly cache stats` to monitor usage
-- Clear cache when debugging content extraction issues
+2. Add processing function (e.g., `ProcessNewType`):
+   ```go
+   func ProcessNewType(link core.Link) (core.Article, error) {
+       // Fetch and parse content
+       // Populate article with URL, Title, CleanedText, ContentType
+       article := core.Article{
+           ID:          uuid.NewString(),
+           URL:         link.URL,  // IMPORTANT: Set URL field
+           Title:       extractedTitle,
+           ContentType: core.ContentTypeNew,
+           CleanedText: cleanedContent,
+           DateFetched: time.Now().UTC(),
+       }
+       return article, nil
+   }
+   ```
 
-### Running Single Tests
+3. Add to processor switch in `ProcessArticle()`
+
+### Extending Summarization
+
+**Add New Prompt Type:**
+
+1. Define prompt in `internal/summarize/prompts.go`:
+   ```go
+   func BuildNewStylePrompt(content string, opts PromptOptions) string
+   ```
+
+2. Use in `Summarizer.SummarizeArticle()`:
+   ```go
+   prompt := prompts.BuildNewStylePrompt(article.CleanedText, opts)
+   ```
+
+### Adding Pipeline Steps
+
+1. Define interface in `internal/pipeline/interfaces.go`
+2. Implement adapter in `internal/pipeline/adapters.go`
+3. Add to pipeline in `internal/pipeline/pipeline.go`
+4. Wire up in builder: `internal/pipeline/builder.go`
+
+### Debugging
+
+**Comprehensive Logging:**
+
+Every pipeline step logs progress:
+```
+📄 Step 1/9: Parsing URLs from input/links.md...
+   ✓ Found 16 URLs
+
+🔍 Step 2/9: Fetching and summarizing articles...
+   [1/16] Processing: https://example.com
+           ✓ Cache hit
+   [2/16] Processing: https://example.com/2
+           ✓ Fetched and summarized
+   ...
+
+🧠 Step 3/9: Generating embeddings for clustering...
+   [1/13] Generating embedding for summary abc123
+           ✓ Embedding generated (768 dimensions)
+```
+
+**Cache Debugging:**
 ```bash
-# Run tests for a specific package
-go test ./internal/core
+# Clear cache if seeing stale data
+briefly cache clear --confirm
 
-# Run a specific test function
-go test ./internal/core -run TestLinkCreation
-
-# Run tests with verbose output for debugging
-go test -v ./internal/templates -run TestTemplateRendering
-
-# Run integration tests
-go test ./test/integration/...
-
-# Run tests with race detection (same as CI)
-go test -race ./internal/relevance
+# Check cache statistics
+briefly cache stats
 ```
 
-### Development Patterns Specific to Briefly
+## API Requirements
 
-**Service Construction Pattern:**
-```go
-// Services are constructed with dependency injection
-digestService := services.NewDigestService(
-    llmService,
-    templateService,
-    cacheService,
-)
-```
+**Required:**
+- `GEMINI_API_KEY` - Gemini API key for summarization and embeddings
 
-**Configuration Access Pattern:**
-```go
-// Access configuration through centralized module
-cfg := config.Get()
-apiKey := cfg.AI.Gemini.APIKey
-searchProvider := cfg.Search.DefaultProvider
-```
+**Optional:**
+- `OPENAI_API_KEY` - For future banner generation
 
-**Error Handling Pattern:**
-```go
-// Graceful degradation with logging
-if err := processArticle(article); err != nil {
-    logger.Warnf("Failed to process article %s: %v", article.URL, err)
-    // Continue processing other articles
-}
-```
-
-**Context Propagation Pattern:**
-```go
-// All service methods accept context for cancellation
-ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-defer cancel()
-digest, err := digestService.GenerateDigest(ctx, urls, "newsletter")
-```
-
-### Linting Commands
+**Configuration:**
+Set in `.env` file or environment:
 ```bash
-# Install golangci-lint if not already installed
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+export GEMINI_API_KEY="your-key-here"
+```
 
-# Run full linting suite (same as CI)
+## Performance Considerations
+
+- **SQLite caching** reduces redundant API calls
+- **Concurrent processing** planned but not yet implemented
+- **Typical processing time**: ~2-3 minutes for 13 articles
+- **Cache hit rate**: 0-60% depending on previous runs
+
+## Known Issues / Future Work
+
+1. **Executive Summary Generation**: Currently failing (non-fatal)
+   - Located in `internal/narrative/generator.go`
+   - Pipeline continues without it
+
+2. **Banner Generation**: Stubbed, not implemented
+   - Interface defined in `internal/pipeline/interfaces.go`
+   - Adapter returns "not yet implemented"
+
+3. **Integration Tests**: Removed during cleanup
+   - Need rewrite for new pipeline architecture
+
+4. **Article Ordering**: Stubbed implementation
+   - `OrdererAdapter` in `internal/pipeline/adapters.go`
+   - Currently returns clusters unchanged
+
+5. **Concurrent Processing**: Not implemented
+   - Articles processed sequentially
+   - TODO in `pipeline.go:290`
+
+## Migration Notes (v2.0 → v3.0)
+
+**Breaking Changes:**
+- 8 commands → 3 commands (digest, read, cache)
+- Many advanced features removed (research, tui, messaging, etc.)
+- Service layer replaced by pipeline architecture
+- Integration tests need rewrite
+
+**Benefits:**
+- 56% fewer packages (32 → 14)
+- ~20,000 lines of code removed
+- Focused on core workflow
+- Clean architecture with interfaces
+- Comprehensive logging
+
+**Upgrade Path:**
+If you need removed features (research, sentiment, alerts, etc.), use v2.0 on the `main` branch.
+
+## Git Workflow
+
+**Branches:**
+- `main` - v2.0 with all features
+- `simplify-architecture` - v3.0 simplified (current development)
+
+**Commit Tags:**
+- `v2.0-before-simplification` - Last commit before refactor
+- Future: `v3.0.0` - Release tag when complete
+
+## Useful Commands Reference
+
+```bash
+# Build and test
+go build -o briefly ./cmd/briefly
+go test ./...
+
+# Generate digest
+./briefly digest input/weekly-links.md
+
+# Quick read
+./briefly read https://example.com/article
+
+# Cache management
+./briefly cache stats
+./briefly cache clear --confirm
+
+# Linting
 golangci-lint run --timeout=5m
 
-# If golangci-lint is not in PATH, use full path
-$(go env GOPATH)/bin/golangci-lint run --timeout=5m
-
-# Run linting on specific directory
-golangci-lint run ./internal/core
-
-# Run basic Go tools
-go fmt ./...
-go vet ./...
-
-# Auto-fix formatting issues
-gofmt -w .
+# View help
+./briefly --help
+./briefly digest --help
+./briefly read --help
 ```
 
-## v1.0 Multi-Channel Architecture
+## Documentation
 
-### HTML Email System
-- **Templates**: Responsive HTML templates in `internal/email/`
-- **Styles**: Inline CSS for email client compatibility
-- **Formats**: Default, newsletter, and minimal styles
-- **Usage**: `briefly digest --format email` or `templates.RenderHTMLEmail()`
-
-### Messaging Integration
-- **Platforms**: Slack and Discord webhook support
-- **Formats**: Bullets, summary, and highlights formats
-- **Features**: Sentiment emojis, article limits, rich formatting
-- **Usage**: `briefly send-slack` and `briefly send-discord` commands
-
-### TTS Audio Generation
-- **Providers**: OpenAI TTS, ElevenLabs, Google Cloud TTS, and mock
-- **Features**: Voice selection, speed control, article limits
-- **Processing**: Markdown cleanup, speech-friendly formatting
-- **Usage**: `briefly generate-tts` with provider-specific configuration
+- `docs/simplified-architecture/` - Architecture design documents
+- `docs/simplified-architecture/UNUSED_PACKAGES.md` - List of removed packages
+- README.md - User-facing documentation
