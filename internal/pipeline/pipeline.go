@@ -193,7 +193,8 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 	executiveSummary, err := p.narrative.GenerateExecutiveSummary(ctx, orderedClusters, articlesToMap(articles), summariesToMap(summaries))
 	if err != nil {
 		// Non-fatal: log and continue without executive summary
-		fmt.Printf("   ⚠️  Executive summary generation failed, continuing without it\n\n")
+		fmt.Printf("   ⚠️  Executive summary generation failed: %v\n", err)
+		fmt.Printf("   • Continuing without executive summary\n\n")
 		executiveSummary = ""
 	} else {
 		fmt.Printf("   ✓ Generated executive summary (%d words)\n\n", len(executiveSummary)/5)
@@ -202,7 +203,8 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 	// Step 7: Build digest structure
 	fmt.Printf("🔨 Step 7/9: Building digest structure...\n")
 	digest := p.buildDigest(orderedClusters, articles, summaries, executiveSummary)
-	fmt.Printf("   ✓ Digest structure complete\n\n")
+	fmt.Printf("   ✓ Digest structure complete\n")
+	fmt.Printf("   • Articles: %d, Summaries: %d\n\n", len(articles), len(summaries))
 
 	// Step 8: Render markdown output
 	fmt.Printf("✍️  Step 8/9: Rendering markdown output...\n")
@@ -431,6 +433,7 @@ func (p *Pipeline) buildDigest(clusters []core.TopicCluster, articles []core.Art
 
 	digest.ArticleGroups = articleGroups
 	digest.ArticleURLs = articleURLs
+	digest.Summaries = summaries // Store summaries for rendering
 
 	// Set metadata
 	digest.Metadata = core.DigestMetadata{
@@ -485,7 +488,11 @@ func articlesToMap(articles []core.Article) map[string]core.Article {
 func summariesToMap(summaries []core.Summary) map[string]core.Summary {
 	result := make(map[string]core.Summary)
 	for _, summary := range summaries {
-		result[summary.ID] = summary
+		// Map by article ID, not summary ID, for narrative generator
+		// Summaries have ArticleIDs array, use first one
+		if len(summary.ArticleIDs) > 0 {
+			result[summary.ArticleIDs[0]] = summary
+		}
 	}
 	return result
 }

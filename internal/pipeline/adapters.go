@@ -204,13 +204,28 @@ func (a *RendererAdapter) RenderDigest(ctx context.Context, digest *core.Digest,
 	// Convert digest to DigestData format for compatibility with existing templates
 	digestItems := make([]render.DigestData, 0)
 
+	// Build a map of article ID to summary
+	summaryMap := make(map[string]*core.Summary)
+	for i := range digest.Summaries {
+		summary := &digest.Summaries[i]
+		for _, articleID := range summary.ArticleIDs {
+			summaryMap[articleID] = summary
+		}
+	}
+
 	// Extract articles from ArticleGroups
 	for _, group := range digest.ArticleGroups {
 		for _, article := range group.Articles {
+			// Find summary for this article
+			summaryText := ""
+			if summary, exists := summaryMap[article.ID]; exists {
+				summaryText = summary.SummaryText
+			}
+
 			item := render.DigestData{
 				Title:           article.Title,
 				URL:             article.URL,
-				SummaryText:     "", // Will be filled from summaries if available
+				SummaryText:     summaryText,
 				TopicCluster:    article.TopicCluster,
 				TopicConfidence: article.ClusterConfidence,
 				ContentType:     string(article.ContentType),

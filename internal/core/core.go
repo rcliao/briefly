@@ -85,10 +85,11 @@ type Summary struct {
 // Digest represents a complete digest with user's take (v3.0 simplified)
 type Digest struct {
 	ID               string         `json:"id"`
-	
+
 	// v3.0 new structure
 	Signal           Signal         `json:"signal,omitempty"`            // Primary insight
 	ArticleGroups    []ArticleGroup `json:"article_groups,omitempty"`    // Clustered articles
+	Summaries        []Summary      `json:"summaries,omitempty"`         // Article summaries
 	Metadata         DigestMetadata `json:"metadata,omitempty"`
 	
 	// User interaction

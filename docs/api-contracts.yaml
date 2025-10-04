@@ -1,0 +1,400 @@
+# Interactive CLI Flow - API Contract Specification
+
+contracts:
+  # Session Management Contracts
+  InitializeInteractiveSession:
+    description: Creates a new interactive session for article selection
+    input:
+      articleSourcePath: string  # Path to markdown file with links
+      format: string  # Digest format
+      outputPath: string  # Optional output location
+      sessionConfig:
+        maxArticles: integer
+        sortOrder: string
+        filters: array[FilterCriteria]
+    output:
+      success:
+        sessionId: uuid
+        state: string  # "initialized"
+        articleCount: integer
+        expiresAt: timestamp
+      errors:
+        - code: NO_ARTICLES_FOUND
+          message: "No valid articles found in source file"
+        - code: INVALID_SOURCE
+          message: "Source file not found or unreadable"
+        - code: SESSION_LIMIT_EXCEEDED
+          message: "Maximum concurrent sessions reached"
+    idempotent: false
+    state_transition: "none -> initialized"
+    timeout: 5000ms
+
+  # Article Processing Contracts
+  ProcessArticles:
+    description: Fetches and processes articles for interactive selection
+    input:
+      sessionId: uuid
+      articles: array[url]
+      processingOptions:
+        parallel: boolean
+        batchSize: integer
+        useCaching: boolean
+        forceRefresh: boolean
+    output:
+      success:
+        processedCount: integer
+        failedCount: integer
+        articles: array[ProcessedArticle]
+        processingTime: integer  # milliseconds
+      errors:
+        - code: SESSION_NOT_FOUND
+          message: "Invalid or expired session"
+        - code: PROCESSING_TIMEOUT
+          message: "Article processing exceeded timeout"
+        - code: RATE_LIMIT_EXCEEDED
+          message: "API rate limit reached"
+    idempotent: true
+    state_transition: "initialized -> processing -> articles_ready"
+    timeout: 60000ms
+
+  # Priority Scoring Contract
+  CalculatePriorityScores:
+    description: Calculates relevance and priority scores for articles
+    input:
+      sessionId: uuid
+      scoringCriteria:
+        keywords: array[string]
+        weights:
+          recency: float
+          sentiment: float
+          relevance: float
+          length: float
+        profileId: string  # User preference profile
+    output:
+      success:
+        scores: array[ArticleScore]
+        topArticleId: string
+        scoringMetadata:
+          algorithm: string
+          version: string
+          timestamp: timestamp
+      errors:
+        - code: NO_ARTICLES_TO_SCORE
+          message: "No processed articles available"
+        - code: INVALID_WEIGHTS
+          message: "Scoring weights must sum to 1.0"
+    idempotent: true
+    state_transition: "articles_ready -> scored"
+    timeout: 5000ms
+
+  # UI Presentation Contracts
+  GetArticleList:
+    description: Retrieves formatted article list for UI display
+    input:
+      sessionId: uuid
+      pagination:
+        page: integer
+        itemsPerPage: integer
+      sortBy: string
+      sortDirection: string
+      filters: array[FilterCriteria]
+    output:
+      success:
+        articles: array[ArticlePresentation]
+        totalCount: integer
+        currentPage: integer
+        totalPages: integer
+        hasMore: boolean
+      errors:
+        - code: SESSION_NOT_FOUND
+          message: "Invalid or expired session"
+        - code: INVALID_PAGE
+          message: "Page number out of range"
+    idempotent: true
+    state_transition: none
+    timeout: 1000ms
+
+  # Article Selection Contract
+  SelectGameChangerArticle:
+    description: Records user's selection of featured article
+    input:
+      sessionId: uuid
+      articleId: string
+      selectionMetadata:
+        selectionMethod: string  # index/id/search
+        timestamp: timestamp
+        confirmSelection: boolean
+    output:
+      success:
+        articleId: string
+        articleTitle: string
+        confirmationRequired: boolean
+        nextStep: string  # "prompt_for_take"
+      errors:
+        - code: ARTICLE_NOT_FOUND
+          message: "Selected article not in session"
+        - code: ALREADY_SELECTED
+          message: "Article already selected"
+        - code: SESSION_EXPIRED
+          message: "Session has expired"
+    idempotent: false
+    state_transition: "scored -> article_selected"
+    timeout: 1000ms
+
+  # User Take Contracts
+  SubmitUserTake:
+    description: Submits user's personal commentary for selected article
+    input:
+      sessionId: uuid
+      articleId: string
+      take:
+        content: string
+        formatting: array[FormattingHint]
+        takeType: string
+      skipTake: boolean  # Allow skipping
+    output:
+      success:
+        takeId: uuid
+        wordCount: integer
+        validationStatus: string
+        storedAt: timestamp
+      errors:
+        - code: NO_ARTICLE_SELECTED
+          message: "No article selected for commentary"
+        - code: TAKE_TOO_SHORT
+          message: "Commentary must be at least 10 characters"
+        - code: TAKE_TOO_LONG
+          message: "Commentary exceeds 2000 character limit"
+        - code: INVALID_FORMATTING
+          message: "Unsupported formatting hints"
+    idempotent: false
+    state_transition: "article_selected -> take_submitted"
+    timeout: 5000ms
+
+  ValidateUserTake:
+    description: Validates user commentary before storage
+    input:
+      content: string
+      validationRules:
+        minLength: integer
+        maxLength: integer
+        requiredElements: array[string]
+        forbiddenPatterns: array[regex]
+    output:
+      success:
+        isValid: boolean
+        warnings: array[string]
+        suggestions: array[string]
+      errors:
+        - code: VALIDATION_FAILED
+          message: "Content fails validation rules"
+          details: array[ValidationError]
+    idempotent: true
+    state_transition: none
+    timeout: 500ms
+
+  # Digest Generation Contracts
+  GenerateInteractiveDigest:
+    description: Generates digest with interactive selections
+    input:
+      sessionId: uuid
+      includeUserTake: boolean
+      templateOverrides:
+        format: string
+        style: string
+        customPrompts: map[string, string]
+      enhancementOptions:
+        smartHeadlines: boolean
+        bannerImage: boolean
+    output:
+      success:
+        digestId: uuid
+        outputPath: string
+        format: string
+        articleCount: integer
+        featuredArticle:
+          id: string
+          title: string
+          hasTake: boolean
+        generationTime: integer  # milliseconds
+      errors:
+        - code: INCOMPLETE_SESSION
+          message: "Session missing required selections"
+        - code: TEMPLATE_ERROR
+          message: "Failed to render template"
+        - code: WRITE_ERROR
+          message: "Failed to write output file"
+    idempotent: false
+    state_transition: "take_submitted -> generating -> completed"
+    timeout: 30000ms
+
+  # Session Control Contracts
+  CancelSession:
+    description: Cancels an active interactive session
+    input:
+      sessionId: uuid
+      reason: string
+      saveProgress: boolean
+    output:
+      success:
+        sessionId: uuid
+        cancelledAt: timestamp
+        progressSaved: boolean
+        savedData: map[string, any]  # If saveProgress true
+      errors:
+        - code: SESSION_NOT_FOUND
+          message: "Session not found or already completed"
+    idempotent: true
+    state_transition: "* -> cancelled"
+    timeout: 1000ms
+
+  GetSessionState:
+    description: Retrieves current state of interactive session
+    input:
+      sessionId: uuid
+    output:
+      success:
+        sessionId: uuid
+        state: string
+        startedAt: timestamp
+        lastActivity: timestamp
+        expiresAt: timestamp
+        progress:
+          articlesProcessed: integer
+          articleSelected: boolean
+          takeSubmitted: boolean
+      errors:
+        - code: SESSION_NOT_FOUND
+          message: "Session not found"
+    idempotent: true
+    state_transition: none
+    timeout: 500ms
+
+  # Navigation Contracts
+  NavigateArticles:
+    description: Handles keyboard navigation in article list
+    input:
+      sessionId: uuid
+      action: string  # up/down/pageup/pagedown/home/end
+      currentIndex: integer
+    output:
+      success:
+        newIndex: integer
+        articleId: string
+        hasNext: boolean
+        hasPrevious: boolean
+      errors:
+        - code: INVALID_NAVIGATION
+          message: "Navigation action not valid"
+        - code: INDEX_OUT_OF_BOUNDS
+          message: "Navigation would exceed list bounds"
+    idempotent: true
+    state_transition: none
+    timeout: 100ms
+
+  # Batch Operations
+  BatchProcessArticles:
+    description: Processes multiple articles in parallel batches
+    input:
+      sessionId: uuid
+      batches: array[ArticleBatch]
+      concurrency: integer
+      retryPolicy:
+        maxRetries: integer
+        backoffMs: integer
+    output:
+      success:
+        totalProcessed: integer
+        batchResults: array[BatchResult]
+        failedArticles: array[FailedArticle]
+        performanceMetrics:
+          totalTime: integer
+          averagePerArticle: integer
+          cacheHitRate: float
+      errors:
+        - code: BATCH_SIZE_EXCEEDED
+          message: "Batch size exceeds maximum allowed"
+        - code: CONCURRENCY_LIMIT
+          message: "Concurrency exceeds system limits"
+    idempotent: true
+    state_transition: "initialized -> batch_processing -> articles_ready"
+    timeout: 120000ms
+
+# Type Definitions
+types:
+  ProcessedArticle:
+    id: string
+    url: string
+    title: string
+    summary: string
+    priorityScore: float
+    sentiment: string
+    fetchedAt: timestamp
+    
+  ArticleScore:
+    articleId: string
+    score: float
+    components:
+      recency: float
+      sentiment: float
+      relevance: float
+      length: float
+      
+  ArticlePresentation:
+    index: integer
+    id: string
+    title: string
+    preview: string
+    score: float
+    category: string
+    
+  FormattingHint:
+    type: string  # bold/italic/link
+    start: integer
+    end: integer
+    value: string
+    
+  ValidationError:
+    field: string
+    rule: string
+    message: string
+    severity: string
+    
+  ArticleBatch:
+    batchId: string
+    articles: array[string]  # URLs
+    priority: integer
+    
+  BatchResult:
+    batchId: string
+    successCount: integer
+    failureCount: integer
+    processingTime: integer
+    
+  FailedArticle:
+    url: string
+    error: string
+    retryable: boolean
+
+# Global Contract Properties
+global_properties:
+  authentication:
+    required: false  # No auth for CLI tool
+    
+  rate_limiting:
+    enabled: true
+    limits:
+      api_calls_per_minute: 60
+      concurrent_sessions: 5
+      
+  versioning:
+    strategy: header  # Version in request header
+    current: "1.0.0"
+    
+  error_handling:
+    format: structured  # JSON error responses
+    include_stack: false  # Security
+    
+  monitoring:
+    trace_id: required  # For debugging
+    metrics: enabled  # Performance monitoring
