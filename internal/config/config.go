@@ -15,6 +15,7 @@ import (
 type Config struct {
 	App       App       `mapstructure:"app"`
 	AI        AI        `mapstructure:"ai"`
+	Database  Database  `mapstructure:"database"`
 	Search    Search    `mapstructure:"search"`
 	Output    Output    `mapstructure:"output"`
 	Cache     Cache     `mapstructure:"cache"`
@@ -28,6 +29,13 @@ type Config struct {
 	Team      Team      `mapstructure:"team"`
 	Logging   Logging   `mapstructure:"logging"`
 	CLI       CLI       `mapstructure:"cli"`
+}
+
+// Database holds database configuration
+type Database struct {
+	ConnectionString string `mapstructure:"connection_string"`
+	MaxConnections   int    `mapstructure:"max_connections"`
+	IdleConnections  int    `mapstructure:"idle_connections"`
 }
 
 // App holds general application configuration
@@ -418,7 +426,7 @@ func setDefaults() {
 	viper.SetDefault("app.data_dir", ".briefly-cache")
 
 	// AI defaults
-	viper.SetDefault("ai.gemini.model", "gemini-2.5-flash-preview-05-20")
+	viper.SetDefault("ai.gemini.model", "gemini-flash-lite-latest")
 	viper.SetDefault("ai.gemini.timeout", "30s")
 	viper.SetDefault("ai.gemini.max_tokens", 8192)
 	viper.SetDefault("ai.gemini.temperature", 0.7)

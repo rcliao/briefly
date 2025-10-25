@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Build artifacts
+briefly
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+test/
+coverage.out
+
+# Cache
+.briefly-cache/
+*.cache
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+*.tmp
+tmp/
+
+# Input/Output directories
+input/
+output/
+digests/
+backups/
+
+# Docker volumes
+postgres_data/
+pgadmin_data/
+redis_data/

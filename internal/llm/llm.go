@@ -17,7 +17,7 @@ import (
 
 const (
 	// DefaultModel is the default Gemini model to use for summarization.
-	DefaultModel = "gemini-2.5-flash-preview-05-20" // Latest Gemini 2.5 Flash Preview
+	DefaultModel = "gemini-flash-lite-latest" // Gemini Flash Lite (latest version)
 	// DefaultEmbeddingModel is the default model for generating embeddings
 	DefaultEmbeddingModel = "text-embedding-004"
 	// SummarizeTextPromptTemplate is the template for the summarization prompt.

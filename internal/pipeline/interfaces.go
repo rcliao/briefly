@@ -40,6 +40,13 @@ type ArticleSummarizer interface {
 	ExtractTitle(ctx context.Context, content string) (string, error)
 }
 
+// ArticleCategorizer assigns articles to categories
+type ArticleCategorizer interface {
+	// CategorizeArticle assigns a category to an article based on its content
+	// Returns category name (e.g., "Platform Updates", "From the Field")
+	CategorizeArticle(ctx context.Context, article *core.Article, summary *core.Summary) (string, error)
+}
+
 // EmbeddingGenerator creates vector embeddings for text
 type EmbeddingGenerator interface {
 	// GenerateEmbedding creates a 768-dimensional embedding vector

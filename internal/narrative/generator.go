@@ -156,34 +156,61 @@ func (g *Generator) extractKeyPoints(summary core.Summary) []string {
 }
 
 // buildNarrativePrompt constructs the prompt for executive summary generation
+// Uses domain storytelling and structured narrative format
 func (g *Generator) buildNarrativePrompt(insights []ClusterInsight) string {
 	var prompt strings.Builder
 
-	prompt.WriteString("Generate a story-driven executive summary (200 words maximum) from these clustered articles:\n\n")
+	prompt.WriteString("Generate an executive summary for a weekly tech digest newsletter using domain storytelling principles.\n\n")
 
-	for i, insight := range insights {
-		prompt.WriteString(fmt.Sprintf("## Topic %d: %s\n", i+1, insight.Theme))
-		prompt.WriteString(fmt.Sprintf("Total articles in cluster: %d\n\n", insight.ArticleCount))
-
-		for j, article := range insight.TopArticles {
-			prompt.WriteString(fmt.Sprintf("### Article %d: %s\n", j+1, article.Title))
-			prompt.WriteString(fmt.Sprintf("Summary: %s\n\n", truncateText(article.Summary, 200)))
+	// Build article reference list with numbers
+	prompt.WriteString("**Articles for reference:**\n")
+	articleNum := 1
+	for _, insight := range insights {
+		for _, article := range insight.TopArticles {
+			prompt.WriteString(fmt.Sprintf("[%d] %s\n", articleNum, article.Title))
+			prompt.WriteString(fmt.Sprintf("    Summary: %s\n\n", truncateText(article.Summary, 150)))
+			articleNum++
 		}
-
-		prompt.WriteString("\n")
 	}
 
-	prompt.WriteString(`
-Instructions:
-1. Synthesize the key insights across all topic clusters into a cohesive narrative
-2. Focus on the "why it matters" rather than listing articles
-3. Identify cross-cutting themes and connections between topics
-4. Write in an engaging, story-driven style suitable for LinkedIn
-5. Keep to exactly 200 words or fewer
-6. Do not use bullet points - write flowing paragraphs
-7. Focus on implications and takeaways, not article summaries
+	prompt.WriteString("\n**REQUIRED STRUCTURE:**\n\n")
 
-Begin your executive summary:`)
+	prompt.WriteString("1. **Executive Summary (2-3 sentences max)**\n")
+	prompt.WriteString("   - State the main pattern/trend immediately\n")
+	prompt.WriteString("   - Include the recommendation or key insight upfront\n")
+	prompt.WriteString("   - Example: 'AI agents are shifting from assistants to autonomous teammates this week. Three major platforms launched features enabling agents to operate independently, while research reveals critical reliability challenges.'\n\n")
+
+	prompt.WriteString("2. **Key Developments (as workflow/narrative sequence)**\n")
+	prompt.WriteString("   - Use domain storytelling format: [Actor] [verb] [System/Data]\n")
+	prompt.WriteString("   - Show the workflow/progression of events\n")
+	prompt.WriteString("   - Each numbered point should tell part of the story\n")
+	prompt.WriteString("   - Include cross-references: [See #X below]\n")
+	prompt.WriteString("   - Format example:\n")
+	prompt.WriteString("     1. **Anthropic → launches** Skills system enabling developers to customize Claude for domain-specific tasks [See #3]\n")
+	prompt.WriteString("     2. **Practitioners → adopt** YOLO mode running 3-8 concurrent agents with minimal oversight [See #1]\n")
+	prompt.WriteString("     3. **Researchers → discover** brain rot phenomenon degrading LLM cognition from low-quality data [See #8]\n\n")
+
+	prompt.WriteString("3. **Bottom Line (1 sentence)**\n")
+	prompt.WriteString("   - Synthesize the implications\n")
+	prompt.WriteString("   - State what matters for the audience\n")
+	prompt.WriteString("   - Example: 'As agents gain autonomy, reliability and data quality become the critical bottlenecks for production deployment.'\n\n")
+
+	prompt.WriteString("**NARRATIVE PRINCIPLES:**\n")
+	prompt.WriteString("- Tell a story with a clear arc (setup → developments → implications)\n")
+	prompt.WriteString("- Use active voice with clear actors and actions\n")
+	prompt.WriteString("- Focus on 'why it matters' not 'what happened'\n")
+	prompt.WriteString("- Show connections and workflow between developments\n")
+	prompt.WriteString("- Keep total length under 150 words\n")
+	prompt.WriteString("- Write for software engineers, PMs, and technical leaders\n\n")
+
+	prompt.WriteString("**Example output:**\n")
+	prompt.WriteString("**AI development tools reached a turning point this week with three simultaneous breakthroughs in agent autonomy. The shift: from AI-as-helper to AI-as-autonomous-developer.**\n\n")
+	prompt.WriteString("1. **Anthropic → releases** Claude Code web platform where developers assign tasks and agents work independently across repositories [See #1]\n")
+	prompt.WriteString("2. **Claude → gains** persistent memory for teams, eliminating context re-explanation and enabling true project continuity [See #2]\n")
+	prompt.WriteString("3. **Practitioners → discover** optimal workflows running 8+ agents simultaneously with atomic git commits and blast-radius management [See #5]\n\n")
+	prompt.WriteString("**Bottom line:** Agent autonomy is production-ready, but success requires new workflows built around parallel execution and granular task isolation.\n\n")
+
+	prompt.WriteString("Now generate the executive summary following this exact structure:")
 
 	return prompt.String()
 }

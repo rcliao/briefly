@@ -38,6 +38,7 @@ type Article struct {
 	// Intelligence
 	TopicCluster      string  `json:"topic_cluster"`
 	ClusterConfidence float64 `json:"cluster_confidence"`
+	Category          string  `json:"category"`         // Article category (Platform Updates, From the Field, etc.)
 	QualityScore      float64 `json:"quality_score"`    // 0.0-1.0
 	SignalStrength    float64 `json:"signal_strength"`  // 0.0-1.0 (replaces RelevanceScore)
 	

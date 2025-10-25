@@ -4,6 +4,7 @@ import (
 	"briefly/internal/core"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type Pipeline struct {
 	parser        URLParser
 	fetcher       ContentFetcher
 	summarizer    ArticleSummarizer
+	categorizer   ArticleCategorizer // NEW: Categorizes articles
 	embedder      EmbeddingGenerator
 	clusterer     TopicClusterer
 	orderer       ArticleOrderer
@@ -68,6 +70,7 @@ func NewPipeline(
 	parser URLParser,
 	fetcher ContentFetcher,
 	summarizer ArticleSummarizer,
+	categorizer ArticleCategorizer,
 	embedder EmbeddingGenerator,
 	clusterer TopicClusterer,
 	orderer ArticleOrderer,
@@ -82,17 +85,18 @@ func NewPipeline(
 	}
 
 	return &Pipeline{
-		parser:     parser,
-		fetcher:    fetcher,
-		summarizer: summarizer,
-		embedder:   embedder,
-		clusterer:  clusterer,
-		orderer:    orderer,
-		narrative:  narrative,
-		renderer:   renderer,
-		cache:      cache,
-		banner:     banner,
-		config:     config,
+		parser:      parser,
+		fetcher:     fetcher,
+		summarizer:  summarizer,
+		categorizer: categorizer,
+		embedder:    embedder,
+		clusterer:   clusterer,
+		orderer:     orderer,
+		narrative:   narrative,
+		renderer:    renderer,
+		cache:       cache,
+		banner:      banner,
+		config:      config,
 	}
 }
 
@@ -162,8 +166,19 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 	fmt.Printf("   ✓ Successfully processed %d/%d articles\n", stats.SuccessfulArticles, stats.TotalURLs)
 	fmt.Printf("   • Cache hits: %d, Cache misses: %d\n\n", stats.CacheHits, stats.CacheMisses)
 
+	// Step 2.5: Categorize articles (NEW)
+	fmt.Printf("📁 Step 3/10: Categorizing articles...\n")
+	articles, err = p.categorizeArticles(ctx, articles, summaries)
+	if err != nil {
+		// Non-fatal: log warning and continue with default category
+		fmt.Printf("   ⚠️  Categorization failed: %v\n", err)
+		fmt.Printf("   • Continuing with uncategorized articles\n\n")
+	} else {
+		fmt.Printf("   ✓ Categorized %d articles\n\n", len(articles))
+	}
+
 	// Step 3: Generate embeddings for clustering
-	fmt.Printf("🧠 Step 3/9: Generating embeddings for clustering...\n")
+	fmt.Printf("🧠 Step 4/10: Generating embeddings for clustering...\n")
 	embeddings, err := p.generateEmbeddings(ctx, summaries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embeddings: %w", err)
@@ -171,7 +186,7 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 	fmt.Printf("   ✓ Generated %d embeddings\n\n", len(embeddings))
 
 	// Step 4: Cluster articles by topic
-	fmt.Printf("🔗 Step 4/9: Clustering articles by topic...\n")
+	fmt.Printf("🔗 Step 5/10: Clustering articles by topic...\n")
 	clusters, err := p.clusterer.ClusterArticles(ctx, articles, summaries, embeddings)
 	if err != nil {
 		return nil, fmt.Errorf("failed to cluster articles: %w", err)
@@ -181,16 +196,22 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 	fmt.Printf("   ✓ Created %d topic clusters\n\n", stats.ClustersGenerated)
 
 	// Step 5: Order articles within clusters
-	fmt.Printf("📊 Step 5/9: Ordering articles within clusters...\n")
+	fmt.Printf("📊 Step 6/10: Ordering articles within clusters...\n")
 	orderedClusters, err := p.orderer.OrderClusters(ctx, clusters, articles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to order articles: %w", err)
 	}
 	fmt.Printf("   ✓ Ordered %d clusters\n\n", len(orderedClusters))
 
-	// Step 6: Generate executive summary
-	fmt.Printf("📝 Step 6/9: Generating executive summary...\n")
-	executiveSummary, err := p.narrative.GenerateExecutiveSummary(ctx, orderedClusters, articlesToMap(articles), summariesToMap(summaries))
+	// Step 6: Build digest structure (before executive summary so we have correct article ordering)
+	fmt.Printf("🔨 Step 7/10: Building digest structure...\n")
+	digest := p.buildDigest(orderedClusters, articles, summaries, "")
+	fmt.Printf("   ✓ Digest structure complete\n")
+	fmt.Printf("   • Articles: %d, Summaries: %d\n\n", len(articles), len(summaries))
+
+	// Step 7: Generate executive summary using category-grouped articles
+	fmt.Printf("📝 Step 8/10: Generating executive summary...\n")
+	executiveSummary, err := p.generateExecutiveSummaryFromDigest(ctx, digest)
 	if err != nil {
 		// Non-fatal: log and continue without executive summary
 		fmt.Printf("   ⚠️  Executive summary generation failed: %v\n", err)
@@ -200,14 +221,11 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 		fmt.Printf("   ✓ Generated executive summary (%d words)\n\n", len(executiveSummary)/5)
 	}
 
-	// Step 7: Build digest structure
-	fmt.Printf("🔨 Step 7/9: Building digest structure...\n")
-	digest := p.buildDigest(orderedClusters, articles, summaries, executiveSummary)
-	fmt.Printf("   ✓ Digest structure complete\n")
-	fmt.Printf("   • Articles: %d, Summaries: %d\n\n", len(articles), len(summaries))
+	// Update digest with executive summary
+	digest.DigestSummary = executiveSummary
 
 	// Step 8: Render markdown output
-	fmt.Printf("✍️  Step 8/9: Rendering markdown output...\n")
+	fmt.Printf("✍️  Step 9/10: Rendering markdown output...\n")
 	markdownPath, err := p.renderer.RenderDigest(ctx, digest, opts.OutputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render digest: %w", err)
@@ -217,7 +235,7 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 	// Step 9: Optional banner generation
 	var bannerPath string
 	if opts.GenerateBanner && p.banner != nil {
-		fmt.Printf("🎨 Step 9/9: Generating banner image...\n")
+		fmt.Printf("🎨 Step 10/10: Generating banner image...\n")
 		bannerPath, err = p.banner.GenerateBanner(ctx, digest, opts.BannerStyle)
 		if err != nil {
 			// Non-fatal: log warning and continue without banner
@@ -227,7 +245,7 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 			fmt.Printf("   ✓ Banner saved to %s\n\n", bannerPath)
 		}
 	} else {
-		fmt.Printf("⏭️  Step 9/9: Skipping banner generation\n\n")
+		fmt.Printf("⏭️  Step 10/10: Skipping banner generation\n\n")
 	}
 
 	stats.EndTime = time.Now()
@@ -399,7 +417,53 @@ func (p *Pipeline) generateEmbeddings(ctx context.Context, summaries []core.Summ
 	return embeddings, nil
 }
 
+// categorizeArticles assigns categories to all articles using LLM categorization
+func (p *Pipeline) categorizeArticles(ctx context.Context, articles []core.Article, summaries []core.Summary) ([]core.Article, error) {
+	if p.categorizer == nil {
+		return articles, fmt.Errorf("categorizer not available")
+	}
+
+	// Build a map of article ID to summary for faster lookup
+	summaryMap := summariesToMap(summaries)
+
+	categorizedArticles := make([]core.Article, 0, len(articles))
+	var failedCount int
+
+	for i, article := range articles {
+		fmt.Printf("   [%d/%d] Categorizing: %s\n", i+1, len(articles), article.Title)
+
+		// Get corresponding summary
+		summary, hasSummary := summaryMap[article.ID]
+		var summaryPtr *core.Summary
+		if hasSummary {
+			summaryPtr = &summary
+		}
+
+		// Categorize article
+		category, err := p.categorizer.CategorizeArticle(ctx, &article, summaryPtr)
+		if err != nil {
+			// Log error but continue with default category
+			fmt.Printf("           ✗ Categorization failed: %v (using 'Miscellaneous')\n", err)
+			category = "Miscellaneous"
+			failedCount++
+		} else {
+			fmt.Printf("           ✓ Category: %s\n", category)
+		}
+
+		// Update article with category
+		article.Category = category
+		categorizedArticles = append(categorizedArticles, article)
+	}
+
+	if failedCount > 0 {
+		fmt.Printf("   ⚠️  Warning: %d/%d articles failed to categorize\n", failedCount, len(articles))
+	}
+
+	return categorizedArticles, nil
+}
+
 // buildDigest constructs the final digest structure
+// Groups articles by category first, then by cluster theme within each category
 func (p *Pipeline) buildDigest(clusters []core.TopicCluster, articles []core.Article, summaries []core.Summary, executiveSummary string) *core.Digest {
 	digest := &core.Digest{
 		ID:            generateID(),
@@ -407,28 +471,47 @@ func (p *Pipeline) buildDigest(clusters []core.TopicCluster, articles []core.Art
 		DateGenerated: time.Now(),
 	}
 
-	// Build article groups from clusters
-	articleGroups := make([]core.ArticleGroup, 0, len(clusters))
+	// Build a map of article IDs to full articles for quick lookup
+	articleMap := articlesToMap(articles)
+
+	// Group articles by category
+	categoryGroups := make(map[string][]core.Article)
 	articleURLs := make([]string, 0, len(articles))
 
+	// First pass: organize articles by category
 	for _, cluster := range clusters {
-		group := core.ArticleGroup{
-			Theme:    cluster.Label,
-			Articles: []core.Article{},
-		}
-
-		// Add articles from this cluster
 		for _, articleID := range cluster.ArticleIDs {
-			for _, article := range articles {
-				if article.ID == articleID {
-					group.Articles = append(group.Articles, article)
-					articleURLs = append(articleURLs, article.URL)
-					break
+			if article, found := articleMap[articleID]; found {
+				category := article.Category
+				if category == "" {
+					category = "Miscellaneous"
 				}
+				categoryGroups[category] = append(categoryGroups[category], article)
+				articleURLs = append(articleURLs, article.URL)
 			}
 		}
+	}
 
+	// Build article groups by category
+	articleGroups := make([]core.ArticleGroup, 0, len(categoryGroups))
+	for category, categoryArticles := range categoryGroups {
+		group := core.ArticleGroup{
+			Category: category,
+			Theme:    category, // Use category as theme for now
+			Articles: categoryArticles,
+			Priority: p.getCategoryPriority(category),
+		}
 		articleGroups = append(articleGroups, group)
+	}
+
+	// Sort groups by priority (lower number = higher priority)
+	// This ensures Platform Updates comes before Miscellaneous, etc.
+	for i := 0; i < len(articleGroups); i++ {
+		for j := i + 1; j < len(articleGroups); j++ {
+			if articleGroups[i].Priority > articleGroups[j].Priority {
+				articleGroups[i], articleGroups[j] = articleGroups[j], articleGroups[i]
+			}
+		}
 	}
 
 	digest.ArticleGroups = articleGroups
@@ -443,6 +526,116 @@ func (p *Pipeline) buildDigest(clusters []core.TopicCluster, articles []core.Art
 	}
 
 	return digest
+}
+
+// getCategoryPriority returns the priority of a category for sorting
+// Lower numbers appear first in the digest
+func (p *Pipeline) getCategoryPriority(category string) int {
+	// Map of category to priority (from categorization/categories.go default order)
+	priorities := map[string]int{
+		"Platform Updates": 1,
+		"From the Field":   2,
+		"Research":         3,
+		"Tutorials":        4,
+		"Analysis":         5,
+		"Miscellaneous":    99,
+	}
+
+	if priority, found := priorities[category]; found {
+		return priority
+	}
+	return 50 // Default priority for unknown categories
+}
+
+// generateExecutiveSummaryFromDigest generates executive summary using category-grouped articles
+// This ensures article numbering in the prompt matches the final output
+func (p *Pipeline) generateExecutiveSummaryFromDigest(ctx context.Context, digest *core.Digest) (string, error) {
+	if len(digest.ArticleGroups) == 0 {
+		return "", fmt.Errorf("no article groups in digest")
+	}
+
+	// Build article list with global numbering matching output
+	var prompt strings.Builder
+	prompt.WriteString("Generate an executive summary for a weekly tech digest newsletter using domain storytelling principles.\n\n")
+
+	// Build article reference list with global numbering
+	prompt.WriteString("**Articles for reference:**\n")
+	articleNum := 1
+	summaryMap := summariesToMap(digest.Summaries)
+
+	for _, group := range digest.ArticleGroups {
+		for _, article := range group.Articles {
+			prompt.WriteString(fmt.Sprintf("[%d] %s\n", articleNum, article.Title))
+
+			// Get summary for this article
+			if summary, found := summaryMap[article.ID]; found {
+				summaryText := summary.SummaryText
+				if len(summaryText) > 150 {
+					summaryText = summaryText[:150] + "..."
+				}
+				prompt.WriteString(fmt.Sprintf("    Summary: %s\n", summaryText))
+			}
+			prompt.WriteString(fmt.Sprintf("    Category: %s\n\n", group.Category))
+			articleNum++
+		}
+	}
+
+	// Add the narrative structure instructions (same as before)
+	prompt.WriteString("\n**REQUIRED STRUCTURE:**\n\n")
+	prompt.WriteString("1. **Executive Summary (2-3 sentences max)**\n")
+	prompt.WriteString("   - State the main pattern/trend immediately\n")
+	prompt.WriteString("   - Include the recommendation or key insight upfront\n")
+	prompt.WriteString("   - Example: 'AI agents are shifting from assistants to autonomous teammates this week. Three major platforms launched features enabling agents to operate independently, while research reveals critical reliability challenges.'\n\n")
+
+	prompt.WriteString("2. **Key Developments (as workflow/narrative sequence)**\n")
+	prompt.WriteString("   - Use domain storytelling format: [Actor] [verb] [System/Data]\n")
+	prompt.WriteString("   - Show the workflow/progression of events\n")
+	prompt.WriteString("   - Each numbered point should tell part of the story\n")
+	prompt.WriteString("   - Include cross-references: [See #X below]\n")
+	prompt.WriteString("   - Format example:\n")
+	prompt.WriteString("     1. **Anthropic → launches** Skills system enabling developers to customize Claude for domain-specific tasks [See #3]\n")
+	prompt.WriteString("     2. **Practitioners → adopt** YOLO mode running 3-8 concurrent agents with minimal oversight [See #1]\n")
+	prompt.WriteString("     3. **Researchers → discover** brain rot phenomenon degrading LLM cognition from low-quality data [See #8]\n\n")
+
+	prompt.WriteString("3. **Bottom Line (1 sentence)**\n")
+	prompt.WriteString("   - Synthesize the implications\n")
+	prompt.WriteString("   - State what matters for the audience\n")
+	prompt.WriteString("   - Example: 'As agents gain autonomy, reliability and data quality become the critical bottlenecks for production deployment.'\n\n")
+
+	prompt.WriteString("**NARRATIVE PRINCIPLES:**\n")
+	prompt.WriteString("- Tell a story with a clear arc (setup → developments → implications)\n")
+	prompt.WriteString("- Use active voice with clear actors and actions\n")
+	prompt.WriteString("- Focus on 'why it matters' not 'what happened'\n")
+	prompt.WriteString("- Show connections and workflow between developments\n")
+	prompt.WriteString("- Keep total length under 150 words\n")
+	prompt.WriteString("- Write for software engineers, PMs, and technical leaders\n\n")
+
+	prompt.WriteString("**Example output:**\n")
+	prompt.WriteString("**AI development tools reached a turning point this week with three simultaneous breakthroughs in agent autonomy. The shift: from AI-as-helper to AI-as-autonomous-developer.**\n\n")
+	prompt.WriteString("1. **Anthropic → releases** Claude Code web platform where developers assign tasks and agents work independently across repositories [See #1]\n")
+	prompt.WriteString("2. **Claude → gains** persistent memory for teams, eliminating context re-explanation and enabling true project continuity [See #2]\n")
+	prompt.WriteString("3. **Practitioners → discover** optimal workflows running 8+ agents simultaneously with atomic git commits and blast-radius management [See #5]\n\n")
+	prompt.WriteString("**Bottom line:** Agent autonomy is production-ready, but success requires new workflows built around parallel execution and granular task isolation.\n\n")
+
+	prompt.WriteString("Now generate the executive summary following this exact structure:")
+
+	// Call LLM through the narrative interface
+	// We need to type-assert to access GenerateText method added to NarrativeAdapter
+	type TextGenerator interface {
+		GenerateText(ctx context.Context, prompt string) (string, error)
+	}
+
+	textGen, ok := p.narrative.(TextGenerator)
+	if !ok {
+		return "", fmt.Errorf("narrative generator does not support text generation")
+	}
+
+	narrative, err := textGen.GenerateText(ctx, prompt.String())
+	if err != nil {
+		return "", fmt.Errorf("failed to generate narrative: %w", err)
+	}
+
+	return strings.TrimSpace(narrative), nil
 }
 
 // Cache helper methods

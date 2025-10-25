@@ -9,9 +9,9 @@ import (
 	"briefly/internal/parser"
 	"briefly/internal/render"
 	"briefly/internal/store"
-	"briefly/internal/templates"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -171,16 +171,22 @@ func (a *OrdererAdapter) OrderArticlesInCluster(cluster *core.TopicCluster, arti
 // NarrativeAdapter wraps internal/narrative
 type NarrativeAdapter struct {
 	generator *narrative.Generator
+	llmClient narrative.LLMClient
 }
 
 func NewNarrativeAdapter(llmClient narrative.LLMClient) *NarrativeAdapter {
 	return &NarrativeAdapter{
 		generator: narrative.NewGenerator(llmClient),
+		llmClient: llmClient,
 	}
 }
 
 func (a *NarrativeAdapter) GenerateExecutiveSummary(ctx context.Context, clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (string, error) {
 	return a.generator.GenerateExecutiveSummary(ctx, clusters, articles, summaries)
+}
+
+func (a *NarrativeAdapter) GenerateText(ctx context.Context, prompt string) (string, error) {
+	return a.llmClient.GenerateText(ctx, prompt)
 }
 
 func (a *NarrativeAdapter) IdentifyClusterTheme(ctx context.Context, cluster core.TopicCluster, articles []core.Article) (string, error) {
@@ -201,9 +207,7 @@ func NewRendererAdapter() *RendererAdapter {
 }
 
 func (a *RendererAdapter) RenderDigest(ctx context.Context, digest *core.Digest, outputPath string) (string, error) {
-	// Convert digest to DigestData format for compatibility with existing templates
-	digestItems := make([]render.DigestData, 0)
-
+	// Use the new category-based rendering with ArticleGroups
 	// Build a map of article ID to summary
 	summaryMap := make(map[string]*core.Summary)
 	for i := range digest.Summaries {
@@ -213,62 +217,119 @@ func (a *RendererAdapter) RenderDigest(ctx context.Context, digest *core.Digest,
 		}
 	}
 
-	// Extract articles from ArticleGroups
-	for _, group := range digest.ArticleGroups {
-		for _, article := range group.Articles {
-			// Find summary for this article
-			summaryText := ""
+	// Populate summaries in articles for rendering
+	for i := range digest.ArticleGroups {
+		for j := range digest.ArticleGroups[i].Articles {
+			article := &digest.ArticleGroups[i].Articles[j]
 			if summary, exists := summaryMap[article.ID]; exists {
-				summaryText = summary.SummaryText
+				// Store summary in MyTake for rendering (legacy field)
+				article.MyTake = summary.SummaryText
 			}
-
-			item := render.DigestData{
-				Title:           article.Title,
-				URL:             article.URL,
-				SummaryText:     summaryText,
-				TopicCluster:    article.TopicCluster,
-				TopicConfidence: article.ClusterConfidence,
-				ContentType:     string(article.ContentType),
-			}
-
-			// Set content type icons
-			switch article.ContentType {
-			case core.ContentTypeYouTube:
-				item.ContentIcon = "🎥"
-				item.ContentLabel = "Video"
-				item.Duration = article.Duration
-				item.Channel = article.Channel
-			case core.ContentTypePDF:
-				item.ContentIcon = "📄"
-				item.ContentLabel = "PDF"
-				item.PageCount = article.PageCount
-			default:
-				item.ContentIcon = "🔗"
-				item.ContentLabel = "Article"
-			}
-
-			digestItems = append(digestItems, item)
 		}
 	}
 
-	// Configure template for newsletter format
-	template := &templates.DigestTemplate{
-		Format:                    templates.FormatNewsletter,
-		Title:                     digest.Metadata.Title,
-		IncludeSummaries:          true,
-		IncludeKeyInsights:        true,
-		IncludeSourceLinks:        true,
-		IncludeIndividualArticles: true,
-		IncludeTopicClustering:    true,
-	}
-
-	// RenderSignalStyleDigest returns (content, filePath, error)
-	_, filePath, err := templates.RenderSignalStyleDigest(digestItems, outputPath, digest.DigestSummary, template, digest.Metadata.Title)
+	// Render using category-based template
+	content, err := a.renderCategoryBasedDigest(digest)
 	if err != nil {
 		return "", fmt.Errorf("failed to render digest: %w", err)
 	}
 
+	// Write to file
+	dateStr := digest.Metadata.DateGenerated.Format("2006-01-02")
+	filename := fmt.Sprintf("digest_signal_%s.md", dateStr)
+
+	if outputPath == "" {
+		outputPath = "digests"
+	}
+
+	filePath, err := render.WriteDigestToFile(content, outputPath, filename)
+	if err != nil {
+		return "", fmt.Errorf("failed to write digest file: %w", err)
+	}
+
 	return filePath, nil
+}
+
+// renderCategoryBasedDigest renders digest grouped by categories
+func (a *RendererAdapter) renderCategoryBasedDigest(digest *core.Digest) (string, error) {
+	var content strings.Builder
+
+	// Header
+	content.WriteString(fmt.Sprintf("# %s\n\n", digest.Metadata.Title))
+
+	// Article count and reading time
+	articleCount := digest.Metadata.ArticleCount
+	readTime := (articleCount * 2) / 3 // Rough estimate: 2 min per 3 articles
+	if readTime < 1 {
+		readTime = 1
+	}
+	content.WriteString(fmt.Sprintf("📊 %d sources • ⏱️ %dm read\n\n", articleCount, readTime))
+
+	// Signal section (executive summary)
+	if digest.DigestSummary != "" {
+		content.WriteString("## 🔍 Signal\n\n")
+		content.WriteString(digest.DigestSummary)
+		content.WriteString("\n\n")
+	}
+
+	// Sources section grouped by category
+	content.WriteString("## 📚 Sources\n\n")
+
+	// Use global article numbering across all categories
+	globalArticleNum := 1
+
+	for _, group := range digest.ArticleGroups {
+		if len(group.Articles) == 0 {
+			continue
+		}
+
+		// Category header with icon
+		categoryIcon := a.getCategoryIcon(group.Category)
+		content.WriteString(fmt.Sprintf("### %s %s\n\n", categoryIcon, group.Category))
+
+		// Articles in this category
+		for i, article := range group.Articles {
+			if i > 0 {
+				content.WriteString("\n")
+			}
+
+			// Article title with global numbering
+			content.WriteString(fmt.Sprintf("**[%d] %s**\n", globalArticleNum, article.Title))
+			globalArticleNum++ // Increment global counter
+
+			// Summary from MyTake (populated earlier)
+			if article.MyTake != "" {
+				content.WriteString(article.MyTake)
+				content.WriteString("\n\n")
+			}
+
+			// Link
+			content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", article.URL))
+		}
+	}
+
+	// Footer
+	content.WriteString("---\n\n")
+	content.WriteString("*Generated using hybrid AI processing*\n")
+
+	return content.String(), nil
+}
+
+// getCategoryIcon returns the emoji icon for a category
+func (a *RendererAdapter) getCategoryIcon(category string) string {
+	icons := map[string]string{
+		"Platform Updates": "📦",
+		"From the Field":   "💭",
+		"Research":         "📊",
+		"Tutorials":        "🎓",
+		"Analysis":         "🔍",
+		"Miscellaneous":    "📌",
+	}
+
+	if icon, found := icons[category]; found {
+		return icon
+	}
+	return "💡" // Default icon
 }
 
 func (a *RendererAdapter) RenderQuickRead(ctx context.Context, article *core.Article, summary *core.Summary) (string, error) {
@@ -411,4 +472,23 @@ func NewLLMClientAdapter(client *llm.Client) *LLMClientAdapter {
 
 func (a *LLMClientAdapter) GenerateText(ctx context.Context, prompt string) (string, error) {
 	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
+}
+
+// CategorizerAdapter wraps internal/categorization to implement ArticleCategorizer
+type CategorizerAdapter struct {
+	categorizer interface {
+		CategorizeArticle(ctx context.Context, article *core.Article, summary *core.Summary) (string, error)
+	}
+}
+
+func NewCategorizerAdapter(categorizer interface {
+	CategorizeArticle(ctx context.Context, article *core.Article, summary *core.Summary) (string, error)
+}) *CategorizerAdapter {
+	return &CategorizerAdapter{
+		categorizer: categorizer,
+	}
+}
+
+func (a *CategorizerAdapter) CategorizeArticle(ctx context.Context, article *core.Article, summary *core.Summary) (string, error) {
+	return a.categorizer.CategorizeArticle(ctx, article, summary)
 }

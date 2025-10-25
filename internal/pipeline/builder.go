@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"briefly/internal/categorization"
 	"briefly/internal/core"
 	"briefly/internal/llm"
 	"briefly/internal/summarize"
@@ -114,11 +115,16 @@ func (b *Builder) Build() (*Pipeline, error) {
 	summarizerCore := summarize.NewSummarizerWithDefaults(llmClientForSummarize)
 	summarizer := &SummarizerAdapter{summarizer: summarizerCore}
 
+	// Create categorizer adapter using the new categorization package
+	categorizerCore := categorization.NewCategorizer(llmClientAdapter, categorization.DefaultCategories())
+	categorizer := NewCategorizerAdapter(categorizerCore)
+
 	// Build pipeline
 	pipeline := NewPipeline(
 		parser,
 		fetcher,
 		summarizer,
+		categorizer,
 		embedder,
 		clusterer,
 		orderer,

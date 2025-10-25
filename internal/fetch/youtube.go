@@ -93,7 +93,12 @@ func getYouTubeVideoInfo(videoID string) (*YouTubeVideoInfo, error) {
 	// Use YouTube's oEmbed API for basic info (no API key required)
 	oembedURL := fmt.Sprintf("https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=%s&format=json", videoID)
 
-	resp, err := http.Get(oembedURL)
+	// Create HTTP client with timeout to prevent hanging
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Get(oembedURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch video info: %w", err)
 	}
@@ -149,8 +154,8 @@ func getYouTubeContent(videoID string) (string, error) {
 
 // generateVideoContentWithAI uses Gemini's knowledge to create intelligent content about the video
 func generateVideoContentWithAI(videoURL string, videoInfo *YouTubeVideoInfo) (string, error) {
-	// Create an LLM client with Gemini 2.5 Flash model for video analysis
-	llmClient, err := llm.NewClient("gemini-2.5-flash-preview-05-20")
+	// Create an LLM client with Gemini Flash Lite model for video analysis
+	llmClient, err := llm.NewClient("gemini-flash-lite-latest")
 	if err != nil {
 		// If LLM client fails, return enhanced content instead
 		return generateVideoContentFromMetadata(videoInfo), nil

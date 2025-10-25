@@ -112,7 +112,12 @@ func ReadLinksFromFile(filePath string) ([]core.Link, error) {
 // FetchArticle fetches the content from a given core.Link and returns a core.Article.
 // It currently only fetches the raw HTML content.
 func FetchArticle(link core.Link) (core.Article, error) {
-	resp, err := http.Get(link.URL)
+	// Create HTTP client with timeout to prevent hanging
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Get(link.URL)
 	if err != nil {
 		return core.Article{}, fmt.Errorf("failed to fetch URL %s: %w", link.URL, err)
 	}

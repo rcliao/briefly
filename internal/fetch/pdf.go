@@ -46,7 +46,12 @@ func ProcessPDFContent(link core.Link) (core.Article, error) {
 		size = stat.Size()
 	} else {
 		// Remote URL
-		resp, err := http.Get(link.URL)
+		// Create HTTP client with timeout to prevent hanging
+		client := &http.Client{
+			Timeout: 60 * time.Second, // Longer timeout for PDF downloads
+		}
+
+		resp, err := client.Get(link.URL)
 		if err != nil {
 			return core.Article{}, fmt.Errorf("failed to fetch PDF from URL %s: %w", link.URL, err)
 		}
