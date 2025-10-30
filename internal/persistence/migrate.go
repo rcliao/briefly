@@ -229,7 +229,9 @@ func (m *MigrationManager) applyMigration(ctx context.Context, migration Migrati
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback() // Rollback is safe to ignore if commit succeeds
+	}()
 
 	// Execute migration SQL
 	if _, err := tx.ExecContext(ctx, migration.SQL); err != nil {

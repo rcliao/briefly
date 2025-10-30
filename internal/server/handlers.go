@@ -143,7 +143,8 @@ func (s *Server) handleHomePage(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement in Phase 3
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`
+
+	if _, err := w.Write([]byte(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -205,7 +206,9 @@ func (s *Server) handleHomePage(w http.ResponseWriter, r *http.Request) {
     </div>
 </body>
 </html>
-	`))
+	`)); err != nil {
+		s.log.Error("Failed to write response", "error", err)
+	}
 }
 
 // respondJSON writes a JSON response
@@ -218,12 +221,13 @@ func (s *Server) respondJSON(w http.ResponseWriter, status int, data interface{}
 	}
 }
 
-// respondError writes an error response
-func (s *Server) respondError(w http.ResponseWriter, status int, message string) {
-	s.respondJSON(w, status, map[string]interface{}{
-		"error": map[string]interface{}{
-			"status":  status,
-			"message": message,
-		},
-	})
-}
+// respondError writes an error response (to be used in Phase 2)
+// Commented out to avoid unused function warning
+// func (s *Server) respondError(w http.ResponseWriter, status int, message string) {
+// 	s.respondJSON(w, status, map[string]interface{}{
+// 		"error": map[string]interface{}{
+// 			"status":  status,
+// 			"message": message,
+// 		},
+// 	})
+// }

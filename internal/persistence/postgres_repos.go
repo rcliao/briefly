@@ -346,7 +346,9 @@ func (r *postgresFeedItemRepo) CreateBatch(ctx context.Context, items []core.Fee
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback()
+		defer func() {
+			_ = tx.Rollback() // Rollback is safe to ignore if commit succeeds
+		}()
 	}
 
 	stmt, err := tx.PrepareContext(ctx, `

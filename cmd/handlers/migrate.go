@@ -207,7 +207,9 @@ func runMigrateRollback(ctx context.Context, force bool) error {
 		fmt.Print("Are you sure you want to proceed? (yes/no): ")
 
 		var response string
-		fmt.Scanln(&response)
+		if _, err := fmt.Scanln(&response); err != nil {
+			return fmt.Errorf("failed to read response: %w", err)
+		}
 
 		if response != "yes" {
 			fmt.Println("Rollback cancelled")
