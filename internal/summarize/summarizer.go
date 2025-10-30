@@ -124,11 +124,10 @@ func (s *Summarizer) SummarizeArticle(ctx context.Context, article *core.Article
 	}
 
 	// Store key points if we got them
-	if len(keyPoints) > 0 {
-		// Key points would go into a KeyPoints field if we add it to Summary struct
-		// For now, we can append them to the summary text in a structured way
-		// Or wait until we update the core.Summary struct
-	}
+	// Key points would go into a KeyPoints field if we add it to Summary struct
+	// For now, we can append them to the summary text in a structured way
+	// Or wait until we update the core.Summary struct
+	_ = keyPoints // Explicitly acknowledge we're not using key points yet
 
 	return summary, nil
 }

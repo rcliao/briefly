@@ -196,9 +196,8 @@ func wrapText(text string, width int) string {
 		lineLength += wordLen
 
 		// Add space after word unless it's the last word
-		if i < len(words)-1 && lineLength > 0 {
-			// Space will be added at the start of next iteration
-		}
+		// Space will be added at the start of next iteration (logic implicit in loop)
+		_ = i // Loop variable used for iteration
 	}
 
 	return result.String()

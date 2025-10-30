@@ -296,35 +296,7 @@ func truncateToWordLimit(text string, maxWords int) string {
 }
 
 // truncateToCompleteSentence truncates text to complete sentences within word limit
-func truncateToCompleteSentence(text string, maxWords int) string {
-	if maxWords <= 0 {
-		return text
-	}
-
-	words := strings.Fields(text)
-	if len(words) <= maxWords {
-		return text
-	}
-
-	// Find the last complete sentence within the word limit
-	truncated := strings.Join(words[:maxWords], " ")
-	
-	// Look for sentence endings
-	sentences := strings.FieldsFunc(truncated, func(r rune) bool {
-		return r == '.' || r == '!' || r == '?'
-	})
-	
-	if len(sentences) > 0 {
-		// Return the first complete sentence
-		firstSentence := strings.TrimSpace(sentences[0])
-		if firstSentence != "" {
-			return firstSentence + "."
-		}
-	}
-	
-	// If no complete sentence found, fall back to word limit with ellipsis
-	return strings.Join(words[:maxWords], " ") + "..."
-}
+// truncateToCompleteSentence was removed as unused
 
 // truncateToScannableFormat provides strict 20-25 word enforcement for scannable format
 // Prioritizes readability while enforcing word limits more strictly than truncateToCompleteSentence
@@ -576,7 +548,7 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 					// Check if this matches any of our expected categories
 					for _, expectedCategory := range categoryOrder {
 						if categoryName == expectedCategory || 
-						   strings.HasSuffix(expectedCategory, strings.TrimSpace(strings.TrimLeft(categoryName, "🔥🚀🤖🔒🛠️☁️📊💡🔍"))) {
+						   strings.HasSuffix(expectedCategory, strings.TrimSpace(strings.TrimLeft(categoryName, "🔥🚀🤖🔒🛠☁️📊💡🔍"))) {
 							categorized = true
 							categoryGroups[expectedCategory] = append(categoryGroups[expectedCategory], item)
 							break
@@ -865,7 +837,7 @@ func generateLinkedInHook(digestItems []render.DigestData, pattern string) strin
 			return fmt.Sprintf("While everyone talks about %s, %s quietly shipped game-changing updates.\n\nHere's what you missed this week 👇",
 				extractTopic(sortedItems[1].Title), extractProductName(topItem.Title))
 		}
-		return fmt.Sprintf("While everyone talks about AI hype, real engineering breakthroughs happened this week.\n\nHere's what actually matters 👇")
+		return "While everyone talks about AI hype, real engineering breakthroughs happened this week.\n\nHere's what actually matters 👇"
 		
 	default:
 		// Default engaging hook
@@ -887,7 +859,7 @@ func extractProductName(title string) string {
 	for _, product := range products {
 		if strings.Contains(title, product) {
 			// Capitalize first letter
-			return strings.Title(product)
+			return strings.ToUpper(string(product[0])) + product[1:]
 		}
 	}
 	
@@ -895,7 +867,7 @@ func extractProductName(title string) string {
 	words := strings.Fields(title)
 	for _, word := range words {
 		if len(word) > 3 && !isStopWord(word) {
-			return strings.Title(word)
+			return strings.ToUpper(string(word[0])) + word[1:]
 		}
 	}
 	
@@ -913,7 +885,7 @@ func extractCompanyName(title string) string {
 	
 	for _, company := range companies {
 		if strings.Contains(title, company) {
-			return strings.Title(company)
+			return strings.ToUpper(string(company[0])) + company[1:]
 		}
 	}
 	
@@ -1318,12 +1290,7 @@ func getContentTypeEmoji(contentType, title string) string {
 // generateWhyItMatters creates a default "why it matters" statement when MyTake is not available
 
 // capitalizeFirst capitalizes the first letter of a string
-func capitalizeFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}
+// capitalizeFirst removed as unused
 
 // renderAlertsSection renders just the alerts section
 func renderAlertsSection(digestItems []render.DigestData, alertsSummary string) string {
@@ -1705,28 +1672,7 @@ func renderBannerSection(banner *core.BannerImage, template *DigestTemplate, for
 }
 
 // renderReferencesSection renders the references section with numbered citations
-func renderReferencesSection(digestItems []render.DigestData) string {
-	if len(digestItems) == 0 {
-		return ""
-	}
-
-	var content strings.Builder
-	content.WriteString("## References\n\n")
-
-	// Use all references
-	referenceCount := len(digestItems)
-
-	for i := 0; i < referenceCount; i++ {
-		item := digestItems[i]
-		content.WriteString(fmt.Sprintf("[%d] %s\n", i+1, item.URL))
-		if item.Title != "" {
-			content.WriteString(fmt.Sprintf("    *%s*\n", item.Title))
-		}
-		content.WriteString("\n")
-	}
-
-	return content.String()
-}
+// renderReferencesSection removed as unused
 
 // RenderWithTemplate renders a digest using the specified template
 func RenderWithTemplate(digestItems []render.DigestData, outputDir string, finalDigest string, template *DigestTemplate) (string, error) {
@@ -2567,16 +2513,7 @@ func isSignalStopWord(word string) bool {
 }
 
 // groupSignalItemsByCategory groups digest items by category for Signal format
-func groupSignalItemsByCategory(digestItems []render.DigestData) map[string][]render.DigestData {
-	categoryGroups := make(map[string][]render.DigestData)
-	
-	for _, item := range digestItems {
-		category := extractCategoryFromItem(item)
-		categoryGroups[category] = append(categoryGroups[category], item)
-	}
-	
-	return categoryGroups
-}
+// groupSignalItemsByCategory removed as unused
 
 // extractCategoryFromItem extracts category from digest item
 func extractCategoryFromItem(item render.DigestData) string {

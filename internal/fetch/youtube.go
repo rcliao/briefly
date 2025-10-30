@@ -2,7 +2,6 @@ package fetch
 
 import (
 	"briefly/internal/core"
-	"briefly/internal/llm"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -153,20 +152,6 @@ func getYouTubeContent(videoID string) (string, error) {
 }
 
 // generateVideoContentWithAI uses Gemini's knowledge to create intelligent content about the video
-func generateVideoContentWithAI(videoURL string, videoInfo *YouTubeVideoInfo) (string, error) {
-	// Create an LLM client with Gemini Flash Lite model for video analysis
-	llmClient, err := llm.NewClient("gemini-flash-lite-latest")
-	if err != nil {
-		// If LLM client fails, return enhanced content instead
-		return generateVideoContentFromMetadata(videoInfo), nil
-	}
-
-	// For now, always use metadata-based content since it's more reliable
-	// TODO: Enable Gemini video analysis when proper video processing is available
-	_ = llmClient // Suppress unused variable warning
-	return generateVideoContentFromMetadata(videoInfo), nil
-}
-
 // generateVideoContentFromMetadata creates detailed content based on video metadata
 func generateVideoContentFromMetadata(videoInfo *YouTubeVideoInfo) string {
 	content := fmt.Sprintf(`YouTube Video Analysis: "%s" by %s
@@ -233,12 +218,3 @@ func DetectYouTubeURL(urlStr string) bool {
 	return false
 }
 
-// generateFallbackVideoContent creates basic content when other methods fail
-func generateFallbackVideoContent(videoInfo *YouTubeVideoInfo) string {
-	return fmt.Sprintf("YouTube Video: '%s' by %s. "+
-		"The video transcript is not available, but based on the title and channel, "+
-		"this video appears to be content from %s. "+
-		"The video title suggests it covers topics related to: %s. "+
-		"For a complete understanding of the video content, please watch the original video.",
-		videoInfo.Title, videoInfo.Channel, videoInfo.Channel, videoInfo.Title)
-}

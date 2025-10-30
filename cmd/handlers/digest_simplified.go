@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"briefly/internal/config"
 	"briefly/internal/llm"
 	"briefly/internal/logger"
 	"briefly/internal/pipeline"
@@ -170,28 +169,10 @@ func digestSimplifiedRun(cmd *cobra.Command, args []string) {
 }
 
 // getOutputFilePath generates the output file path
-func getOutputFilePath(outputDir string) string {
-	timestamp := time.Now().Format("2006-01-02")
-	return fmt.Sprintf("%s/digest-%s.md", outputDir, timestamp)
-}
+// getOutputFilePath removed as unused
 
 // validateConfiguration checks that required configuration is present
-func validateConfiguration() error {
-	cfg := config.Get()
-
-	// Check for API key
-	if cfg.AI.Gemini.APIKey == "" {
-		return fmt.Errorf("GEMINI_API_KEY not configured")
-	}
-
-	return nil
-}
+// validateConfiguration removed as unused
 
 // printProgressBar prints a simple progress indicator
-func printProgressBar(current, total int, message string) {
-	percent := float64(current) / float64(total) * 100
-	fmt.Printf("\r⏳ %s [%d/%d] %.0f%%", message, current, total, percent)
-	if current == total {
-		fmt.Println() // New line when complete
-	}
-}
+// printProgressBar removed as unused
