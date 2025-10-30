@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ContentProcessor implements the ArticleProcessor interface with multi-format support
@@ -140,7 +141,12 @@ func (cp *ContentProcessor) detectContentType(urlStr string) (core.ContentType, 
 
 // getContentTypeFromHTTP makes a HEAD request to determine content type
 func (cp *ContentProcessor) getContentTypeFromHTTP(urlStr string) (core.ContentType, error) {
-	resp, err := http.Head(urlStr)
+	// Create HTTP client with timeout to prevent hanging
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Head(urlStr)
 	if err != nil {
 		return core.ContentTypeHTML, err
 	}

@@ -15,6 +15,8 @@ import (
 type Config struct {
 	App       App       `mapstructure:"app"`
 	AI        AI        `mapstructure:"ai"`
+	Database  Database  `mapstructure:"database"`
+	Server    Server    `mapstructure:"server"`
 	Search    Search    `mapstructure:"search"`
 	Output    Output    `mapstructure:"output"`
 	Cache     Cache     `mapstructure:"cache"`
@@ -28,6 +30,38 @@ type Config struct {
 	Team      Team      `mapstructure:"team"`
 	Logging   Logging   `mapstructure:"logging"`
 	CLI       CLI       `mapstructure:"cli"`
+}
+
+// Database holds database configuration
+type Database struct {
+	ConnectionString string `mapstructure:"connection_string"`
+	MaxConnections   int    `mapstructure:"max_connections"`
+	IdleConnections  int    `mapstructure:"idle_connections"`
+}
+
+// Server holds HTTP server configuration
+type Server struct {
+	Host            string        `mapstructure:"host"`
+	Port            int           `mapstructure:"port"`
+	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+	StaticDir       string        `mapstructure:"static_dir"`
+	TemplateDir     string        `mapstructure:"template_dir"`
+	CORS            CORSConfig    `mapstructure:"cors"`
+	RateLimit       RateLimitConfig `mapstructure:"rate_limit"`
+}
+
+// CORSConfig holds CORS configuration
+type CORSConfig struct {
+	Enabled        bool     `mapstructure:"enabled"`
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+}
+
+// RateLimitConfig holds rate limiting configuration
+type RateLimitConfig struct {
+	Enabled           bool `mapstructure:"enabled"`
+	RequestsPerMinute int  `mapstructure:"requests_per_minute"`
 }
 
 // App holds general application configuration
@@ -417,8 +451,21 @@ func setDefaults() {
 	viper.SetDefault("app.log_level", "info")
 	viper.SetDefault("app.data_dir", ".briefly-cache")
 
+	// Server defaults
+	viper.SetDefault("server.host", "0.0.0.0")
+	viper.SetDefault("server.port", 8080)
+	viper.SetDefault("server.read_timeout", "15s")
+	viper.SetDefault("server.write_timeout", "15s")
+	viper.SetDefault("server.shutdown_timeout", "10s")
+	viper.SetDefault("server.static_dir", "web/static")
+	viper.SetDefault("server.template_dir", "web/templates")
+	viper.SetDefault("server.cors.enabled", true)
+	viper.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3000", "http://localhost:8080"})
+	viper.SetDefault("server.rate_limit.enabled", true)
+	viper.SetDefault("server.rate_limit.requests_per_minute", 60)
+
 	// AI defaults
-	viper.SetDefault("ai.gemini.model", "gemini-2.5-flash-preview-05-20")
+	viper.SetDefault("ai.gemini.model", "gemini-flash-lite-latest")
 	viper.SetDefault("ai.gemini.timeout", "30s")
 	viper.SetDefault("ai.gemini.max_tokens", 8192)
 	viper.SetDefault("ai.gemini.temperature", 0.7)
@@ -772,6 +819,8 @@ func validateConfig(config *Config) error {
 // Convenience getters for commonly used configuration values
 func GetApp() App             { return Get().App }
 func GetAI() AI               { return Get().AI }
+func GetDatabase() Database   { return Get().Database }
+func GetServer() Server       { return Get().Server }
 func GetSearch() Search       { return Get().Search }
 func GetOutput() Output       { return Get().Output }
 func GetCache() Cache         { return Get().Cache }

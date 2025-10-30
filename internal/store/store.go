@@ -278,6 +278,11 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// DB returns the underlying database connection for advanced operations
+func (s *Store) DB() *sql.DB {
+	return s.db
+}
+
 // CacheArticle stores an article in the cache
 func (s *Store) CacheArticle(article core.Article) error {
 	metadata, _ := json.Marshal(map[string]interface{}{

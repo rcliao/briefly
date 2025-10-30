@@ -41,6 +41,13 @@ search:
     duckduckgo:
       rate_limit: "1s"
 
+# Database Configuration (for news aggregator)
+database:
+  # connection_string: ""       # PostgreSQL: "postgres://user:pass@localhost:5432/briefly?sslmode=disable"
+                                # Or set DATABASE_URL environment variable
+  max_connections: 25
+  idle_connections: 5
+
 # Output Configuration
 output:
   directory: "digests"

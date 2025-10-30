@@ -1,0 +1,92 @@
+package handlers
+
+import (
+	"briefly/internal/config"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+)
+
+var cfgFile string // Configuration file path
+
+// NewSimplifiedRootCmd creates the new simplified root command
+// This replaces the complex root.go with a clean, focused interface
+func NewSimplifiedRootCmd() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:   "briefly",
+		Short: "LLM-focused news aggregator and digest generator",
+		Long: `Briefly - Content Digest & News Aggregation Tool
+
+A focused tool for:
+  • Automated news aggregation from RSS/Atom feeds
+  • Quality weekly digests from curated URLs
+  • Quick summaries of individual articles
+
+Core workflows:
+  • News Aggregation: Fetch and store articles from feeds
+  • Weekly Digest: Process markdown file with URLs → LinkedIn-ready digest
+  • Quick Read: Single URL → Fast summary with key points
+  • Feed Management: Add/remove/manage RSS feed sources
+
+Features:
+  • RSS/Atom feed support with conditional GET
+  • Smart caching (avoid redundant API calls)
+  • Topic clustering (automatic article grouping)
+  • Executive summaries (story-driven narratives)
+  • LinkedIn-optimized output
+  • PostgreSQL persistence for scalable storage
+
+Examples:
+  # Add RSS feeds
+  briefly feed add https://hnrss.org/newest
+
+  # Aggregate news (run daily)
+  briefly aggregate --since 24
+
+  # Generate weekly digest from feeds
+  briefly digest --from-feeds
+
+  # Generate digest from markdown file
+  briefly digest input/weekly-links.md
+
+  # Quick read a single article
+  briefly read https://example.com/article
+
+  # Check cache statistics
+  briefly cache stats`,
+		Version: "3.1.0-news-aggregator",
+	}
+
+	// Global flags
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .briefly.yaml)")
+
+	// Add subcommands
+	rootCmd.AddCommand(NewMigrateCmd())            // NEW: Database migrations
+	rootCmd.AddCommand(NewAggregateCmd())          // NEW: News aggregation
+	rootCmd.AddCommand(NewFeedCmd())               // NEW: Feed management
+	rootCmd.AddCommand(NewServeCmd())              // NEW: HTTP server
+	rootCmd.AddCommand(NewDigestSimplifiedCmd())   // Existing: Weekly digest
+	rootCmd.AddCommand(NewReadSimplifiedCmd())     // Existing: Quick read
+	rootCmd.AddCommand(NewCacheCmd())              // Existing: Cache management
+
+	// Initialize config before running any command
+	cobra.OnInitialize(initSimplifiedConfig)
+
+	return rootCmd
+}
+
+// initSimplifiedConfig reads in config file and ENV variables
+func initSimplifiedConfig() {
+	_, err := config.Load(cfgFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to load config: %v\n", err)
+		// Don't exit - allow running with just environment variables
+	}
+}
+
+// Execute runs the root command
+func ExecuteSimplified() error {
+	rootCmd := NewSimplifiedRootCmd()
+	return rootCmd.Execute()
+}

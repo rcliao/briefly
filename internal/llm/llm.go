@@ -17,7 +17,7 @@ import (
 
 const (
 	// DefaultModel is the default Gemini model to use for summarization.
-	DefaultModel = "gemini-2.5-flash-preview-05-20" // Latest Gemini 2.5 Flash Preview
+	DefaultModel = "gemini-flash-lite-latest" // Gemini Flash Lite (latest version)
 	// DefaultEmbeddingModel is the default model for generating embeddings
 	DefaultEmbeddingModel = "text-embedding-004"
 	// SummarizeTextPromptTemplate is the template for the summarization prompt.
@@ -1451,6 +1451,45 @@ Remember: Respond with EXACTLY the format above, nothing else.`, text)
 	}
 
 	return score, label, emoji, nil
+}
+
+// AnalyzeYouTubeVideo creates intelligent content based on video metadata
+func (c *Client) AnalyzeYouTubeVideo(ctx context.Context, videoURL, videoTitle, channelName string) (string, error) {
+	// Create an intelligent summary based on video metadata using Gemini's knowledge
+	prompt := fmt.Sprintf(`Based on the YouTube video metadata provided below, generate a comprehensive and intelligent summary that explains what this video likely covers and why it might be valuable.
+
+Video Title: "%s"
+Channel: "%s"
+Video URL: %s
+
+Using your knowledge about this channel, topic area, and typical content patterns, provide:
+
+1. **Likely Content Overview**: What this video probably discusses based on the title and channel
+2. **Key Topics**: Main subjects and themes likely covered
+3. **Target Audience**: Who would benefit from watching this video
+4. **Technical Relevance**: How this content might be relevant to technical professionals
+5. **Context & Implications**: Why this topic matters in the current landscape
+
+Write this as a 200-300 word summary that helps readers understand the value and content of the video without needing to watch it. Be specific and insightful based on the title and channel context.
+
+Focus on being informative and helpful rather than speculative. Draw on your knowledge of the subject matter suggested by the title and the reputation/focus of the channel.`, videoTitle, channelName, videoURL)
+
+	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", fmt.Errorf("failed to analyze YouTube video: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("no analysis generated for YouTube video")
+	}
+
+	contentPart := resp.Candidates[0].Content.Parts[0]
+	content, ok := contentPart.(genai.Text)
+	if !ok {
+		return "", fmt.Errorf("unexpected response format from video analysis API, expected genai.Text")
+	}
+
+	return string(content), nil
 }
 
 // ChatSession represents an active chat session with the LLM

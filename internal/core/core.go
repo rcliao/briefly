@@ -38,6 +38,7 @@ type Article struct {
 	// Intelligence
 	TopicCluster      string  `json:"topic_cluster"`
 	ClusterConfidence float64 `json:"cluster_confidence"`
+	Category          string  `json:"category"`         // Article category (Platform Updates, From the Field, etc.)
 	QualityScore      float64 `json:"quality_score"`    // 0.0-1.0
 	SignalStrength    float64 `json:"signal_strength"`  // 0.0-1.0 (replaces RelevanceScore)
 	
@@ -85,10 +86,11 @@ type Summary struct {
 // Digest represents a complete digest with user's take (v3.0 simplified)
 type Digest struct {
 	ID               string         `json:"id"`
-	
+
 	// v3.0 new structure
 	Signal           Signal         `json:"signal,omitempty"`            // Primary insight
 	ArticleGroups    []ArticleGroup `json:"article_groups,omitempty"`    // Clustered articles
+	Summaries        []Summary      `json:"summaries,omitempty"`         // Article summaries
 	Metadata         DigestMetadata `json:"metadata,omitempty"`
 	
 	// User interaction

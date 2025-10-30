@@ -1,0 +1,339 @@
+# Interactive CLI Flow - Data Model Specification
+
+entities:
+  # Core Article Entity (Extended)
+  Article:
+    fields:
+      id: string  # Unique identifier (hash or UUID)
+      url: string
+      title: string
+      content: string
+      summary: string
+      author: string
+      publishedDate: timestamp
+      fetchedAt: timestamp
+      contentHash: string  # For cache validation
+      priorityScore: float  # Calculated relevance score
+      isGameChanger: boolean  # Selected as featured article
+      userTake: string  # Personal commentary (nullable)
+      sentiment: string  # positive/negative/neutral
+      category: string  # Article category
+      tags: array[string]
+      metadata: map[string, any]  # Extensible metadata
+    validations:
+      - url: valid_url_format
+      - priorityScore: range[0.0, 1.0]
+      - sentiment: enum[positive, negative, neutral, mixed]
+      - userTake: max_length[2000]
+    storage: persistent
+    indexes: 
+      - url
+      - contentHash
+      - fetchedAt
+      - priorityScore
+    lifecycle:
+      creation: On article fetch
+      updates: Summary generation, priority calculation, user selection
+      deletion: Cache expiry (24 hours for content, 7 days for summaries)
+      archival: After digest generation (30 days retention)
+
+  # Interactive Session Entity
+  InteractiveSession:
+    fields:
+      sessionId: uuid
+      startedAt: timestamp
+      completedAt: timestamp
+      userId: string  # Optional user identifier
+      mode: string  # interactive/standard
+      state: string  # Current session state
+      selectedArticleId: string  # Selected game-changer
+      userTake: string  # Commentary for selected article
+      digestConfig: DigestConfiguration
+      articles: array[ArticleReference]
+      abortedAt: timestamp  # If session was cancelled
+      abortReason: string
+    validations:
+      - mode: enum[interactive, standard]
+      - state: valid_state_transition
+      - userTake: min_length[10] if provided
+    storage: session  # Memory during session, persisted on completion
+    ttl: 3600  # 1 hour session timeout
+    indexes:
+      - sessionId
+      - startedAt
+    lifecycle:
+      creation: On --interactive flag
+      updates: State transitions, user interactions
+      deletion: On completion or timeout
+      archival: Store metadata for analytics
+
+  # Article Display Entity (For UI)
+  ArticlePresentation:
+    fields:
+      displayIndex: integer  # 1-based index for user selection
+      articleId: string
+      headline: string  # Shortened title for display
+      preview: string  # First 200 chars of summary
+      priorityScore: float
+      priorityLabel: string  # High/Medium/Low
+      sentiment: string
+      category: string
+      isSelected: boolean  # Currently selected in UI
+      displayMetadata: map[string, string]  # UI-specific data
+    validations:
+      - displayIndex: min[1]
+      - preview: max_length[200]
+      - priorityLabel: enum[High, Medium, Low]
+    storage: memory  # Transient during selection
+    lifecycle:
+      creation: On article list presentation
+      updates: User navigation
+      deletion: After selection or cancellation
+
+  # User Take Entity
+  UserTake:
+    fields:
+      takeId: uuid
+      articleId: string
+      sessionId: uuid
+      content: string  # The actual commentary
+      createdAt: timestamp
+      modifiedAt: timestamp
+      wordCount: integer
+      characterCount: integer
+      formattingHints: array[string]  # Bold, italic, etc.
+      takeType: string  # personal/professional/analytical
+      validationStatus: string
+      validationErrors: array[string]
+    validations:
+      - content: required
+      - content: min_length[10]
+      - content: max_length[2000]
+      - takeType: enum[personal, professional, analytical, mixed]
+      - wordCount: min[5]
+    storage: persistent
+    indexes:
+      - articleId
+      - sessionId
+      - createdAt
+    lifecycle:
+      creation: On user input submission
+      updates: Edit during session
+      deletion: Never (audit trail)
+      archival: After 90 days
+
+  # Digest Configuration (Extended)
+  DigestConfiguration:
+    fields:
+      format: string  # newsletter/email/standard/brief
+      outputPath: string
+      templateOverrides: map[string, any]
+      includeUserTake: boolean
+      gameChangerPosition: integer  # Position in digest
+      interactiveMode: boolean
+      selectionStrategy: string  # manual/auto/hybrid
+      maxArticles: integer
+      sortOrder: string  # priority/date/category
+      filters: array[FilterCriteria]
+      enhancementOptions: EnhancementSettings
+    validations:
+      - format: enum[newsletter, email, standard, brief, scannable]
+      - gameChangerPosition: min[1]
+      - selectionStrategy: enum[manual, auto, hybrid]
+      - maxArticles: range[1, 100]
+      - sortOrder: enum[priority, date, category, sentiment]
+    storage: session
+    lifecycle:
+      creation: On digest command invocation
+      updates: During interactive configuration
+      deletion: After digest generation
+
+  # Article Reference (Lightweight)
+  ArticleReference:
+    fields:
+      articleId: string
+      url: string
+      position: integer  # Order in digest
+      includeInDigest: boolean
+      customTitle: string  # Override title if needed
+      customSummary: string  # Override summary if needed
+    validations:
+      - position: min[1]
+      - position: unique_in_session
+    storage: memory
+    lifecycle:
+      creation: During article processing
+      updates: During selection/reordering
+      deletion: With session
+
+  # UI State Entity
+  UIState:
+    fields:
+      sessionId: uuid
+      currentPage: integer
+      itemsPerPage: integer
+      totalPages: integer
+      selectedIndex: integer  # Currently highlighted item
+      viewMode: string  # list/detail/preview
+      sortField: string
+      sortDirection: string  # asc/desc
+      filterActive: boolean
+      searchQuery: string
+      navigationHistory: array[string]  # Breadcrumb trail
+    validations:
+      - currentPage: min[1]
+      - itemsPerPage: range[5, 50]
+      - selectedIndex: range[0, itemsPerPage]
+      - viewMode: enum[list, detail, preview]
+      - sortDirection: enum[asc, desc]
+    storage: memory
+    ttl: 600  # 10 minute UI timeout
+    lifecycle:
+      creation: On interactive UI initialization
+      updates: User navigation actions
+      deletion: On selection completion or timeout
+
+  # Validation Rule Entity
+  ValidationRule:
+    fields:
+      ruleId: string
+      entityType: string
+      fieldName: string
+      ruleType: string  # required/min/max/regex/custom
+      ruleValue: any
+      errorMessage: string
+      severity: string  # error/warning/info
+      isActive: boolean
+    validations:
+      - ruleType: enum[required, min, max, regex, custom, enum]
+      - severity: enum[error, warning, info]
+    storage: persistent  # Configuration
+    indexes:
+      - entityType
+      - fieldName
+    lifecycle:
+      creation: System initialization
+      updates: Configuration changes
+      deletion: Never (versioned)
+
+  # Filter Criteria Entity
+  FilterCriteria:
+    fields:
+      field: string
+      operator: string  # equals/contains/greater/less/in/between
+      value: any
+      logicalOperator: string  # AND/OR for chaining
+      priority: integer  # Order of evaluation
+    validations:
+      - operator: enum[equals, contains, greater, less, in, between, regex]
+      - logicalOperator: enum[AND, OR, NOT]
+      - priority: min[0]
+    storage: memory
+    lifecycle:
+      creation: During filter configuration
+      updates: User modifications
+      deletion: With session
+
+  # Enhancement Settings Entity
+  EnhancementSettings:
+    fields:
+      enableSmartHeadlines: boolean
+      enableBannerImage: boolean
+      enableSentimentAnalysis: boolean
+      enableTrendAnalysis: boolean
+      enableClustering: boolean
+      clusteringThreshold: float
+      headlineStyle: string  # engaging/professional/casual
+      bannerStyle: string  # minimalist/tech/professional
+      customPrompts: map[string, string]
+    validations:
+      - clusteringThreshold: range[0.0, 1.0]
+      - headlineStyle: enum[engaging, professional, casual, creative]
+      - bannerStyle: enum[minimalist, tech, professional, artistic]
+    storage: session
+    lifecycle:
+      creation: With digest configuration
+      updates: User preferences
+      deletion: After digest generation
+
+# Relationships
+relationships:
+  - type: one-to-many
+    from: InteractiveSession
+    to: ArticleReference
+    cardinality: 1:N
+    
+  - type: one-to-one
+    from: InteractiveSession
+    to: UserTake
+    cardinality: 1:0..1
+    
+  - type: one-to-many
+    from: Article
+    to: UserTake
+    cardinality: 1:N
+    
+  - type: one-to-one
+    from: InteractiveSession
+    to: UIState
+    cardinality: 1:1
+    
+  - type: many-to-many
+    from: Article
+    to: FilterCriteria
+    through: ArticleFiltering
+    
+  - type: one-to-many
+    from: DigestConfiguration
+    to: FilterCriteria
+    cardinality: 1:N
+
+# Storage Requirements
+storage_layers:
+  persistent:
+    engine: SQLite/PostgreSQL/File
+    retention: 30-90 days
+    backup: Daily
+    
+  cache:
+    engine: Redis/SQLite/Memory
+    ttl: 
+      articles: 86400  # 24 hours
+      summaries: 604800  # 7 days
+    eviction: LRU
+    
+  session:
+    engine: Memory/Redis
+    ttl: 3600  # 1 hour
+    cleanup: On completion or timeout
+    
+  memory:
+    engine: Application memory
+    scope: Process lifetime
+    cleanup: Immediate on scope exit
+
+# Data Lifecycle Policies
+lifecycle_policies:
+  article_content:
+    fetch: On first request
+    cache: 24 hours
+    refresh: On cache miss or force flag
+    archive: After 30 days
+    
+  user_takes:
+    create: During interactive session
+    persist: Immediately
+    retain: 90 days
+    audit: Permanent metadata
+    
+  session_data:
+    create: On --interactive flag
+    timeout: 1 hour idle
+    persist: On completion
+    cleanup: On abort or timeout
+    
+  ui_state:
+    create: On UI initialization
+    update: Real-time
+    persist: Never (transient)
+    cleanup: On session end
