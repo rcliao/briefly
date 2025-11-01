@@ -305,3 +305,83 @@ type FeedStats struct {
 	LatestItem       time.Time
 	OldestItem       time.Time
 }
+
+// ManualURLResult contains statistics for manual URL processing
+type ManualURLResult struct {
+	URLsProcessed int
+	URLsFailed    int
+	Errors        []error
+}
+
+// AggregateManualURLs processes all pending manual URLs
+func (m *Manager) AggregateManualURLs(ctx context.Context, maxURLs int) (*ManualURLResult, error) {
+	result := &ManualURLResult{}
+
+	// Get pending URLs
+	urls, err := m.db.ManualURLs().GetPending(ctx, maxURLs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pending URLs: %w", err)
+	}
+
+	if len(urls) == 0 {
+		m.log.Info("No pending manual URLs to process")
+		return result, nil
+	}
+
+	m.log.Info("Processing manual URLs", "count", len(urls))
+
+	// Process each URL
+	for _, manualURL := range urls {
+		select {
+		case <-ctx.Done():
+			m.log.Warn("Manual URL processing cancelled", "reason", ctx.Err())
+			return result, ctx.Err()
+		default:
+		}
+
+		// Mark as processing
+		if err := m.db.ManualURLs().UpdateStatus(ctx, manualURL.ID, string(core.ManualURLStatusProcessing), ""); err != nil {
+			m.log.Error("Failed to update URL status", "url", manualURL.URL, "error", err)
+			continue
+		}
+
+		// Create a feed item for this URL
+		feedItem := &core.FeedItem{
+			ID:             manualURL.ID,
+			FeedID:         "manual", // Special feed ID for manual URLs
+			Title:          manualURL.URL,
+			Link:           manualURL.URL,
+			Description:    fmt.Sprintf("Manually submitted by %s", manualURL.SubmittedBy),
+			Published:      manualURL.CreatedAt,
+			GUID:           manualURL.URL,
+			Processed:      false,
+			DateDiscovered: manualURL.CreatedAt,
+		}
+
+		// Store feed item
+		if err := m.db.FeedItems().Create(ctx, feedItem); err != nil {
+			m.log.Error("Failed to store feed item", "url", manualURL.URL, "error", err)
+			result.URLsFailed++
+			result.Errors = append(result.Errors, fmt.Errorf("failed to store %s: %w", manualURL.URL, err))
+
+			// Mark as failed
+			_ = m.db.ManualURLs().MarkFailed(ctx, manualURL.ID, err.Error())
+			continue
+		}
+
+		// Mark as processed
+		if err := m.db.ManualURLs().MarkProcessed(ctx, manualURL.ID); err != nil {
+			m.log.Error("Failed to mark URL as processed", "url", manualURL.URL, "error", err)
+		}
+
+		result.URLsProcessed++
+		m.log.Info("Processed manual URL", "url", manualURL.URL)
+	}
+
+	m.log.Info("Manual URL processing completed",
+		"processed", result.URLsProcessed,
+		"failed", result.URLsFailed,
+	)
+
+	return result, nil
+}

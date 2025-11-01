@@ -13,23 +13,25 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	App       App       `mapstructure:"app"`
-	AI        AI        `mapstructure:"ai"`
-	Database  Database  `mapstructure:"database"`
-	Server    Server    `mapstructure:"server"`
-	Search    Search    `mapstructure:"search"`
-	Output    Output    `mapstructure:"output"`
-	Cache     Cache     `mapstructure:"cache"`
-	Visual    Visual    `mapstructure:"visual"`
-	TTS       TTS       `mapstructure:"tts"`
-	Messaging Messaging `mapstructure:"messaging"`
-	Email     Email     `mapstructure:"email"`
-	Feeds     Feeds     `mapstructure:"feeds"`
-	Research  Research  `mapstructure:"research"`
-	Filtering Filtering `mapstructure:"filtering"`
-	Team      Team      `mapstructure:"team"`
-	Logging   Logging   `mapstructure:"logging"`
-	CLI       CLI       `mapstructure:"cli"`
+	App           App           `mapstructure:"app"`
+	AI            AI            `mapstructure:"ai"`
+	Database      Database      `mapstructure:"database"`
+	Server        Server        `mapstructure:"server"`
+	Search        Search        `mapstructure:"search"`
+	Output        Output        `mapstructure:"output"`
+	Cache         Cache         `mapstructure:"cache"`
+	Visual        Visual        `mapstructure:"visual"`
+	TTS           TTS           `mapstructure:"tts"`
+	Messaging     Messaging     `mapstructure:"messaging"`
+	Email         Email         `mapstructure:"email"`
+	Feeds         Feeds         `mapstructure:"feeds"`
+	Research      Research      `mapstructure:"research"`
+	Filtering     Filtering     `mapstructure:"filtering"`
+	Team          Team          `mapstructure:"team"`
+	Logging       Logging       `mapstructure:"logging"`
+	CLI           CLI           `mapstructure:"cli"`
+	Observability Observability `mapstructure:"observability"`
+	Themes        Themes        `mapstructure:"themes"`
 }
 
 // Database holds database configuration
@@ -370,6 +372,34 @@ type Team struct {
 	Priority          string   `mapstructure:"priority"`           // Current priority: performance, features, quality, etc.
 }
 
+// Observability holds observability and analytics configuration
+type Observability struct {
+	LangFuse LangFuseConfig `mapstructure:"langfuse"`
+	PostHog  PostHogConfig  `mapstructure:"posthog"`
+}
+
+// LangFuseConfig holds LangFuse observability configuration
+type LangFuseConfig struct {
+	Enabled   bool   `mapstructure:"enabled"`
+	PublicKey string `mapstructure:"public_key"`
+	SecretKey string `mapstructure:"secret_key"`
+	Host      string `mapstructure:"host"` // Default: https://cloud.langfuse.com
+}
+
+// PostHogConfig holds PostHog analytics configuration
+type PostHogConfig struct {
+	Enabled bool   `mapstructure:"enabled"`
+	APIKey  string `mapstructure:"api_key"`
+	Host    string `mapstructure:"host"` // Default: https://app.posthog.com
+}
+
+// Themes holds theme classification configuration
+type Themes struct {
+	Enabled             bool    `mapstructure:"enabled"`
+	MinRelevanceScore   float64 `mapstructure:"min_relevance_score"` // 0.0-1.0, minimum score to assign theme
+	ClassificationModel string  `mapstructure:"classification_model"` // LLM model to use for classification
+}
+
 var globalConfig *Config
 
 // Load loads the configuration from various sources
@@ -608,6 +638,17 @@ func setDefaults() {
 	viper.SetDefault("team.working_style", "agile")
 	viper.SetDefault("team.team_size", 5)
 	viper.SetDefault("team.priority", "features")
+
+	// Observability defaults
+	viper.SetDefault("observability.langfuse.enabled", false)
+	viper.SetDefault("observability.langfuse.host", "https://cloud.langfuse.com")
+	viper.SetDefault("observability.posthog.enabled", false)
+	viper.SetDefault("observability.posthog.host", "https://app.posthog.com")
+
+	// Themes defaults
+	viper.SetDefault("themes.enabled", true)
+	viper.SetDefault("themes.min_relevance_score", 0.6)
+	viper.SetDefault("themes.classification_model", "gemini-flash-lite-latest")
 }
 
 // bindEnvironmentVariables sets up flexible environment variable binding
@@ -699,6 +740,33 @@ func bindEnvironmentVariables() {
 	bindEnvKeys("cli.editor", []string{
 		"EDITOR",
 		"VISUAL",
+	})
+
+	// LangFuse observability
+	bindEnvKeys("observability.langfuse.public_key", []string{
+		"LANGFUSE_PUBLIC_KEY",
+		"LANGFUSE_PK",
+	})
+
+	bindEnvKeys("observability.langfuse.secret_key", []string{
+		"LANGFUSE_SECRET_KEY",
+		"LANGFUSE_SK",
+	})
+
+	bindEnvKeys("observability.langfuse.host", []string{
+		"LANGFUSE_HOST",
+		"LANGFUSE_URL",
+	})
+
+	// PostHog analytics
+	bindEnvKeys("observability.posthog.api_key", []string{
+		"POSTHOG_API_KEY",
+		"POSTHOG_KEY",
+	})
+
+	bindEnvKeys("observability.posthog.host", []string{
+		"POSTHOG_HOST",
+		"POSTHOG_URL",
 	})
 }
 
@@ -817,23 +885,25 @@ func validateConfig(config *Config) error {
 }
 
 // Convenience getters for commonly used configuration values
-func GetApp() App             { return Get().App }
-func GetAI() AI               { return Get().AI }
-func GetDatabase() Database   { return Get().Database }
-func GetServer() Server       { return Get().Server }
-func GetSearch() Search       { return Get().Search }
-func GetOutput() Output       { return Get().Output }
-func GetCache() Cache         { return Get().Cache }
-func GetVisual() Visual       { return Get().Visual }
-func GetTTS() TTS             { return Get().TTS }
-func GetMessaging() Messaging { return Get().Messaging }
-func GetEmail() Email         { return Get().Email }
-func GetFeeds() Feeds         { return Get().Feeds }
-func GetResearch() Research   { return Get().Research }
-func GetFiltering() Filtering { return Get().Filtering }
-func GetTeam() Team           { return Get().Team }
-func GetLogging() Logging     { return Get().Logging }
-func GetCLI() CLI             { return Get().CLI }
+func GetApp() App                     { return Get().App }
+func GetAI() AI                       { return Get().AI }
+func GetDatabase() Database           { return Get().Database }
+func GetServer() Server               { return Get().Server }
+func GetSearch() Search               { return Get().Search }
+func GetOutput() Output               { return Get().Output }
+func GetCache() Cache                 { return Get().Cache }
+func GetVisual() Visual               { return Get().Visual }
+func GetTTS() TTS                     { return Get().TTS }
+func GetMessaging() Messaging         { return Get().Messaging }
+func GetEmail() Email                 { return Get().Email }
+func GetFeeds() Feeds                 { return Get().Feeds }
+func GetResearch() Research           { return Get().Research }
+func GetFiltering() Filtering         { return Get().Filtering }
+func GetTeam() Team                   { return Get().Team }
+func GetLogging() Logging             { return Get().Logging }
+func GetCLI() CLI                     { return Get().CLI }
+func GetObservability() Observability { return Get().Observability }
+func GetThemes() Themes               { return Get().Themes }
 
 // Specific convenience getters for frequently accessed values
 func GetGeminiAPIKey() string   { return Get().AI.Gemini.APIKey }
@@ -856,6 +926,17 @@ func GetTeamInterests() []string  { return Get().Team.Interests }
 func GetTeamProductType() string  { return Get().Team.ProductType }
 func GetTeamPriority() string     { return Get().Team.Priority }
 func GetTeamContext() Team        { return Get().Team }
+
+// Observability convenience getters
+func GetLangFuseConfig() LangFuseConfig { return Get().Observability.LangFuse }
+func GetPostHogConfig() PostHogConfig   { return Get().Observability.PostHog }
+func IsLangFuseEnabled() bool           { return Get().Observability.LangFuse.Enabled }
+func IsPostHogEnabled() bool            { return Get().Observability.PostHog.Enabled }
+
+// Themes convenience getters
+func IsThemesEnabled() bool            { return Get().Themes.Enabled }
+func GetThemeMinRelevance() float64    { return Get().Themes.MinRelevanceScore }
+func GetThemeClassificationModel() string { return Get().Themes.ClassificationModel }
 
 // GenerateTeamContextPrompt creates a formatted prompt string for LLM context
 func GenerateTeamContextPrompt() string {

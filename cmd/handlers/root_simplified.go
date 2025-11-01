@@ -65,6 +65,8 @@ Examples:
 	rootCmd.AddCommand(NewMigrateCmd())            // NEW: Database migrations
 	rootCmd.AddCommand(NewAggregateCmd())          // NEW: News aggregation
 	rootCmd.AddCommand(NewFeedCmd())               // NEW: Feed management
+	rootCmd.AddCommand(NewThemeCmd())              // NEW: Theme management (Phase 0)
+	rootCmd.AddCommand(NewManualURLCmd())          // NEW: Manual URL management (Phase 0)
 	rootCmd.AddCommand(NewServeCmd())              // NEW: HTTP server
 	rootCmd.AddCommand(NewDigestSimplifiedCmd())   // Existing: Weekly digest
 	rootCmd.AddCommand(NewReadSimplifiedCmd())     // Existing: Quick read

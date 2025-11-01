@@ -241,7 +241,7 @@ func runFeedList(ctx context.Context, showInactive bool) error {
 		}
 
 		lastFetched := "Never"
-		if !feed.LastFetched.IsZero() {
+		if feed.LastFetched != nil {
 			lastFetched = feed.LastFetched.Format("2006-01-02 15:04")
 		}
 
@@ -255,8 +255,14 @@ func runFeedList(ctx context.Context, showInactive bool) error {
 			errorCount = fmt.Sprintf("⚠️  %d", feed.ErrorCount)
 		}
 
+		// Truncate ID safely
+		idShort := feed.ID
+		if len(feed.ID) > 8 {
+			idShort = feed.ID[:8] + "..."
+		}
+
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			feed.ID[:8]+"...", titleShort, status, lastFetched, errorCount,
+			idShort, titleShort, status, lastFetched, errorCount,
 		)
 	}
 	w.Flush()

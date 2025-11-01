@@ -4,25 +4,33 @@
 
 Briefly is an LLM-powered news aggregator and digest generator built in Go. The system processes article URLs from markdown files, generates summaries using AI, clusters articles by topic, and produces LinkedIn-optimized digests.
 
-**Current Version:** v3.0 (simplified architecture)
-**Primary Goal:** Generate weekly news digests from RSS feeds and curated URLs
+**Current Version:** v3.0-phase0 (simplified architecture + observability)
+**Primary Goal:** Generate weekly news digests from RSS feeds and curated URLs with theme-based classification and observability
 
 ## Architecture Philosophy
 
 Version 3.0 represents a **breaking refactor** focused on the core workflow:
 
-1. Collect URLs manually or from RSS feeds
+1. Collect URLs manually, from RSS feeds, or via web submission
 2. Process URLs to extract and summarize content
-3. Cluster articles by topic similarity
-4. Generate executive summary from top articles
-5. Render LinkedIn-ready markdown digest
-6. Serve digests via web interface
+3. Classify articles by predefined themes using LLM
+4. Cluster articles by topic similarity
+5. Generate executive summary from top articles
+6. Render LinkedIn-ready markdown digest
+7. Serve digests via web interface with PostHog analytics
+
+**Phase 0 Enhancements:**
+- **Theme-based Classification**: LLM-powered article categorization with relevance scoring
+- **Manual URL Submission**: Web and CLI interfaces for one-off article submissions
+- **LangFuse Observability**: LLM tracing with cost tracking and performance metrics
+- **PostHog Analytics**: Product analytics for user behavior and system usage
 
 The architecture emphasizes:
 - **Clean separation of concerns** via interfaces
 - **Pipeline-based processing** with adapters
 - **Graceful degradation** on failures
 - **Comprehensive logging** at every step
+- **Observability first** with integrated tracing and analytics
 
 ## System Components
 
@@ -228,6 +236,98 @@ type MarkdownRenderer interface {
 
 **Location:** `internal/server/`, `cmd/handlers/serve.go`
 
+#### 10. Theme Classification System (Phase 0)
+**Responsibility:** Categorize articles by predefined themes
+
+**Features:**
+- LLM-based theme classification with relevance scoring
+- Support for multiple themes per article
+- Minimum relevance threshold (default: 0.4 / 40%)
+- Database-backed theme management
+
+**Theme Structure:**
+- Theme name, description, keywords
+- Enabled/disabled state
+- Created/updated timestamps
+
+**Classification Process:**
+1. Fetch enabled themes from database
+2. Build classification prompt with article and themes
+3. LLM analyzes article against each theme
+4. Parse JSON response with relevance scores
+5. Filter by minimum threshold
+6. Return best match or "Uncategorized"
+
+**Interface:**
+```go
+type ArticleCategorizer interface {
+    CategorizeArticle(ctx context.Context, article *core.Article, summary *core.Summary) (string, error)
+}
+```
+
+**PostHog Integration:**
+- Track classification events with article ID and theme
+- Log relevance scores for analysis
+- Monitor classification performance
+
+**Location:** `internal/themes/`, `internal/pipeline/theme_categorizer.go`
+
+**Default Themes (10 seeded):**
+- AI & Machine Learning
+- Cloud & DevOps
+- Software Engineering
+- Web Development
+- Data Engineering
+- Security & Privacy
+- Programming Languages
+- Mobile Development
+- Open Source
+- Product & Startup
+
+#### 11. Manual URL Submission System (Phase 0)
+**Responsibility:** Accept and process user-submitted URLs
+
+**Features:**
+- Web form and REST API for URL submission
+- CLI commands for submission and management
+- Status tracking: pending → processing → processed/failed
+- Integration with aggregation pipeline
+
+**Status Workflow:**
+- `pending`: URL submitted, awaiting processing
+- `processing`: Currently being fetched and summarized
+- `processed`: Successfully added to system
+- `failed`: Processing error (with error message)
+
+**Capabilities:**
+- Bulk URL submission
+- Duplicate detection
+- Retry failed URLs
+- Status filtering and querying
+- Integration with feed items
+
+**REST API Endpoints:**
+- `POST /api/manual-urls` - Submit URLs (batch)
+- `GET /api/manual-urls` - List URLs (with status filter)
+- `GET /api/manual-urls/{id}` - Get single URL
+- `POST /api/manual-urls/{id}/retry` - Retry failed URL
+- `DELETE /api/manual-urls/{id}` - Delete URL
+
+**CLI Commands:**
+```bash
+briefly manual-url add <urls...>     # Submit URLs
+briefly manual-url list [--status]   # List with filter
+briefly manual-url retry <id>        # Retry failed
+briefly manual-url delete <id>       # Remove URL
+```
+
+**Integration:**
+- Processed via `AggregateManualURLs()` method
+- Converted to feed items for unified processing
+- Status updated through workflow stages
+
+**Location:** `internal/persistence/`, `internal/sources/manager.go`, `internal/server/manual_url_handlers.go`, `cmd/handlers/manual_url.go`
+
 ### Supporting Infrastructure
 
 #### Cache Manager
@@ -273,6 +373,85 @@ type MarkdownRenderer interface {
 - Repository pattern for data access
 
 **Location:** `internal/persistence/`
+
+#### Observability Infrastructure (Phase 0)
+**Technology:** LangFuse + PostHog
+
+**LangFuse - LLM Observability:**
+- **Purpose**: Track LLM API calls, costs, and performance
+- **Status**: Simplified local logging implementation (SDK pending)
+- **Capabilities**:
+  - Trace generation with context propagation
+  - Cost estimation for Gemini models
+  - Token counting and latency tracking
+  - Generation metadata logging
+
+**Tracked Operations:**
+- Text generation (summaries, narratives)
+- Embedding generation (clustering)
+- Theme classification
+- Article categorization
+
+**Cost Estimation:**
+```
+Gemini 2.5 Flash Preview:
+- Input: $0.000015 per 1K tokens
+- Output: $0.000060 per 1K tokens
+```
+
+**TracedClient Pattern:**
+```go
+type TracedClient struct {
+    client   *Client
+    langfuse *observability.LangFuseClient
+    posthog  *observability.PostHogClient
+}
+```
+
+**PostHog - Product Analytics:**
+- **Purpose**: Track user behavior and system usage
+- **SDK**: Official PostHog Go SDK (full integration)
+- **Capabilities**:
+  - Event tracking with properties
+  - User identification
+  - Feature flag support (future)
+  - Session recording (future)
+
+**Tracked Events:**
+- Theme classification (`theme_classified`)
+- Manual URL submission (`manual_url_submitted`)
+- Digest generation (`digest_generated`)
+- Article processing (`article_processed`)
+- Web page views (`themes_page_viewed`, `submit_page_viewed`)
+
+**Event Properties:**
+- Article/digest IDs
+- Theme names and relevance scores
+- Processing timestamps
+- Error states
+- User identifiers (for manual submissions)
+
+**Frontend Integration:**
+- PostHog JavaScript snippet in web pages
+- Automatic page view tracking
+- Custom event tracking for user actions
+- Privacy-respecting implementation
+
+**Configuration:**
+```yaml
+observability:
+  langfuse:
+    enabled: true
+    public_key: "pk_..."
+    secret_key: "sk_..."
+    host: "https://cloud.langfuse.com"
+  posthog:
+    enabled: true
+    api_key: "phc_..."
+    host: "https://app.posthog.com"
+```
+
+**Location:** `internal/observability/`, `internal/llm/traced_client.go`
 
 ## Data Flow
 
@@ -369,6 +548,32 @@ type Digest struct {
 }
 ```
 
+### Theme (Phase 0)
+```go
+type Theme struct {
+    ID          string      // UUID
+    Name        string      // Theme name (unique)
+    Description string      // Theme description
+    Keywords    []string    // Relevant keywords
+    Enabled     bool        // Active state
+    CreatedAt   time.Time   // Creation timestamp
+    UpdatedAt   time.Time   // Last update timestamp
+}
+```
+
+### ManualURL (Phase 0)
+```go
+type ManualURL struct {
+    ID           string     // UUID
+    URL          string     // Submitted URL
+    SubmittedBy  string     // Submitter identifier
+    Status       string     // pending|processing|processed|failed
+    ErrorMessage string     // Error details (if failed)
+    ProcessedAt  *time.Time // Processing completion time
+    CreatedAt    time.Time  // Submission timestamp
+}
+```
+
 ## Error Handling Strategy
 
 ### Graceful Degradation
@@ -421,13 +626,22 @@ type Digest struct {
 - **Configuration:** Viper
 - **Logging:** slog (structured logging)
 - **Migrations:** Custom embedded migration system
+- **Observability:** Custom LangFuse client (local logging), PostHog Go SDK
+- **Analytics:** PostHog (product analytics)
 
 ## API Dependencies
 
 **Required:**
 - `GEMINI_API_KEY` - Gemini API for summarization and embeddings
 
-**Optional:**
+**Optional (Phase 0 Observability):**
+- `LANGFUSE_PUBLIC_KEY` - LangFuse public key for LLM tracing
+- `LANGFUSE_SECRET_KEY` - LangFuse secret key
+- `LANGFUSE_HOST` - LangFuse host URL (default: https://cloud.langfuse.com)
+- `POSTHOG_API_KEY` - PostHog API key for product analytics
+- `POSTHOG_HOST` - PostHog host URL (default: https://app.posthog.com)
+
+**Future:**
 - `OPENAI_API_KEY` - For future banner generation
 
 ## Project Structure
@@ -437,11 +651,13 @@ briefly/
 ├── cmd/
 │   ├── briefly/main.go          # Entry point
 │   └── handlers/                 # Cobra command handlers
-│       ├── root_simplified.go    # 3-command root (digest, read, cache)
+│       ├── root_simplified.go    # Root command (digest, read, cache, serve, theme, manual-url)
 │       ├── digest_simplified.go  # Weekly digest generation
 │       ├── read_simplified.go    # Quick article summary
 │       ├── cache.go              # Cache management
-│       └── serve.go              # HTTP server (Phase 1)
+│       ├── serve.go              # HTTP server (Phase 1)
+│       ├── theme.go              # Theme management (Phase 0)
+│       └── manual_url.go         # Manual URL management (Phase 0)
 ├── internal/
 │   ├── parser/                   # URL parsing from markdown
 │   ├── summarize/                # Centralized summarization
@@ -450,19 +666,37 @@ briefly/
 │   │   ├── pipeline.go           # Core orchestrator
 │   │   ├── interfaces.go         # Component contracts
 │   │   ├── adapters.go           # Wrapper adapters
-│   │   └── builder.go            # Fluent API construction
+│   │   ├── builder.go            # Fluent API construction
+│   │   └── theme_categorizer.go  # Theme classification integration (Phase 0)
 │   ├── clustering/               # K-means clustering
-│   ├── core/                     # Core data structures
+│   ├── core/                     # Core data structures (Article, Summary, Theme, ManualURL)
 │   ├── fetch/                    # Content fetching
 │   ├── llm/                      # LLM client (Gemini)
+│   │   └── traced_client.go      # Observability-wrapped client (Phase 0)
+│   ├── themes/                   # Theme classification (Phase 0)
+│   │   └── classifier.go         # LLM-based theme classifier
+│   ├── observability/            # Observability infrastructure (Phase 0)
+│   │   ├── langfuse.go           # LangFuse client (local logging)
+│   │   └── posthog.go            # PostHog client
+│   ├── sources/                  # Content source management
+│   │   └── manager.go            # Manual URL aggregation (Phase 0)
 │   ├── store/                    # SQLite caching
 │   ├── persistence/              # PostgreSQL storage
+│   │   ├── migrations/           # Database migrations (003-006 for Phase 0)
+│   │   ├── interfaces.go         # Repository interfaces (Theme, ManualURL)
+│   │   └── postgres_repos.go     # Repository implementations
 │   ├── server/                   # HTTP server
+│   │   ├── server.go             # Server setup with Phase 0 routes
+│   │   ├── theme_handlers.go     # Theme REST API (Phase 0)
+│   │   ├── manual_url_handlers.go # Manual URL REST API (Phase 0)
+│   │   └── web_pages.go          # HTML pages with PostHog (Phase 0)
 │   ├── templates/                # Digest templates
 │   ├── render/                   # Output formatting
-│   ├── config/                   # Configuration
+│   ├── config/                   # Configuration (includes observability)
 │   └── logger/                   # Structured logging
 └── docs/                         # Documentation
+    └── executions/               # Execution logs
+        └── 2025-10-31.md         # Phase 0 completion notes
 ```
 
 ## Development Workflow
@@ -540,30 +774,50 @@ The following packages were removed as they were not part of the core weekly dig
 - Comprehensive logging
 - Easier to maintain and extend
 
-## Future Roadmap
+## Development Roadmap
 
-### Phase 2: REST API Endpoints
+### ✅ Phase 0: Observability & Manual Curation (Complete)
+- ✅ LangFuse integration for LLM tracing
+- ✅ PostHog integration for product analytics
+- ✅ Theme-based article classification
+- ✅ Manual URL submission system (CLI, API, Web)
+- ✅ Database migrations (themes, manual_urls, article_themes)
+- ✅ Theme management CLI and REST API
+- ✅ Web pages with PostHog tracking
+- ✅ TracedClient for observability-wrapped LLM calls
+
+### Phase 1: RSS Feed Integration (Current)
+- Re-add RSS feed processing with theme classification
+- Scheduled digest generation using themes
+- Feed subscription management UI
+- Automatic aggregation with manual URL integration
+
+### Phase 2: REST API Enhancements
 - Implement full CRUD for articles, digests, feeds
 - Add pagination, filtering, search
 - Populate database statistics in status endpoint
+- Theme-based filtering for all endpoints
 
 ### Phase 3: Web Frontend
 - HTMX-based server-side rendering
-- Article browsing and reading
-- Digest management
+- Article browsing and reading with theme filters
+- Digest management with theme visualization
 - Feed subscription interface
+- Enhanced theme management UI
 
-### Phase 4: RSS Integration
-- Re-add RSS feed processing
-- Scheduled digest generation
-- Feed discovery and management
+### Phase 4: Advanced Observability
+- Full LangFuse HTTP API integration (upgrade from local logging)
+- PostHog feature flags for A/B testing
+- Custom dashboards for digest performance
+- Cost optimization recommendations
 
 ### Phase 5: Advanced Features
 - Concurrent article processing
 - Executive summary improvements
 - Banner image generation
-- Email delivery
+- Email delivery with personalization
 - User accounts and preferences
+- Theme learning and adaptation
 
 ## Known Issues
 

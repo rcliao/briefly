@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // postgresSummaryRepo implements SummaryRepository for PostgreSQL
@@ -276,10 +278,13 @@ func (r *postgresFeedRepo) UpdateLastFetched(ctx context.Context, id string, las
 
 func (r *postgresFeedRepo) scanFeed(row *sql.Row) (*core.Feed, error) {
 	var feed core.Feed
+	var lastFetched sql.NullTime
+	var lastModified, etag, lastError sql.NullString
+
 	err := row.Scan(
-		&feed.ID, &feed.URL, &feed.Title, &feed.Description, &feed.LastFetched,
-		&feed.LastModified, &feed.ETag, &feed.Active, &feed.ErrorCount,
-		&feed.LastError, &feed.DateAdded,
+		&feed.ID, &feed.URL, &feed.Title, &feed.Description, &lastFetched,
+		&lastModified, &etag, &feed.Active, &feed.ErrorCount,
+		&lastError, &feed.DateAdded,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -287,19 +292,52 @@ func (r *postgresFeedRepo) scanFeed(row *sql.Row) (*core.Feed, error) {
 		}
 		return nil, err
 	}
+
+	// Handle nullable fields
+	if lastFetched.Valid {
+		feed.LastFetched = &lastFetched.Time
+	}
+	if lastModified.Valid {
+		feed.LastModified = lastModified.String
+	}
+	if etag.Valid {
+		feed.ETag = etag.String
+	}
+	if lastError.Valid {
+		feed.LastError = lastError.String
+	}
+
 	return &feed, nil
 }
 
 func (r *postgresFeedRepo) scanFeedRow(rows *sql.Rows) (*core.Feed, error) {
 	var feed core.Feed
+	var lastFetched sql.NullTime
+	var lastModified, etag, lastError sql.NullString
+
 	err := rows.Scan(
-		&feed.ID, &feed.URL, &feed.Title, &feed.Description, &feed.LastFetched,
-		&feed.LastModified, &feed.ETag, &feed.Active, &feed.ErrorCount,
-		&feed.LastError, &feed.DateAdded,
+		&feed.ID, &feed.URL, &feed.Title, &feed.Description, &lastFetched,
+		&lastModified, &etag, &feed.Active, &feed.ErrorCount,
+		&lastError, &feed.DateAdded,
 	)
 	if err != nil {
 		return nil, err
 	}
+
+	// Handle nullable fields
+	if lastFetched.Valid {
+		feed.LastFetched = &lastFetched.Time
+	}
+	if lastModified.Valid {
+		feed.LastModified = lastModified.String
+	}
+	if etag.Valid {
+		feed.ETag = etag.String
+	}
+	if lastError.Valid {
+		feed.LastError = lastError.String
+	}
+
 	return &feed, nil
 }
 
@@ -617,4 +655,340 @@ func (r *postgresDigestRepo) Delete(ctx context.Context, id string) error {
 
 func (r *postgresDigestRepo) GetLatest(ctx context.Context, limit int) ([]core.Digest, error) {
 	return r.List(ctx, ListOptions{Limit: limit})
+}
+
+// postgresThemeRepo implements ThemeRepository for PostgreSQL (Phase 0)
+type postgresThemeRepo struct {
+	db *sql.DB
+	tx *sql.Tx
+}
+
+func (r *postgresThemeRepo) query() interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+} {
+	if r.tx != nil {
+		return r.tx
+	}
+	return r.db
+}
+
+func (r *postgresThemeRepo) Create(ctx context.Context, theme *core.Theme) error {
+	query := `
+		INSERT INTO themes (id, name, description, keywords, enabled, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	now := time.Now().UTC()
+	_, err := r.query().ExecContext(ctx, query,
+		theme.ID,
+		theme.Name,
+		theme.Description,
+		pq.Array(theme.Keywords), // PostgreSQL text[] array
+		theme.Enabled,
+		now,
+		now,
+	)
+	return err
+}
+
+func (r *postgresThemeRepo) Get(ctx context.Context, id string) (*core.Theme, error) {
+	query := `SELECT id, name, description, keywords, enabled, created_at, updated_at FROM themes WHERE id = $1`
+	row := r.query().QueryRowContext(ctx, query, id)
+	return r.scanTheme(row)
+}
+
+func (r *postgresThemeRepo) GetByName(ctx context.Context, name string) (*core.Theme, error) {
+	query := `SELECT id, name, description, keywords, enabled, created_at, updated_at FROM themes WHERE name = $1`
+	row := r.query().QueryRowContext(ctx, query, name)
+	return r.scanTheme(row)
+}
+
+func (r *postgresThemeRepo) List(ctx context.Context, enabledOnly bool) ([]core.Theme, error) {
+	var query string
+	var rows *sql.Rows
+	var err error
+
+	if enabledOnly {
+		query = `SELECT id, name, description, keywords, enabled, created_at, updated_at FROM themes WHERE enabled = true ORDER BY name ASC`
+		rows, err = r.query().QueryContext(ctx, query)
+	} else {
+		query = `SELECT id, name, description, keywords, enabled, created_at, updated_at FROM themes ORDER BY name ASC`
+		rows, err = r.query().QueryContext(ctx, query)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var themes []core.Theme
+	for rows.Next() {
+		theme, err := r.scanThemeRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		themes = append(themes, *theme)
+	}
+	return themes, rows.Err()
+}
+
+func (r *postgresThemeRepo) ListEnabled(ctx context.Context) ([]core.Theme, error) {
+	return r.List(ctx, true)
+}
+
+func (r *postgresThemeRepo) Update(ctx context.Context, theme *core.Theme) error {
+	query := `
+		UPDATE themes
+		SET name = $2, description = $3, keywords = $4, enabled = $5, updated_at = $6
+		WHERE id = $1
+	`
+	_, err := r.query().ExecContext(ctx, query,
+		theme.ID,
+		theme.Name,
+		theme.Description,
+		pq.Array(theme.Keywords),
+		theme.Enabled,
+		time.Now().UTC(),
+	)
+	return err
+}
+
+func (r *postgresThemeRepo) Delete(ctx context.Context, id string) error {
+	query := `DELETE FROM themes WHERE id = $1`
+	_, err := r.query().ExecContext(ctx, query, id)
+	return err
+}
+
+func (r *postgresThemeRepo) scanTheme(row *sql.Row) (*core.Theme, error) {
+	var theme core.Theme
+	err := row.Scan(
+		&theme.ID,
+		&theme.Name,
+		&theme.Description,
+		pq.Array(&theme.Keywords),
+		&theme.Enabled,
+		&theme.CreatedAt,
+		&theme.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("theme not found")
+		}
+		return nil, err
+	}
+	return &theme, nil
+}
+
+func (r *postgresThemeRepo) scanThemeRow(rows *sql.Rows) (*core.Theme, error) {
+	var theme core.Theme
+	err := rows.Scan(
+		&theme.ID,
+		&theme.Name,
+		&theme.Description,
+		pq.Array(&theme.Keywords),
+		&theme.Enabled,
+		&theme.CreatedAt,
+		&theme.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &theme, nil
+}
+
+// postgresManualURLRepo implements ManualURLRepository for PostgreSQL (Phase 0)
+type postgresManualURLRepo struct {
+	db *sql.DB
+	tx *sql.Tx
+}
+
+func (r *postgresManualURLRepo) query() interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+} {
+	if r.tx != nil {
+		return r.tx
+	}
+	return r.db
+}
+
+func (r *postgresManualURLRepo) Create(ctx context.Context, manualURL *core.ManualURL) error {
+	query := `
+		INSERT INTO manual_urls (id, url, submitted_by, status, error_message, processed_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	_, err := r.query().ExecContext(ctx, query,
+		manualURL.ID,
+		manualURL.URL,
+		manualURL.SubmittedBy,
+		manualURL.Status,
+		manualURL.ErrorMessage,
+		manualURL.ProcessedAt,
+		time.Now().UTC(),
+	)
+	return err
+}
+
+func (r *postgresManualURLRepo) CreateBatch(ctx context.Context, urls []string, submittedBy string) error {
+	query := `
+		INSERT INTO manual_urls (id, url, submitted_by, status, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`
+	for _, url := range urls {
+		id := fmt.Sprintf("mu_%d", time.Now().UnixNano())
+		_, err := r.query().ExecContext(ctx, query,
+			id,
+			url,
+			submittedBy,
+			core.ManualURLStatusPending,
+			time.Now().UTC(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert URL %s: %w", url, err)
+		}
+	}
+	return nil
+}
+
+func (r *postgresManualURLRepo) Get(ctx context.Context, id string) (*core.ManualURL, error) {
+	query := `SELECT id, url, submitted_by, status, error_message, processed_at, created_at FROM manual_urls WHERE id = $1`
+	row := r.query().QueryRowContext(ctx, query, id)
+	return r.scanManualURL(row)
+}
+
+func (r *postgresManualURLRepo) List(ctx context.Context, opts ListOptions) ([]core.ManualURL, error) {
+	limit := opts.Limit
+	if limit == 0 {
+		limit = 100
+	}
+	query := `SELECT id, url, submitted_by, status, error_message, processed_at, created_at FROM manual_urls ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+	rows, err := r.query().QueryContext(ctx, query, limit, opts.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var manualURLs []core.ManualURL
+	for rows.Next() {
+		manualURL, err := r.scanManualURLRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		manualURLs = append(manualURLs, *manualURL)
+	}
+	return manualURLs, rows.Err()
+}
+
+func (r *postgresManualURLRepo) GetPending(ctx context.Context, limit int) ([]core.ManualURL, error) {
+	if limit == 0 {
+		limit = 100
+	}
+	query := `SELECT id, url, submitted_by, status, error_message, processed_at, created_at FROM manual_urls WHERE status = $1 ORDER BY created_at ASC LIMIT $2`
+	rows, err := r.query().QueryContext(ctx, query, core.ManualURLStatusPending, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var manualURLs []core.ManualURL
+	for rows.Next() {
+		manualURL, err := r.scanManualURLRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		manualURLs = append(manualURLs, *manualURL)
+	}
+	return manualURLs, rows.Err()
+}
+
+func (r *postgresManualURLRepo) GetByURL(ctx context.Context, url string) (*core.ManualURL, error) {
+	query := `SELECT id, url, submitted_by, status, error_message, processed_at, created_at FROM manual_urls WHERE url = $1`
+	row := r.query().QueryRowContext(ctx, query, url)
+	return r.scanManualURL(row)
+}
+
+func (r *postgresManualURLRepo) GetByStatus(ctx context.Context, status string, limit int) ([]core.ManualURL, error) {
+	if limit == 0 {
+		limit = 100
+	}
+	query := `SELECT id, url, submitted_by, status, error_message, processed_at, created_at FROM manual_urls WHERE status = $1 ORDER BY created_at DESC LIMIT $2`
+	rows, err := r.query().QueryContext(ctx, query, status, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var manualURLs []core.ManualURL
+	for rows.Next() {
+		manualURL, err := r.scanManualURLRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		manualURLs = append(manualURLs, *manualURL)
+	}
+	return manualURLs, rows.Err()
+}
+
+func (r *postgresManualURLRepo) UpdateStatus(ctx context.Context, id string, status string, errorMessage string) error {
+	query := `UPDATE manual_urls SET status = $2, error_message = $3, processed_at = $4 WHERE id = $1`
+	var processedAt *time.Time
+	if status == core.ManualURLStatusProcessed || status == core.ManualURLStatusFailed {
+		now := time.Now().UTC()
+		processedAt = &now
+	}
+	_, err := r.query().ExecContext(ctx, query, id, status, errorMessage, processedAt)
+	return err
+}
+
+func (r *postgresManualURLRepo) MarkProcessed(ctx context.Context, id string) error {
+	return r.UpdateStatus(ctx, id, core.ManualURLStatusProcessed, "")
+}
+
+func (r *postgresManualURLRepo) MarkFailed(ctx context.Context, id string, errorMessage string) error {
+	return r.UpdateStatus(ctx, id, core.ManualURLStatusFailed, errorMessage)
+}
+
+func (r *postgresManualURLRepo) Delete(ctx context.Context, id string) error {
+	query := `DELETE FROM manual_urls WHERE id = $1`
+	_, err := r.query().ExecContext(ctx, query, id)
+	return err
+}
+
+func (r *postgresManualURLRepo) scanManualURL(row *sql.Row) (*core.ManualURL, error) {
+	var manualURL core.ManualURL
+	err := row.Scan(
+		&manualURL.ID,
+		&manualURL.URL,
+		&manualURL.SubmittedBy,
+		&manualURL.Status,
+		&manualURL.ErrorMessage,
+		&manualURL.ProcessedAt,
+		&manualURL.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("manual URL not found")
+		}
+		return nil, err
+	}
+	return &manualURL, nil
+}
+
+func (r *postgresManualURLRepo) scanManualURLRow(rows *sql.Rows) (*core.ManualURL, error) {
+	var manualURL core.ManualURL
+	err := rows.Scan(
+		&manualURL.ID,
+		&manualURL.URL,
+		&manualURL.SubmittedBy,
+		&manualURL.Status,
+		&manualURL.ErrorMessage,
+		&manualURL.ProcessedAt,
+		&manualURL.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &manualURL, nil
 }

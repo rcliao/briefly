@@ -138,7 +138,7 @@ func TestFeedCreation(t *testing.T) {
 		URL:          "https://example.com/rss",
 		Title:        "Test Feed",
 		Description:  "A test RSS feed",
-		LastFetched:  now,
+		LastFetched:  &now,
 		LastModified: "Wed, 01 Jan 2025 00:00:00 GMT",
 		ETag:         "abc123",
 		Active:       true,

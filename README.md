@@ -4,6 +4,16 @@ Briefly is a modern command-line application written in Go that transforms lengt
 
 ## Features
 
+### 🔍 Phase 0: Observability & Manual Curation (New - Implemented)
+
+- **Theme-Based Classification**: LLM-powered article categorization with 10 predefined themes (AI & ML, Cloud & DevOps, Software Engineering, Web Development, Data Engineering, Security, Programming Languages, Mobile, Open Source, Product & Startup)
+- **Manual URL Submission**: Submit individual articles via CLI, REST API, or web form for one-off processing
+- **LangFuse Observability**: Track all LLM API calls with cost estimation, token counting, and performance metrics
+- **PostHog Analytics**: Product analytics integrated across CLI, API, and web pages for usage insights
+- **Theme Management**: Full CRUD operations via CLI and REST API for managing classification themes
+- **Web Interface**: HTML pages for theme management and URL submission with integrated PostHog tracking
+- **Status Tracking**: Complete workflow for manual URLs (pending → processing → processed/failed)
+
 ### 🎯 v2.0 Smart Concise Digests (Phase 1 - Implemented)
 
 - **Intelligent Content Filtering**: Advanced relevance scoring automatically filters articles by importance, keeping only high-value content (🔥 Critical ≥0.8, ⭐ Important 0.6-0.8, 💡 Optional <0.6)
@@ -78,6 +88,62 @@ Briefly is a modern command-line application written in Go that transforms lengt
 
 Check the [Releases](https://github.com/rcliao/briefly/releases) page for pre-built binaries for your platform.
 
+### Phase 0: New Commands
+
+**Theme Management:**
+```bash
+# List all themes
+briefly theme list
+
+# Add a new theme
+briefly theme add "Blockchain" -d "Blockchain and cryptocurrency" -k "blockchain,crypto,web3"
+
+# Enable/disable a theme
+briefly theme enable <theme-id>
+briefly theme disable <theme-id>
+
+# Update theme keywords
+briefly theme update <theme-id> -k "blockchain,crypto,web3,defi"
+
+# Delete a theme
+briefly theme delete <theme-id>
+```
+
+**Manual URL Submission:**
+```bash
+# Submit URLs for processing
+briefly manual-url add https://example.com/article
+
+# Submit multiple URLs at once
+briefly manual-url add https://example.com/article1 https://example.com/article2
+
+# List all submitted URLs
+briefly manual-url list
+
+# Filter by status
+briefly manual-url list --status pending
+briefly manual-url list --status failed
+
+# Retry a failed URL
+briefly manual-url retry <url-id>
+
+# Delete a submitted URL
+briefly manual-url delete <url-id>
+```
+
+**Web Server with Phase 0 Features:**
+```bash
+# Start web server (includes theme and manual URL pages)
+briefly serve
+
+# Access web interfaces:
+# - http://localhost:8080/ - Homepage
+# - http://localhost:8080/themes - Theme management
+# - http://localhost:8080/submit - URL submission
+# - http://localhost:8080/api/themes - Theme REST API
+# - http://localhost:8080/api/manual-urls - Manual URL REST API
+```
+
 ## Configuration
 
 ### Quick Start
@@ -127,9 +193,21 @@ SERPAPI_KEY=your-serpapi-key
 
 **`.env` file:**
 ```env
+# Required
 GEMINI_API_KEY=your-gemini-key
+
+# Optional - Search Providers
 GOOGLE_CSE_API_KEY=your-google-key
 GOOGLE_CSE_ID=your-search-engine-id
+
+# Optional - Phase 0 Observability
+LANGFUSE_PUBLIC_KEY=pk_...
+LANGFUSE_SECRET_KEY=sk_...
+LANGFUSE_HOST=https://cloud.langfuse.com
+POSTHOG_API_KEY=phc_...
+POSTHOG_HOST=https://app.posthog.com
+
+# Optional - Multi-channel output
 SLACK_WEBHOOK_URL=https://hooks.slack.com/...
 OPENAI_API_KEY=your-openai-key
 ```
@@ -144,6 +222,18 @@ research:
   default_provider: "google"
 deep_research:
   max_sources: 30
+
+# Phase 0: Observability (optional)
+observability:
+  langfuse:
+    enabled: true
+    public_key: "pk_..."
+    secret_key: "sk_..."
+    host: "https://cloud.langfuse.com"
+  posthog:
+    enabled: true
+    api_key: "phc_..."
+    host: "https://app.posthog.com"
 ```
 
 ### Configuration Precedence
@@ -691,10 +781,17 @@ briefly/
 ### Key Components
 
 - **`cmd/briefly/main.go`**: Application entry point
-- **`cmd/cmd/root.go`**: CLI command definitions and routing
-- **`internal/core/`**: Core data structures and business logic
+- **`cmd/handlers/root_simplified.go`**: CLI command definitions and routing
+- **`cmd/handlers/theme.go`**: 🔍 Phase 0 - Theme management CLI
+- **`cmd/handlers/manual_url.go`**: 🔍 Phase 0 - Manual URL management CLI
+- **`internal/core/`**: Core data structures (Article, Summary, Theme, ManualURL)
 - **`internal/fetch/`**: Web scraping and content extraction
 - **`internal/llm/`**: AI/LLM integration layer
+- **`internal/llm/traced_client.go`**: 🔍 Phase 0 - Observability-wrapped LLM client
+- **`internal/themes/`**: 🔍 Phase 0 - LLM-based theme classification
+- **`internal/observability/`**: 🔍 Phase 0 - LangFuse and PostHog clients
+- **`internal/persistence/`**: PostgreSQL storage with theme and manual URL repositories
+- **`internal/server/`**: HTTP server with theme and manual URL endpoints
 - **`internal/store/`**: SQLite-based caching system
 - **`internal/templates/`**: Output format templates
 - **`internal/tui/`**: Interactive terminal interface
@@ -709,7 +806,7 @@ briefly/
 
 See [`docs/requirements/v2-smart-concise-digests.md`](docs/requirements/v2-smart-concise-digests.md) for the complete v2.0 development roadmap.
 
-**Current Status**: 🎯 **v2.0 Smart Concise Digests - Phase 1 Complete**
+**Current Status**: 🔍 **Phase 0: Observability & Manual Curation - Complete** | 🎯 **v2.0 Smart Concise Digests - Phase 1 Complete**
 
 ✅ **Phase 1 Implemented (High Priority)**:
 - REQ-1: Word count optimization (200-500 words per digest)
@@ -725,6 +822,16 @@ See [`docs/requirements/v2-smart-concise-digests.md`](docs/requirements/v2-smart
 **Future - Phase 3 (Lower Priority)**:
 - REQ-8: TUI command relevance integration for content discovery
 - REQ-9: Adaptive scoring with learning capabilities
+
+**🔍 Phase 0 Implemented** (Observability & Manual Curation):
+- ✅ Theme-based article classification with LLM
+- ✅ Manual URL submission system (CLI, API, Web)
+- ✅ LangFuse integration for LLM observability
+- ✅ PostHog integration for product analytics
+- ✅ Theme management (10 default themes seeded)
+- ✅ Web pages with PostHog tracking
+- ✅ TracedClient pattern for observability-wrapped LLM calls
+- ✅ Database migrations for themes and manual URLs
 
 **v1.0 Multi-Channel Features** (Production Ready):
 - ✅ HTML email output with responsive templates
