@@ -133,6 +133,66 @@ type DigestRepository interface {
 	GetLatest(ctx context.Context, limit int) ([]core.Digest, error)
 }
 
+// ThemeRepository handles theme persistence operations (Phase 0)
+type ThemeRepository interface {
+	// Create inserts a new theme
+	Create(ctx context.Context, theme *core.Theme) error
+
+	// Get retrieves a theme by ID
+	Get(ctx context.Context, id string) (*core.Theme, error)
+
+	// GetByName retrieves a theme by its name
+	GetByName(ctx context.Context, name string) (*core.Theme, error)
+
+	// List retrieves all themes with optional enabled filter
+	List(ctx context.Context, enabledOnly bool) ([]core.Theme, error)
+
+	// Update updates an existing theme
+	Update(ctx context.Context, theme *core.Theme) error
+
+	// Delete removes a theme by ID
+	Delete(ctx context.Context, id string) error
+
+	// ListEnabled retrieves all enabled themes
+	ListEnabled(ctx context.Context) ([]core.Theme, error)
+}
+
+// ManualURLRepository handles manual URL submission persistence operations (Phase 0)
+type ManualURLRepository interface {
+	// Create inserts a new manual URL
+	Create(ctx context.Context, manualURL *core.ManualURL) error
+
+	// CreateBatch inserts multiple manual URLs efficiently
+	CreateBatch(ctx context.Context, urls []string, submittedBy string) error
+
+	// Get retrieves a manual URL by ID
+	Get(ctx context.Context, id string) (*core.ManualURL, error)
+
+	// List retrieves manual URLs with pagination
+	List(ctx context.Context, opts ListOptions) ([]core.ManualURL, error)
+
+	// GetPending retrieves all pending manual URLs
+	GetPending(ctx context.Context, limit int) ([]core.ManualURL, error)
+
+	// GetByURL retrieves a manual URL by its URL
+	GetByURL(ctx context.Context, url string) (*core.ManualURL, error)
+
+	// GetByStatus retrieves manual URLs by status
+	GetByStatus(ctx context.Context, status string, limit int) ([]core.ManualURL, error)
+
+	// UpdateStatus updates the status of a manual URL
+	UpdateStatus(ctx context.Context, id string, status string, errorMessage string) error
+
+	// MarkProcessed marks a manual URL as successfully processed
+	MarkProcessed(ctx context.Context, id string) error
+
+	// MarkFailed marks a manual URL as failed with an error message
+	MarkFailed(ctx context.Context, id string, errorMessage string) error
+
+	// Delete removes a manual URL by ID
+	Delete(ctx context.Context, id string) error
+}
+
 // ListOptions provides common filtering and pagination options
 type ListOptions struct {
 	Limit  int               // Maximum number of results (0 for no limit)
@@ -158,6 +218,12 @@ type Database interface {
 
 	// Digests returns the digest repository
 	Digests() DigestRepository
+
+	// Themes returns the theme repository (Phase 0)
+	Themes() ThemeRepository
+
+	// ManualURLs returns the manual URL repository (Phase 0)
+	ManualURLs() ManualURLRepository
 
 	// Close closes the database connection
 	Close() error
@@ -191,4 +257,10 @@ type Transaction interface {
 
 	// Digests returns the digest repository within this transaction
 	Digests() DigestRepository
+
+	// Themes returns the theme repository within this transaction (Phase 0)
+	Themes() ThemeRepository
+
+	// ManualURLs returns the manual URL repository within this transaction (Phase 0)
+	ManualURLs() ManualURLRepository
 }

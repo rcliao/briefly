@@ -20,6 +20,8 @@ type PostgresDB struct {
 	feeds            FeedRepository
 	feedItems        FeedItemRepository
 	digests          DigestRepository
+	themes           ThemeRepository    // Phase 0
+	manualURLs       ManualURLRepository // Phase 0
 }
 
 // NewPostgresDB creates a new PostgreSQL database connection
@@ -47,15 +49,19 @@ func NewPostgresDB(connectionString string) (*PostgresDB, error) {
 	pgDB.feeds = &postgresFeedRepo{db: db}
 	pgDB.feedItems = &postgresFeedItemRepo{db: db}
 	pgDB.digests = &postgresDigestRepo{db: db}
+	pgDB.themes = &postgresThemeRepo{db: db}           // Phase 0
+	pgDB.manualURLs = &postgresManualURLRepo{db: db}    // Phase 0
 
 	return pgDB, nil
 }
 
-func (p *PostgresDB) Articles() ArticleRepository   { return p.articles }
-func (p *PostgresDB) Summaries() SummaryRepository  { return p.summaries }
-func (p *PostgresDB) Feeds() FeedRepository         { return p.feeds }
-func (p *PostgresDB) FeedItems() FeedItemRepository { return p.feedItems }
-func (p *PostgresDB) Digests() DigestRepository     { return p.digests }
+func (p *PostgresDB) Articles() ArticleRepository       { return p.articles }
+func (p *PostgresDB) Summaries() SummaryRepository      { return p.summaries }
+func (p *PostgresDB) Feeds() FeedRepository             { return p.feeds }
+func (p *PostgresDB) FeedItems() FeedItemRepository     { return p.feedItems }
+func (p *PostgresDB) Digests() DigestRepository         { return p.digests }
+func (p *PostgresDB) Themes() ThemeRepository           { return p.themes }       // Phase 0
+func (p *PostgresDB) ManualURLs() ManualURLRepository   { return p.manualURLs }   // Phase 0
 
 func (p *PostgresDB) Close() error {
 	return p.db.Close()
@@ -71,23 +77,27 @@ func (p *PostgresDB) BeginTx(ctx context.Context) (Transaction, error) {
 		return nil, err
 	}
 	return &postgresTx{
-		tx:        tx,
-		articles:  &postgresArticleRepo{db: p.db, tx: tx},
-		summaries: &postgresSummaryRepo{db: p.db, tx: tx},
-		feeds:     &postgresFeedRepo{db: p.db, tx: tx},
-		feedItems: &postgresFeedItemRepo{db: p.db, tx: tx},
-		digests:   &postgresDigestRepo{db: p.db, tx: tx},
+		tx:         tx,
+		articles:   &postgresArticleRepo{db: p.db, tx: tx},
+		summaries:  &postgresSummaryRepo{db: p.db, tx: tx},
+		feeds:      &postgresFeedRepo{db: p.db, tx: tx},
+		feedItems:  &postgresFeedItemRepo{db: p.db, tx: tx},
+		digests:    &postgresDigestRepo{db: p.db, tx: tx},
+		themes:     &postgresThemeRepo{db: p.db, tx: tx},        // Phase 0
+		manualURLs: &postgresManualURLRepo{db: p.db, tx: tx},    // Phase 0
 	}, nil
 }
 
 // postgresTx implements Transaction interface
 type postgresTx struct {
-	tx        *sql.Tx
-	articles  ArticleRepository
-	summaries SummaryRepository
-	feeds     FeedRepository
-	feedItems FeedItemRepository
-	digests   DigestRepository
+	tx         *sql.Tx
+	articles   ArticleRepository
+	summaries  SummaryRepository
+	feeds      FeedRepository
+	feedItems  FeedItemRepository
+	digests    DigestRepository
+	themes     ThemeRepository     // Phase 0
+	manualURLs ManualURLRepository // Phase 0
 }
 
 func (t *postgresTx) Commit() error                      { return t.tx.Commit() }
@@ -97,6 +107,8 @@ func (t *postgresTx) Summaries() SummaryRepository       { return t.summaries }
 func (t *postgresTx) Feeds() FeedRepository              { return t.feeds }
 func (t *postgresTx) FeedItems() FeedItemRepository      { return t.feedItems }
 func (t *postgresTx) Digests() DigestRepository          { return t.digests }
+func (t *postgresTx) Themes() ThemeRepository            { return t.themes }      // Phase 0
+func (t *postgresTx) ManualURLs() ManualURLRepository    { return t.manualURLs }  // Phase 0
 
 // postgresArticleRepo implements ArticleRepository for PostgreSQL
 type postgresArticleRepo struct {

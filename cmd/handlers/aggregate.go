@@ -141,6 +141,21 @@ func runAggregate(ctx context.Context, maxArticles, concurrency, sinceHours int,
 		return fmt.Errorf("aggregation failed: %w", err)
 	}
 
+	// Also process any pending manual URLs
+	log.Info("Processing manual URLs...")
+	manualURLResult, err := sourceMgr.AggregateManualURLs(ctx, 100)
+	if err != nil {
+		log.Warn("Failed to process manual URLs", "error", err)
+	} else if manualURLResult.URLsProcessed > 0 || manualURLResult.URLsFailed > 0 {
+		log.Info("Manual URL processing completed",
+			"processed", manualURLResult.URLsProcessed,
+			"failed", manualURLResult.URLsFailed,
+		)
+		// Add manual URL stats to result
+		result.NewArticles += manualURLResult.URLsProcessed
+		result.Errors = append(result.Errors, manualURLResult.Errors...)
+	}
+
 	// Display results
 	log.Info("Aggregation completed",
 		"duration", duration.String(),

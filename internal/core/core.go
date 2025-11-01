@@ -126,17 +126,17 @@ type Prompt struct {
 
 // Feed represents an RSS/Atom feed source.
 type Feed struct {
-	ID           string    `json:"id"`            // Unique identifier for the feed
-	URL          string    `json:"url"`           // Feed URL
-	Title        string    `json:"title"`         // Feed title
-	Description  string    `json:"description"`   // Feed description
-	LastFetched  time.Time `json:"last_fetched"`  // Last time the feed was fetched
-	LastModified string    `json:"last_modified"` // Last-Modified header from the feed
-	ETag         string    `json:"etag"`          // ETag header from the feed
-	Active       bool      `json:"active"`        // Whether the feed is active for polling
-	ErrorCount   int       `json:"error_count"`   // Number of consecutive errors
-	LastError    string    `json:"last_error"`    // Last error encountered
-	DateAdded    time.Time `json:"date_added"`    // When the feed was added
+	ID           string     `json:"id"`            // Unique identifier for the feed
+	URL          string     `json:"url"`           // Feed URL
+	Title        string     `json:"title"`         // Feed title
+	Description  string     `json:"description"`   // Feed description
+	LastFetched  *time.Time `json:"last_fetched"`  // Last time the feed was fetched (nullable)
+	LastModified string     `json:"last_modified"` // Last-Modified header from the feed
+	ETag         string     `json:"etag"`          // ETag header from the feed
+	Active       bool       `json:"active"`        // Whether the feed is active for polling
+	ErrorCount   int        `json:"error_count"`   // Number of consecutive errors
+	LastError    string     `json:"last_error"`    // Last error encountered
+	DateAdded    time.Time  `json:"date_added"`    // When the feed was added
 }
 
 // FeedItem represents an item discovered in an RSS/Atom feed.
@@ -344,3 +344,33 @@ type ResearchItem struct {
 	AddedToQueue    bool      `json:"added_to_queue"`
 	DateDiscovered  time.Time `json:"date_discovered"`
 }
+
+// Theme represents a user-defined theme for article classification (Phase 0)
+type Theme struct {
+	ID          string    `json:"id"`          // Unique identifier
+	Name        string    `json:"name"`        // Theme name (e.g., "GenAI", "Gaming")
+	Description string    `json:"description"` // Optional description
+	Keywords    []string  `json:"keywords"`    // Keywords for classification
+	Enabled     bool      `json:"enabled"`     // Whether this theme is active
+	CreatedAt   time.Time `json:"created_at"`  // Creation timestamp
+	UpdatedAt   time.Time `json:"updated_at"`  // Last update timestamp
+}
+
+// ManualURL represents a user-submitted URL for processing (Phase 0)
+type ManualURL struct {
+	ID           string     `json:"id"`                     // Unique identifier
+	URL          string     `json:"url"`                    // The submitted URL
+	SubmittedBy  string     `json:"submitted_by,omitempty"` // User or source that submitted
+	Status       string     `json:"status"`                 // pending, processing, processed, failed
+	ErrorMessage string     `json:"error_message,omitempty"` // Error details if failed
+	ProcessedAt  *time.Time `json:"processed_at,omitempty"` // When processing completed
+	CreatedAt    time.Time  `json:"created_at"`             // Submission timestamp
+}
+
+// ManualURLStatus constants for ManualURL.Status field
+const (
+	ManualURLStatusPending    = "pending"
+	ManualURLStatusProcessing = "processing"
+	ManualURLStatusProcessed  = "processed"
+	ManualURLStatusFailed     = "failed"
+)

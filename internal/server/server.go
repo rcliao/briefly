@@ -119,10 +119,30 @@ func (s *Server) setupRoutes() {
 			r.Get("/", s.handleListFeeds)
 			r.Get("/{id}/stats", s.handleFeedStats)
 		})
+
+		// Themes API (Phase 0)
+		r.Route("/themes", func(r chi.Router) {
+			r.Get("/", s.handleListThemes)
+			r.Post("/", s.handleCreateTheme)
+			r.Get("/{id}", s.handleGetTheme)
+			r.Patch("/{id}", s.handleUpdateTheme)
+			r.Delete("/{id}", s.handleDeleteTheme)
+		})
+
+		// Manual URLs API (Phase 0)
+		r.Route("/manual-urls", func(r chi.Router) {
+			r.Get("/", s.handleListManualURLs)
+			r.Post("/", s.handleSubmitURLs)
+			r.Get("/{id}", s.handleGetManualURL)
+			r.Post("/{id}/retry", s.handleRetryManualURL)
+			r.Delete("/{id}", s.handleDeleteManualURL)
+		})
 	})
 
 	// Web routes (HTML pages - Phase 3)
 	s.router.Get("/", s.handleHomePage)
+	s.router.Get("/themes", s.handleThemesPage)
+	s.router.Get("/submit", s.handleSubmitPage)
 
 	// Static files (if directory exists)
 	// TODO: Add static file serving in Phase 3

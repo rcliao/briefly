@@ -838,7 +838,8 @@ func (s *Store) GetFeeds(activeOnly bool) ([]core.Feed, error) {
 			feed.Description = description.String
 		}
 		if lastFetched.Valid {
-			feed.LastFetched = lastFetched.Time
+			t := lastFetched.Time
+			feed.LastFetched = &t
 		}
 		if lastModified.Valid {
 			feed.LastModified = lastModified.String

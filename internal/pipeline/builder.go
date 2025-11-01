@@ -4,6 +4,8 @@ import (
 	"briefly/internal/categorization"
 	"briefly/internal/core"
 	"briefly/internal/llm"
+	"briefly/internal/observability"
+	"briefly/internal/persistence"
 	"briefly/internal/summarize"
 	"context"
 	"fmt"
@@ -11,11 +13,16 @@ import (
 
 // Builder helps construct a fully configured Pipeline
 type Builder struct {
-	cacheDir   string
-	llmClient  *llm.Client
-	config     *Config
-	skipCache  bool
-	skipBanner bool
+	cacheDir       string
+	llmClient      *llm.Client
+	tracedClient   *llm.TracedClient  // For theme classification with observability
+	db             persistence.Database // Optional: for theme-based categorization
+	langfuse       *observability.LangFuseClient
+	posthog        *observability.PostHogClient
+	config         *Config
+	skipCache      bool
+	skipBanner     bool
+	useThemeSystem bool               // Enable theme-based categorization
 }
 
 // NewBuilder creates a new pipeline builder with default settings
@@ -71,6 +78,32 @@ func (b *Builder) WithBanner(style string) *Builder {
 	return b
 }
 
+// WithDatabase sets the database for theme-based categorization
+func (b *Builder) WithDatabase(db persistence.Database) *Builder {
+	b.db = db
+	b.useThemeSystem = true
+	return b
+}
+
+// WithTracedClient sets the traced LLM client with observability
+func (b *Builder) WithTracedClient(client *llm.TracedClient) *Builder {
+	b.tracedClient = client
+	return b
+}
+
+// WithObservability sets the observability clients
+func (b *Builder) WithObservability(langfuse *observability.LangFuseClient, posthog *observability.PostHogClient) *Builder {
+	b.langfuse = langfuse
+	b.posthog = posthog
+	return b
+}
+
+// WithoutThemes disables theme-based categorization (use legacy categories)
+func (b *Builder) WithoutThemes() *Builder {
+	b.useThemeSystem = false
+	return b
+}
+
 // Build constructs a fully configured Pipeline
 func (b *Builder) Build() (*Pipeline, error) {
 	// Validate required components
@@ -115,9 +148,19 @@ func (b *Builder) Build() (*Pipeline, error) {
 	summarizerCore := summarize.NewSummarizerWithDefaults(llmClientForSummarize)
 	summarizer := &SummarizerAdapter{summarizer: summarizerCore}
 
-	// Create categorizer adapter using the new categorization package
-	categorizerCore := categorization.NewCategorizer(llmClientAdapter, categorization.DefaultCategories())
-	categorizer := NewCategorizerAdapter(categorizerCore)
+	// Create categorizer: use theme-based if database is available, otherwise use legacy
+	var categorizer ArticleCategorizer
+	if b.useThemeSystem && b.db != nil && b.tracedClient != nil {
+		// Use theme-based categorization with database
+		fmt.Println("🎨 Using theme-based categorization")
+		themeCategorizer := NewThemeCategorizer(b.db, b.tracedClient, b.posthog)
+		categorizer = themeCategorizer
+	} else {
+		// Fall back to legacy categorization
+		fmt.Println("📁 Using legacy categorization (no database or theme system disabled)")
+		categorizerCore := categorization.NewCategorizer(llmClientAdapter, categorization.DefaultCategories())
+		categorizer = NewCategorizerAdapter(categorizerCore)
+	}
 
 	// Build pipeline
 	pipeline := NewPipeline(
