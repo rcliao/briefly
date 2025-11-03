@@ -114,6 +114,26 @@ type AggregateResult struct {
 	Errors           []error
 }
 
+// AggregateWithClassificationOptions configures aggregation with inline classification
+type AggregateWithClassificationOptions struct {
+	MaxArticles    int           // Maximum number of articles to process (0 = no limit)
+	MinRelevance   float64       // Minimum relevance score to keep article (0.0-1.0)
+	ThemeFilter    string        // Optional: Only process articles matching this theme
+	Since          time.Time     // Only fetch items published after this date
+	MaxConcurrency int           // Number of articles to process concurrently
+}
+
+// AggregateWithClassificationResult contains aggregation + classification statistics
+type AggregateWithClassificationResult struct {
+	FeedsFetched        int
+	ArticlesFetched     int
+	ArticlesClassified  int
+	ArticlesFiltered    int
+	ArticlesFailed      int
+	ThemeDistribution   map[string]int // theme_name -> count
+	Errors              []error
+}
+
 // Aggregate fetches new articles from all active feeds
 func (m *Manager) Aggregate(ctx context.Context, opts AggregateOptions) (*AggregateResult, error) {
 	// Create timeout context
@@ -178,6 +198,192 @@ func (m *Manager) Aggregate(ctx context.Context, opts AggregateOptions) (*Aggreg
 		"failed", result.FeedsFailed,
 		"new_articles", result.NewArticles,
 		"duplicates", result.DuplicateArticles,
+	)
+
+	return result, nil
+}
+
+// AggregateWithClassification fetches articles from RSS feeds and classifies them inline
+// This is the Phase 1 enhanced aggregation that does classification during fetch
+func (m *Manager) AggregateWithClassification(ctx context.Context, processor ArticleProcessor, classifier ThemeClassifier, opts AggregateWithClassificationOptions) (*AggregateWithClassificationResult, error) {
+	// Get all active feeds
+	feeds, err := m.db.Feeds().ListActive(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list active feeds: %w", err)
+	}
+
+	if len(feeds) == 0 {
+		m.log.Warn("No active feeds found")
+		return &AggregateWithClassificationResult{}, nil
+	}
+
+	// Get all active themes for classification
+	themes, err := m.db.Themes().List(ctx, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list themes: %w", err)
+	}
+
+	if len(themes) == 0 {
+		m.log.Warn("No active themes found")
+		return &AggregateWithClassificationResult{}, nil
+	}
+
+	m.log.Info("Starting aggregation with classification",
+		"feed_count", len(feeds),
+		"theme_count", len(themes),
+		"min_relevance", opts.MinRelevance,
+	)
+
+	// Collect all unprocessed feed items from all feeds
+	var allFeedItems []core.FeedItem
+	feedsFetched := 0
+
+	for _, feed := range feeds {
+		// Fetch feed with conditional GET
+		parsedFeed, err := m.feedManager.FetchFeed(feed.URL, feed.LastModified, feed.ETag)
+		if err != nil {
+			m.log.Error("Failed to fetch feed", "feed_id", feed.ID, "error", err)
+			continue
+		}
+
+		if parsedFeed.NotModified {
+			m.log.Debug("Feed not modified", "feed_id", feed.ID)
+			continue
+		}
+
+		feedsFetched++
+
+		// Update feed metadata
+		now := time.Now()
+		feed.LastFetched = &now
+		feed.LastModified = parsedFeed.LastModified
+		feed.ETag = parsedFeed.ETag
+		feed.ErrorCount = 0
+		feed.LastError = ""
+		_ = m.db.Feeds().Update(ctx, &feed)
+
+		// Filter items by publication date
+		for _, item := range parsedFeed.Items {
+			if !opts.Since.IsZero() && item.Published.Before(opts.Since) {
+				continue
+			}
+
+			// Add feed_id to the item
+			item.FeedID = feed.ID
+			allFeedItems = append(allFeedItems, item)
+		}
+	}
+
+	m.log.Info("Collected feed items", "total_items", len(allFeedItems), "feeds_fetched", feedsFetched)
+
+	// Limit articles if requested
+	if opts.MaxArticles > 0 && len(allFeedItems) > opts.MaxArticles {
+		allFeedItems = allFeedItems[:opts.MaxArticles]
+	}
+
+	// Process articles with classification inline
+	result := &AggregateWithClassificationResult{
+		FeedsFetched:      feedsFetched,
+		ArticlesFetched:   len(allFeedItems),
+		ThemeDistribution: make(map[string]int),
+	}
+
+	// Process with concurrency control
+	sem := make(chan struct{}, opts.MaxConcurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for _, item := range allFeedItems {
+		select {
+		case <-ctx.Done():
+			m.log.Warn("Aggregation cancelled", "reason", ctx.Err())
+			return result, ctx.Err()
+		default:
+		}
+
+		wg.Add(1)
+		sem <- struct{}{} // Acquire semaphore
+
+		go func(feedItem core.FeedItem) {
+			defer wg.Done()
+			defer func() { <-sem }() // Release semaphore
+
+			// Fetch full article content
+			article, err := processor.ProcessArticle(ctx, feedItem.Link)
+			if err != nil {
+				m.log.Error("Failed to fetch article", "url", feedItem.Link, "error", err)
+				mu.Lock()
+				result.ArticlesFailed++
+				result.Errors = append(result.Errors, fmt.Errorf("fetch %s: %w", feedItem.Link, err))
+				mu.Unlock()
+				return
+			}
+
+			// Set article metadata from feed item
+			article.Title = feedItem.Title
+			article.DatePublished = feedItem.Published
+
+			// Classify article
+			classificationResult, err := classifier.GetBestMatch(ctx, *article, themes, opts.MinRelevance)
+			if err != nil {
+				m.log.Error("Failed to classify article", "url", article.URL, "error", err)
+				mu.Lock()
+				result.ArticlesFailed++
+				result.Errors = append(result.Errors, fmt.Errorf("classify %s: %w", article.URL, err))
+				mu.Unlock()
+				return
+			}
+
+			// Check if article was filtered (below relevance threshold)
+			if classificationResult == nil {
+				m.log.Debug("Article filtered (below relevance threshold)", "url", article.URL, "min_relevance", opts.MinRelevance)
+				mu.Lock()
+				result.ArticlesFiltered++
+				mu.Unlock()
+				return
+			}
+
+			// Check theme filter if specified
+			if opts.ThemeFilter != "" && classificationResult.GetThemeName() != opts.ThemeFilter {
+				m.log.Debug("Article filtered (theme mismatch)", "url", article.URL, "theme", classificationResult.GetThemeName(), "filter", opts.ThemeFilter)
+				mu.Lock()
+				result.ArticlesFiltered++
+				mu.Unlock()
+				return
+			}
+
+			// Store article with theme assignment
+			themeID := classificationResult.GetThemeID()
+			relevanceScore := classificationResult.GetRelevanceScore()
+			article.ThemeID = &themeID
+			article.ThemeRelevanceScore = &relevanceScore
+
+			if err := m.db.Articles().Create(ctx, article); err != nil {
+				m.log.Error("Failed to store article", "url", article.URL, "error", err)
+				mu.Lock()
+				result.ArticlesFailed++
+				result.Errors = append(result.Errors, fmt.Errorf("store %s: %w", article.URL, err))
+				mu.Unlock()
+				return
+			}
+
+			m.log.Info("Article classified and stored", "url", article.URL, "theme", classificationResult.GetThemeName(), "relevance", fmt.Sprintf("%.2f", relevanceScore))
+
+			mu.Lock()
+			result.ArticlesClassified++
+			result.ThemeDistribution[classificationResult.GetThemeName()]++
+			mu.Unlock()
+		}(item)
+	}
+
+	wg.Wait()
+
+	m.log.Info("Aggregation with classification completed",
+		"feeds_fetched", result.FeedsFetched,
+		"articles_fetched", result.ArticlesFetched,
+		"articles_classified", result.ArticlesClassified,
+		"articles_filtered", result.ArticlesFiltered,
+		"articles_failed", result.ArticlesFailed,
 	)
 
 	return result, nil
