@@ -240,11 +240,9 @@ func queryClassifiedArticles(ctx context.Context, db *persistence.PostgresDB, si
 			continue
 		}
 
-		// If theme filter specified, only include matching theme
-		if themeFilter != "" {
-			// Need to fetch theme name - for now skip this filtering
-			// TODO: Add join query or theme lookup
-		}
+		// TODO: If theme filter specified, filter by theme name
+		// This would require fetching theme names here or using a join query
+		// For now, filtering by theme is done in the grouping step
 
 		filtered = append(filtered, article)
 	}

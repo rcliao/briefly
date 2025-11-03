@@ -222,7 +222,10 @@ func (c *Classifier) buildClassificationPrompt(article core.Article, themes []co
 	sb.WriteString("- Be honest and conservative with scores\n")
 	sb.WriteString("- Consider both the title and content\n")
 	sb.WriteString("- Match against theme keywords and descriptions\n")
-	sb.WriteString("- Use the exact theme name from the list above\n")
+	sb.WriteString("- Use the exact theme name from the list above\n\n")
+
+	sb.WriteString("OUTPUT FORMAT:\n")
+	sb.WriteString("Provide your response as structured JSON following the schema.\n")
 
 	return sb.String()
 }
@@ -230,8 +233,16 @@ func (c *Classifier) buildClassificationPrompt(article core.Article, themes []co
 // parseClassificationResponse parses the LLM JSON response into results
 // With structured output (ResponseSchema), the response is guaranteed to be valid JSON
 func (c *Classifier) parseClassificationResponse(response string, themes []core.Theme) ([]ClassificationResult, error) {
-	// Parse JSON directly - no need to extract from markdown blocks
-	// because ResponseSchema guarantees clean JSON output
+	// Strip markdown code blocks if present (for backward compatibility and testing)
+	cleanResponse := strings.TrimSpace(response)
+	if strings.HasPrefix(cleanResponse, "```json") {
+		// Remove ```json prefix and ``` suffix
+		cleanResponse = strings.TrimPrefix(cleanResponse, "```json")
+		cleanResponse = strings.TrimPrefix(cleanResponse, "```")
+		cleanResponse = strings.TrimSuffix(cleanResponse, "```")
+		cleanResponse = strings.TrimSpace(cleanResponse)
+	}
+
 	var parsed struct {
 		Classifications []struct {
 			ThemeName      string  `json:"theme_name"`
@@ -240,7 +251,7 @@ func (c *Classifier) parseClassificationResponse(response string, themes []core.
 		} `json:"classifications"`
 	}
 
-	if err := json.Unmarshal([]byte(strings.TrimSpace(response)), &parsed); err != nil {
+	if err := json.Unmarshal([]byte(cleanResponse), &parsed); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON response: %w\nResponse: %s", err, response)
 	}
 
