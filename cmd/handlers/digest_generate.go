@@ -134,7 +134,10 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 	log.Info("Found classified articles", "count", len(articles))
 
 	// Group articles by theme
-	themeGroups := groupArticlesByTheme(articles)
+	themeGroups, err := groupArticlesByTheme(ctx, db, articles)
+	if err != nil {
+		return fmt.Errorf("failed to group articles by theme: %w", err)
+	}
 
 	fmt.Printf("\n📊 Articles by Theme:\n")
 	for themeName, themeArticles := range themeGroups {
@@ -175,6 +178,8 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 
 // queryClassifiedArticles fetches articles from database with filters
 func queryClassifiedArticles(ctx context.Context, db *persistence.PostgresDB, since time.Time, themeFilter string) ([]core.Article, error) {
+	log := logger.Get()
+
 	// Get articles repository
 	articlesRepo := db.Articles()
 
@@ -188,15 +193,21 @@ func queryClassifiedArticles(ctx context.Context, db *persistence.PostgresDB, si
 		return nil, err
 	}
 
+	log.Info("Fetched articles from database", "total_count", len(allArticles))
+
 	var filtered []core.Article
+	var skippedOld, skippedNoTheme int
+
 	for _, article := range allArticles {
 		// Filter by date (use DateFetched as proxy for DateAdded)
 		if article.DateFetched.Before(since) {
+			skippedOld++
 			continue
 		}
 
 		// Filter by theme (must have theme assigned)
 		if article.ThemeID == nil {
+			skippedNoTheme++
 			continue
 		}
 
@@ -209,11 +220,42 @@ func queryClassifiedArticles(ctx context.Context, db *persistence.PostgresDB, si
 		filtered = append(filtered, article)
 	}
 
+	log.Info("Filtered articles",
+		"matched", len(filtered),
+		"skipped_old", skippedOld,
+		"skipped_no_theme", skippedNoTheme,
+		"since_date", since.Format("2006-01-02"),
+	)
+
 	return filtered, nil
 }
 
-// groupArticlesByTheme groups articles by their theme
-func groupArticlesByTheme(articles []core.Article) map[string][]core.Article {
+// groupArticlesByTheme groups articles by their theme name
+func groupArticlesByTheme(ctx context.Context, db *persistence.PostgresDB, articles []core.Article) (map[string][]core.Article, error) {
+	log := logger.Get()
+
+	// First, collect all unique theme IDs
+	themeIDs := make(map[string]bool)
+	for _, article := range articles {
+		if article.ThemeID != nil {
+			themeIDs[*article.ThemeID] = true
+		}
+	}
+
+	// Fetch all themes to create ID -> Name mapping
+	themes, err := db.Themes().List(ctx, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch themes: %w", err)
+	}
+
+	themeIDToName := make(map[string]string)
+	for _, theme := range themes {
+		themeIDToName[theme.ID] = theme.Name
+	}
+
+	log.Info("Loaded theme mappings", "theme_count", len(themeIDToName))
+
+	// Group articles by theme name
 	groups := make(map[string][]core.Article)
 
 	for _, article := range articles {
@@ -221,13 +263,16 @@ func groupArticlesByTheme(articles []core.Article) map[string][]core.Article {
 			continue
 		}
 
-		// Use theme ID as key for now
-		// TODO: Fetch theme name from database
-		themeKey := *article.ThemeID
-		groups[themeKey] = append(groups[themeKey], article)
+		themeName, found := themeIDToName[*article.ThemeID]
+		if !found {
+			log.Warn("Article has unknown theme ID", "theme_id", *article.ThemeID, "article_id", article.ID)
+			themeName = "Unknown Theme"
+		}
+
+		groups[themeName] = append(groups[themeName], article)
 	}
 
-	return groups
+	return groups, nil
 }
 
 // generateSimpleDigest creates a basic digest structure

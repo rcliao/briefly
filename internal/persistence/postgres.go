@@ -142,13 +142,15 @@ func (r *postgresArticleRepo) Create(ctx context.Context, article *core.Article)
 	query := `
 		INSERT INTO articles (
 			id, url, title, content_type, cleaned_text, raw_content,
-			topic_cluster, cluster_confidence, embedding, date_fetched, date_added
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			topic_cluster, cluster_confidence, embedding, date_fetched, date_added,
+			theme_id, theme_relevance_score
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 	_, err = r.query().ExecContext(ctx, query,
 		article.ID, article.URL, article.Title, article.ContentType,
 		article.CleanedText, article.RawContent, article.TopicCluster,
 		article.ClusterConfidence, embeddingJSON, article.DateFetched, time.Now().UTC(),
+		article.ThemeID, article.ThemeRelevanceScore,
 	)
 	return err
 }
@@ -156,7 +158,8 @@ func (r *postgresArticleRepo) Create(ctx context.Context, article *core.Article)
 func (r *postgresArticleRepo) Get(ctx context.Context, id string) (*core.Article, error) {
 	query := `
 		SELECT id, url, title, content_type, cleaned_text, raw_content,
-			   topic_cluster, cluster_confidence, embedding, date_fetched, date_added
+			   topic_cluster, cluster_confidence, embedding, date_fetched, date_added,
+			   theme_id, theme_relevance_score
 		FROM articles WHERE id = $1
 	`
 	row := r.query().QueryRowContext(ctx, query, id)
@@ -166,7 +169,8 @@ func (r *postgresArticleRepo) Get(ctx context.Context, id string) (*core.Article
 func (r *postgresArticleRepo) GetByURL(ctx context.Context, url string) (*core.Article, error) {
 	query := `
 		SELECT id, url, title, content_type, cleaned_text, raw_content,
-			   topic_cluster, cluster_confidence, embedding, date_fetched, date_added
+			   topic_cluster, cluster_confidence, embedding, date_fetched, date_added,
+			   theme_id, theme_relevance_score
 		FROM articles WHERE url = $1
 	`
 	row := r.query().QueryRowContext(ctx, query, url)
@@ -176,7 +180,8 @@ func (r *postgresArticleRepo) GetByURL(ctx context.Context, url string) (*core.A
 func (r *postgresArticleRepo) List(ctx context.Context, opts ListOptions) ([]core.Article, error) {
 	query := `
 		SELECT id, url, title, content_type, cleaned_text, raw_content,
-			   topic_cluster, cluster_confidence, embedding, date_fetched, date_added
+			   topic_cluster, cluster_confidence, embedding, date_fetched, date_added,
+			   theme_id, theme_relevance_score
 		FROM articles
 		ORDER BY date_added DESC
 		LIMIT $1 OFFSET $2
@@ -290,6 +295,7 @@ func (r *postgresArticleRepo) scanArticle(row *sql.Row) (*core.Article, error) {
 		&article.ID, &article.URL, &article.Title, &article.ContentType,
 		&article.CleanedText, &article.RawContent, &article.TopicCluster,
 		&article.ClusterConfidence, &embeddingJSON, &article.DateFetched, &dateAdded,
+		&article.ThemeID, &article.ThemeRelevanceScore,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -316,6 +322,7 @@ func (r *postgresArticleRepo) scanArticleRow(rows *sql.Rows) (*core.Article, err
 		&article.ID, &article.URL, &article.Title, &article.ContentType,
 		&article.CleanedText, &article.RawContent, &article.TopicCluster,
 		&article.ClusterConfidence, &embeddingJSON, &article.DateFetched, &dateAdded,
+		&article.ThemeID, &article.ThemeRelevanceScore,
 	)
 	if err != nil {
 		return nil, err
