@@ -145,6 +145,13 @@ func (r *postgresArticleRepo) Create(ctx context.Context, article *core.Article)
 			topic_cluster, cluster_confidence, embedding, date_fetched, date_added,
 			theme_id, theme_relevance_score
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		ON CONFLICT (url) DO UPDATE SET
+			title = EXCLUDED.title,
+			content_type = EXCLUDED.content_type,
+			cleaned_text = EXCLUDED.cleaned_text,
+			theme_id = EXCLUDED.theme_id,
+			theme_relevance_score = EXCLUDED.theme_relevance_score,
+			date_fetched = EXCLUDED.date_fetched
 	`
 	_, err = r.query().ExecContext(ctx, query,
 		article.ID, article.URL, article.Title, article.ContentType,

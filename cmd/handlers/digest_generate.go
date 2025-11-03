@@ -6,13 +6,27 @@ import (
 	"briefly/internal/llm"
 	"briefly/internal/logger"
 	"briefly/internal/persistence"
+	"briefly/internal/summarize"
 	"context"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
+
+// llmClientAdapter adapts llm.Client to summarize.LLMClient interface
+type llmClientAdapter struct {
+	client *llm.Client
+}
+
+// GenerateText implements summarize.LLMClient interface
+func (a *llmClientAdapter) GenerateText(ctx context.Context, prompt string, opts interface{}) (string, error) {
+	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
+}
 
 // NewDigestGenerateCmd creates the digest generate command for database-driven digests
 func NewDigestGenerateCmd() *cobra.Command {
@@ -66,6 +80,7 @@ Examples:
 }
 
 func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, outputDir string, minArticles int) error {
+	startTime := time.Now()
 	log := logger.Get()
 	log.Info("Starting digest generation from database",
 		"since_days", sinceDays,
@@ -144,7 +159,7 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 		fmt.Printf("  • %s: %d articles\n", themeName, len(themeArticles))
 	}
 
-	// Initialize LLM client for summaries
+	// Initialize LLM client for summaries and narrative
 	modelName := cfg.AI.Gemini.Model
 	if modelName == "" {
 		modelName = "gemini-2.5-flash-preview-05-20"
@@ -156,21 +171,35 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 	}
 	defer llmClient.Close()
 
-	// Generate simple digest structure
-	digest := generateSimpleDigest(articles, themeGroups, since)
-
-	// Save digest to file
-	outputPath, err := saveDigest(digest, outputDir, themeFilter)
+	// Generate digest with LLM summaries
+	fmt.Println("\n🤖 Generating summaries and digest...")
+	digest, err := generateDigestWithSummaries(ctx, db, llmClient, articles, themeGroups, since, themeFilter)
 	if err != nil {
-		return fmt.Errorf("failed to save digest: %w", err)
+		return fmt.Errorf("failed to generate digest: %w", err)
 	}
 
-	duration := time.Since(time.Now().Add(-5 * time.Second)) // Approximate
+	// Save digest to database
+	if err := db.Digests().Create(ctx, digest); err != nil {
+		log.Warn("Failed to save digest to database", "error", err)
+		// Continue - still save markdown file
+	} else {
+		log.Info("Digest saved to database", "digest_id", digest.ID)
+	}
+
+	// Save digest to markdown file for LinkedIn
+	outputPath, err := saveDigestMarkdown(digest, outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to save markdown file: %w", err)
+	}
+
+	duration := time.Since(startTime)
 
 	fmt.Printf("\n✅ Successfully generated digest\n")
+	fmt.Printf("   Digest ID: %s\n", digest.ID)
 	fmt.Printf("   Articles: %d\n", len(articles))
 	fmt.Printf("   Themes: %d\n", len(themeGroups))
-	fmt.Printf("   Output: %s\n", outputPath)
+	fmt.Printf("   Database: Saved ✓\n")
+	fmt.Printf("   Markdown: %s\n", outputPath)
 	fmt.Printf("   Duration: %s\n", duration.Round(time.Millisecond))
 
 	return nil
@@ -275,61 +304,301 @@ func groupArticlesByTheme(ctx context.Context, db *persistence.PostgresDB, artic
 	return groups, nil
 }
 
-// generateSimpleDigest creates a basic digest structure
-func generateSimpleDigest(articles []core.Article, themeGroups map[string][]core.Article, since time.Time) string {
-	var content string
+// generateDigestWithSummaries creates a complete digest with LLM-generated summaries
+func generateDigestWithSummaries(ctx context.Context, db *persistence.PostgresDB, llmClient *llm.Client, articles []core.Article, themeGroups map[string][]core.Article, since time.Time, themeFilter string) (*core.Digest, error) {
+	log := logger.Get()
 
-	content += fmt.Sprintf("# Weekly Tech Digest\n\n")
-	content += fmt.Sprintf("**Period:** %s to %s\n\n", since.Format("Jan 2"), time.Now().Format("Jan 2, 2006"))
-	content += fmt.Sprintf("**Articles:** %d across %d themes\n\n", len(articles), len(themeGroups))
-	content += "---\n\n"
+	// Create summarizer with adapter
+	adapter := &llmClientAdapter{client: llmClient}
+	summarizer := summarize.NewSummarizerWithDefaults(adapter)
 
-	for themeName, themeArticles := range themeGroups {
-		content += fmt.Sprintf("## %s (%d articles)\n\n", themeName, len(themeArticles))
+	// Generate summaries for articles (or fetch from database)
+	fmt.Println("   📝 Generating article summaries...")
+	articleSummaries := make(map[string]*core.Summary)
+	summaryList := []core.Summary{}
 
-		for _, article := range themeArticles {
-			content += fmt.Sprintf("### %s\n\n", article.Title)
-			content += fmt.Sprintf("**Source:** [%s](%s)\n\n", article.URL, article.URL)
+	for i, article := range articles {
+		fmt.Printf("   [%d/%d] Summarizing: %s\n", i+1, len(articles), article.Title)
 
-			if article.ThemeRelevanceScore != nil {
-				content += fmt.Sprintf("**Relevance:** %.0f%%\n\n", *article.ThemeRelevanceScore*100)
-			}
-
-			// Add snippet of content if available
-			if len(article.CleanedText) > 200 {
-				content += fmt.Sprintf("%s...\n\n", article.CleanedText[:200])
-			} else if article.CleanedText != "" {
-				content += fmt.Sprintf("%s\n\n", article.CleanedText)
-			}
-
-			content += "---\n\n"
+		// Try to fetch existing summary from database
+		existingSummary, err := db.Summaries().Get(ctx, article.ID)
+		if err == nil && existingSummary != nil {
+			articleSummaries[article.ID] = existingSummary
+			summaryList = append(summaryList, *existingSummary)
+			log.Info("Using existing summary", "article_id", article.ID)
+			continue
 		}
+
+		// Generate new summary
+		summary, err := summarizer.SummarizeArticleStructured(ctx, &article)
+		if err != nil {
+			log.Warn("Failed to generate summary", "article_id", article.ID, "error", err)
+			// Create fallback summary
+			summary = &core.Summary{
+				ID:          uuid.NewString(),
+				ArticleIDs:  []string{article.ID},
+				SummaryText: fmt.Sprintf("Summary for: %s", article.Title),
+				ModelUsed:   "fallback",
+			}
+		}
+
+		// Store summary in database
+		if err := db.Summaries().Create(ctx, summary); err != nil {
+			log.Warn("Failed to save summary to database", "error", err)
+		}
+
+		articleSummaries[article.ID] = summary
+		summaryList = append(summaryList, *summary)
 	}
 
-	return content
+	// Build article groups by theme
+	articleGroups := []core.ArticleGroup{}
+	themeNames := make([]string, 0, len(themeGroups))
+	for themeName := range themeGroups {
+		themeNames = append(themeNames, themeName)
+	}
+	sort.Strings(themeNames) // Sort for consistent output
+
+	for _, themeName := range themeNames {
+		themeArticles := themeGroups[themeName]
+
+		// Generate theme-level summary
+		themeSummary := generateThemeSummary(themeArticles, articleSummaries)
+
+		articleGroup := core.ArticleGroup{
+			Theme:    themeName,
+			Articles: themeArticles,
+			Summary:  themeSummary,
+			Priority: len(themeArticles), // Higher count = higher priority
+		}
+		articleGroups = append(articleGroups, articleGroup)
+	}
+
+	// Sort by priority (most articles first)
+	sort.Slice(articleGroups, func(i, j int) bool {
+		return articleGroups[i].Priority > articleGroups[j].Priority
+	})
+
+	// Generate executive summary
+	fmt.Println("   ✨ Generating executive summary...")
+	executiveSummary := generateExecutiveSummaryFromThemes(ctx, llmClient, articleGroups, articleSummaries)
+
+	// Build digest structure
+	digestDate := time.Now()
+	if themeFilter != "" {
+		digestDate = since // Use since date if filtering
+	}
+
+	digest := &core.Digest{
+		ID:            uuid.NewString(),
+		ArticleGroups: articleGroups,
+		Summaries:     summaryList,
+		DigestSummary: executiveSummary,
+		Title:         fmt.Sprintf("Weekly Tech Digest - %s", digestDate.Format("Jan 2, 2006")),
+		Metadata: core.DigestMetadata{
+			Title:         fmt.Sprintf("Weekly Tech Digest - %s", digestDate.Format("Jan 2, 2006")),
+			ArticleCount:  len(articles),
+			DateGenerated: time.Now(),
+		},
+	}
+
+	return digest, nil
 }
 
-// saveDigest writes digest to markdown file
-func saveDigest(content string, outputDir string, themeFilter string) (string, error) {
+// generateThemeSummary creates a summary for a theme group
+func generateThemeSummary(articles []core.Article, summaries map[string]*core.Summary) string {
+	if len(articles) == 0 {
+		return ""
+	}
+
+	// Simple: combine titles
+	titles := make([]string, 0, len(articles))
+	for _, article := range articles {
+		titles = append(titles, article.Title)
+	}
+
+	return fmt.Sprintf("%d articles covering: %s", len(articles), strings.Join(titles, ", "))
+}
+
+// generateExecutiveSummaryFromThemes creates an executive summary from theme groups
+func generateExecutiveSummaryFromThemes(ctx context.Context, llmClient *llm.Client, articleGroups []core.ArticleGroup, summaries map[string]*core.Summary) string {
+	log := logger.Get()
+
+	// Build prompt for executive summary
+	var prompt strings.Builder
+	prompt.WriteString("Generate a compelling executive summary (200 words max) for this weekly tech digest.\n\n")
+	prompt.WriteString("The digest covers the following themes and articles:\n\n")
+
+	for _, group := range articleGroups {
+		prompt.WriteString(fmt.Sprintf("**%s** (%d articles):\n", group.Theme, len(group.Articles)))
+		for i, article := range group.Articles {
+			if i >= 3 {
+				break // Only use top 3 per theme
+			}
+			summary := summaries[article.ID]
+			if summary != nil {
+				prompt.WriteString(fmt.Sprintf("- %s: %s\n", article.Title, summary.SummaryText))
+			} else {
+				prompt.WriteString(fmt.Sprintf("- %s\n", article.Title))
+			}
+		}
+		prompt.WriteString("\n")
+	}
+
+	prompt.WriteString("\nWrite an engaging executive summary that:\n")
+	prompt.WriteString("1. Highlights the most important trends and insights\n")
+	prompt.WriteString("2. Connects themes and shows relationships\n")
+	prompt.WriteString("3. Is written for technical leaders and engineers\n")
+	prompt.WriteString("4. Uses a professional but engaging tone\n")
+	prompt.WriteString("5. Focuses on actionable insights\n\n")
+	prompt.WriteString("Executive Summary:\n")
+
+	// Generate using LLM
+	response, err := llmClient.GenerateText(ctx, prompt.String(), llm.TextGenerationOptions{})
+	if err != nil {
+		log.Warn("Failed to generate executive summary", "error", err)
+		return generateFallbackExecutiveSummary(articleGroups)
+	}
+
+	return strings.TrimSpace(response)
+}
+
+// generateFallbackExecutiveSummary creates a simple fallback if LLM fails
+func generateFallbackExecutiveSummary(articleGroups []core.ArticleGroup) string {
+	var summary strings.Builder
+	summary.WriteString("This week's digest covers ")
+
+	themes := make([]string, 0, len(articleGroups))
+	totalArticles := 0
+	for _, group := range articleGroups {
+		themes = append(themes, group.Theme)
+		totalArticles += len(group.Articles)
+	}
+
+	summary.WriteString(fmt.Sprintf("%d articles across %d themes: %s.",
+		totalArticles, len(themes), strings.Join(themes, ", ")))
+
+	return summary.String()
+}
+
+// saveDigestMarkdown renders digest to LinkedIn-ready markdown file
+func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 	// Create output directory if needed
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Generate filename
-	timestamp := time.Now().Format("2006-01-02")
-	filename := fmt.Sprintf("digest_%s", timestamp)
-	if themeFilter != "" {
-		filename += fmt.Sprintf("_%s", themeFilter)
-	}
-	filename += ".md"
-
+	timestamp := digest.Metadata.DateGenerated.Format("2006-01-02")
+	filename := fmt.Sprintf("digest_%s.md", timestamp)
 	outputPath := fmt.Sprintf("%s/%s", outputDir, filename)
 
+	// Render markdown
+	var content strings.Builder
+
+	// Header with emoji
+	content.WriteString("# 🗞️ Weekly Tech Digest\n\n")
+	content.WriteString(fmt.Sprintf("*%d Articles Across %d Themes*\n\n",
+		digest.Metadata.ArticleCount,
+		len(digest.ArticleGroups)))
+	content.WriteString("---\n\n")
+
+	// Executive Summary
+	if digest.DigestSummary != "" {
+		content.WriteString("## 🎯 Executive Summary\n\n")
+		content.WriteString(digest.DigestSummary)
+		content.WriteString("\n\n---\n\n")
+	}
+
+	// Theme sections
+	for _, group := range digest.ArticleGroups {
+		// Theme header with emoji based on theme name
+		emoji := getThemeEmoji(group.Theme)
+		content.WriteString(fmt.Sprintf("## %s %s\n\n", emoji, group.Theme))
+
+		// Theme summary if available
+		if group.Summary != "" && !strings.Contains(group.Summary, "covering:") {
+			content.WriteString(fmt.Sprintf("*%s*\n\n", group.Summary))
+		}
+
+		// Articles in this theme
+		for _, article := range group.Articles {
+			content.WriteString(fmt.Sprintf("### %s\n\n", article.Title))
+			content.WriteString(fmt.Sprintf("🔗 [Read Article](%s)\n\n", article.URL))
+
+			// Find summary
+			var summary *core.Summary
+			for _, s := range digest.Summaries {
+				for _, aid := range s.ArticleIDs {
+					if aid == article.ID {
+						summary = &s
+						break
+					}
+				}
+				if summary != nil {
+					break
+				}
+			}
+
+			if summary != nil && summary.SummaryText != "" {
+				content.WriteString(summary.SummaryText)
+				content.WriteString("\n\n")
+			}
+
+			if article.ThemeRelevanceScore != nil {
+				content.WriteString(fmt.Sprintf("*Relevance: %.0f%%*\n\n", *article.ThemeRelevanceScore*100))
+			}
+
+			content.WriteString("---\n\n")
+		}
+	}
+
+	// Footer
+	content.WriteString(fmt.Sprintf("*Generated on %s*\n",
+		digest.Metadata.DateGenerated.Format("Jan 2, 2006")))
+
 	// Write file
-	if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(content.String()), 0644); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 
 	return outputPath, nil
+}
+
+// getThemeEmoji returns an emoji for a theme name
+func getThemeEmoji(theme string) string {
+	themeUpper := strings.ToUpper(theme)
+
+	if strings.Contains(themeUpper, "AI") || strings.Contains(themeUpper, "MACHINE LEARNING") {
+		return "🤖"
+	}
+	if strings.Contains(themeUpper, "SECURITY") || strings.Contains(themeUpper, "PRIVACY") {
+		return "🔒"
+	}
+	if strings.Contains(themeUpper, "CLOUD") || strings.Contains(themeUpper, "DEVOPS") {
+		return "☁️"
+	}
+	if strings.Contains(themeUpper, "DATA") || strings.Contains(themeUpper, "ANALYTICS") {
+		return "📊"
+	}
+	if strings.Contains(themeUpper, "MOBILE") {
+		return "📱"
+	}
+	if strings.Contains(themeUpper, "WEB") || strings.Contains(themeUpper, "FRONTEND") {
+		return "🌐"
+	}
+	if strings.Contains(themeUpper, "OPEN SOURCE") {
+		return "🔓"
+	}
+	if strings.Contains(themeUpper, "PRODUCT") || strings.Contains(themeUpper, "STARTUP") {
+		return "🚀"
+	}
+	if strings.Contains(themeUpper, "PROGRAMMING") || strings.Contains(themeUpper, "LANGUAGE") {
+		return "💻"
+	}
+	if strings.Contains(themeUpper, "ENGINEERING") {
+		return "⚙️"
+	}
+
+	return "📌" // Default
 }
