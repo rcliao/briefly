@@ -79,6 +79,50 @@ briefly cache stats
 briefly cache clear --confirm
 ```
 
+**Theme Management (Phase 0):**
+```bash
+# List all enabled themes
+briefly theme list
+
+# List all themes (including disabled)
+briefly theme list --all
+
+# Add a new theme
+briefly theme add "Theme Name" --description "Description" --keywords "keyword1,keyword2"
+
+# Update a theme
+briefly theme update <id> --description "New description" --keywords "new,keywords"
+
+# Enable/disable themes
+briefly theme enable <id>
+briefly theme disable <id>
+
+# Remove a theme
+briefly theme remove <id>
+```
+
+**Manual URL Submission (Phase 0):**
+```bash
+# Submit one or more URLs for processing
+briefly url add https://example.com/article1
+briefly url add https://example.com/article1 https://example.com/article2
+
+# List submitted URLs
+briefly url list
+briefly url list --status pending
+briefly url list --status processed
+
+# Check status of a specific URL
+briefly url status <id>
+
+# Retry failed URLs
+briefly url retry <id>
+briefly url retry --all  # Retry all failed
+
+# Clear processed/failed URLs
+briefly url clear --processed --failed
+```
+
 ## Architecture Overview (v3.0 Simplified)
 
 ### Design Philosophy
@@ -99,30 +143,52 @@ briefly/
 ├── cmd/
 │   ├── briefly/main.go          # Entry point (uses ExecuteSimplified)
 │   └── handlers/                 # Cobra command handlers
-│       ├── root_simplified.go    # 3-command root (digest, read, cache)
+│       ├── root_simplified.go    # 5-command root (digest, read, cache, theme, url)
 │       ├── digest_simplified.go  # Weekly digest generation
 │       ├── read_simplified.go    # Quick article summary
-│       └── cache.go              # Cache management
+│       ├── cache.go              # Cache management
+│       ├── theme.go              # NEW Phase 0: Theme management CLI
+│       └── manual_url.go         # NEW Phase 0: Manual URL submission CLI
 ├── internal/
-│   ├── parser/                   # NEW: URL parsing from markdown
-│   ├── summarize/                # NEW: Centralized summarization with prompts
-│   ├── narrative/                # NEW: Executive summary generation
-│   ├── pipeline/                 # NEW: Orchestration layer
+│   ├── parser/                   # URL parsing from markdown
+│   ├── summarize/                # Centralized summarization with prompts
+│   ├── narrative/                # Executive summary generation
+│   ├── pipeline/                 # Orchestration layer
 │   │   ├── pipeline.go           # Core orchestrator
 │   │   ├── interfaces.go         # Component contracts
 │   │   ├── adapters.go           # Wrapper adapters for existing packages
-│   │   └── builder.go            # Fluent API for construction
+│   │   ├── builder.go            # Fluent API for construction
+│   │   └── theme_categorizer.go  # NEW Phase 0: Theme-based categorization
 │   ├── clustering/               # K-means topic clustering
-│   ├── core/                     # Core data structures
+│   ├── core/                     # Core data structures (Article, Summary, Digest, Theme, ManualURL)
 │   ├── fetch/                    # Content fetching (HTML, PDF, YouTube)
 │   ├── llm/                      # LLM client for Gemini API
-│   ├── store/                    # SQLite caching
+│   │   └── traced_client.go      # NEW Phase 0: LangFuse-traced LLM client
+│   ├── observability/            # NEW Phase 0: Observability infrastructure
+│   │   ├── langfuse.go           # LangFuse tracing (local logging mode)
+│   │   └── posthog.go            # PostHog analytics tracking
+│   ├── themes/                   # NEW Phase 0: Theme classification system
+│   │   └── classifier.go         # LLM-based theme classifier
+│   ├── persistence/              # NEW Phase 0: Database abstraction layer
+│   │   ├── interfaces.go         # Repository interfaces
+│   │   ├── postgres_repos.go     # PostgreSQL implementations
+│   │   └── migrations/           # Database migrations (001-007+)
+│   ├── sources/                  # NEW Phase 0: Feed source management
+│   │   └── manager.go            # RSS feeds + manual URL aggregation
+│   ├── server/                   # NEW Phase 0: Web server
+│   │   ├── server.go             # HTTP server setup
+│   │   ├── theme_handlers.go     # Theme management API
+│   │   ├── manual_url_handlers.go # Manual URL API
+│   │   └── web_pages.go          # Web UI pages (/themes, /submit)
+│   ├── store/                    # SQLite caching (being phased out for PostgreSQL)
 │   ├── templates/                # Digest format templates
 │   ├── render/                   # Output formatting
 │   ├── email/                    # HTML email templates
 │   ├── config/                   # Configuration management
 │   └── logger/                   # Structured logging
 ├── docs/
+│   ├── executions/               # NEW Phase 0: Execution tracking
+│   │   └── 2025-10-31.md         # Phase 0-1 implementation plan
 │   └── simplified-architecture/  # Architecture design documents
 │       ├── data-flow.md
 │       ├── components.md
@@ -448,22 +514,103 @@ briefly cache stats
 
 **Required:**
 - `GEMINI_API_KEY` - Gemini API key for summarization and embeddings
+- `DATABASE_URL` - PostgreSQL connection string (Phase 0+)
 
-**Optional:**
+**Phase 0 Observability (Optional but Recommended):**
+- `LANGFUSE_PUBLIC_KEY` - LangFuse public key for LLM tracing
+- `LANGFUSE_SECRET_KEY` - LangFuse secret key
+- `LANGFUSE_HOST` - LangFuse server URL (default: https://cloud.langfuse.com)
+- `POSTHOG_API_KEY` - PostHog API key for analytics
+- `POSTHOG_HOST` - PostHog server URL (default: https://app.posthog.com)
+
+**Other Optional:**
 - `OPENAI_API_KEY` - For future banner generation
 
 **Configuration:**
 Set in `.env` file or environment:
 ```bash
+# Required
 export GEMINI_API_KEY="your-key-here"
+export DATABASE_URL="postgresql://user:pass@localhost:5432/briefly"
+
+# Observability (Phase 0)
+export LANGFUSE_PUBLIC_KEY="pk-lf-..."
+export LANGFUSE_SECRET_KEY="sk-lf-..."
+export LANGFUSE_HOST="https://cloud.langfuse.com"
+export POSTHOG_API_KEY="phc_..."
+export POSTHOG_HOST="https://app.posthog.com"
 ```
+
+**Note:** LangFuse is currently in local logging mode. HTTP API integration pending.
 
 ## Performance Considerations
 
-- **SQLite caching** reduces redundant API calls
+- **SQLite caching** reduces redundant API calls (being migrated to PostgreSQL)
 - **Concurrent processing** planned but not yet implemented
 - **Typical processing time**: ~2-3 minutes for 13 articles
 - **Cache hit rate**: 0-60% depending on previous runs
+
+## Phase 0 Features (Implemented)
+
+### Theme System
+**Database-driven theme classification with LLM-based relevance scoring**
+
+- **10 Default Themes** seeded on first run (AI/ML, Cloud/DevOps, Software Engineering, etc.)
+- **CLI Management**: Full CRUD operations via `briefly theme` commands
+- **Web UI**: Theme management interface at `/themes`
+- **LLM Classification**: Articles automatically classified using Gemini with JSON prompts
+- **Relevance Threshold**: 0.4 (40%) minimum score required for theme assignment
+- **Theme Structure**:
+  - Name, description, keywords
+  - Enable/disable toggle
+  - Used in pipeline categorization
+
+**Files**: `internal/themes/classifier.go`, `internal/pipeline/theme_categorizer.go`, `cmd/handlers/theme.go`
+
+### Manual URL Submission
+**User-submitted URLs with status tracking and automatic processing**
+
+- **CLI Commands**: `briefly url add/list/status/retry/clear`
+- **Web UI**: Submission form at `/submit`
+- **Status Flow**: `pending` → `processing` → `processed`/`failed`
+- **Auto-Processing**: Integrated with `briefly aggregate` command
+- **Feed Integration**: Manual URLs converted to feed items for unified processing
+- **Error Handling**: Failed URLs tracked with error messages, retry capability
+
+**Files**: `internal/sources/manager.go` (AggregateManualURLs), `cmd/handlers/manual_url.go`
+
+### Observability Infrastructure
+**LangFuse + PostHog tracking for LLM operations and user analytics**
+
+**LangFuse (LLM Tracing):**
+- Wraps all Gemini API calls via `TracedClient`
+- Tracks: prompts, completions, tokens, latency, costs
+- Currently: Local logging mode (stdout)
+- Future: HTTP API integration when SDK stabilizes
+- Files: `internal/observability/langfuse.go`, `internal/llm/traced_client.go`
+
+**PostHog (Analytics):**
+- Fully integrated with official Go SDK
+- Tracks key events:
+  - Digest generation, article processing, theme classification
+  - Manual URL submissions, article clicks, theme filters
+  - LLM calls (model, operation, tokens, latency)
+- Frontend tracking in web pages (`/themes`, `/submit`)
+- Files: `internal/observability/posthog.go`
+
+### Database Migration (PostgreSQL)
+**Replaced SQLite with PostgreSQL for production scalability**
+
+- **Repository Pattern**: Clean abstractions in `internal/persistence/interfaces.go`
+- **7 Migrations** (as of Phase 0):
+  1. Initial schema (articles, summaries, feeds)
+  2. Feed items
+  3. Themes table
+  4. Manual URLs table
+  5. Article-theme relationships
+  6. Default theme seeds
+  7. Manual submissions feed
+- **Graceful Fallback**: Observability clients optional (no crashes if disabled)
 
 ## Known Issues / Future Work
 

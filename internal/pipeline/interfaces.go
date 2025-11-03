@@ -129,3 +129,15 @@ type BannerGenerator interface {
 	// AnalyzeThemes identifies content themes for banner generation
 	AnalyzeThemes(digest *core.Digest) ([]core.ContentTheme, error)
 }
+
+// CitationTracker handles citation extraction and storage (Phase 1)
+type CitationTracker interface {
+	// TrackArticle creates a citation record for an article
+	TrackArticle(ctx context.Context, article *core.Article) (*core.Citation, error)
+
+	// TrackBatch creates citation records for multiple articles
+	TrackBatch(ctx context.Context, articles []core.Article) (map[string]*core.Citation, error)
+
+	// GetCitation retrieves a citation by article ID
+	GetCitation(ctx context.Context, articleID string) (*core.Citation, error)
+}

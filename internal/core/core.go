@@ -41,7 +41,12 @@ type Article struct {
 	Category          string  `json:"category"`         // Article category (Platform Updates, From the Field, etc.)
 	QualityScore      float64 `json:"quality_score"`    // 0.0-1.0
 	SignalStrength    float64 `json:"signal_strength"`  // 0.0-1.0 (replaces RelevanceScore)
-	
+
+	// Theme classification (Phase 1)
+	ThemeID              *string   `json:"theme_id,omitempty"`               // Primary theme assigned to this article
+	ThemeRelevanceScore  *float64  `json:"theme_relevance_score,omitempty"`  // Relevance score (0.0-1.0) for the assigned theme
+	DatePublished        time.Time `json:"date_published"`                    // Original publication date from feed
+
 	// Content-specific metadata (conditional)
 	Duration  int    `json:"duration,omitempty"`   // YouTube only
 	Channel   string `json:"channel,omitempty"`    // YouTube only
@@ -81,6 +86,20 @@ type Summary struct {
 	Embedding       []float64 `json:"embedding"`        // Vector embedding of the summary content
 	TopicCluster    string    `json:"topic_cluster"`    // Assigned topic cluster label
 	TopicConfidence float64   `json:"topic_confidence"` // Confidence score for topic assignment
+
+	// Phase 1: Structured summary support
+	SummaryType       string                     `json:"summary_type,omitempty"`       // Type: "simple" or "structured"
+	StructuredContent *StructuredSummaryContent  `json:"structured_content,omitempty"` // Structured sections (if type=structured)
+}
+
+// StructuredSummaryContent represents structured summary sections (Phase 1)
+// Generated using Gemini's response_schema API for consistent, parseable output
+type StructuredSummaryContent struct {
+	KeyPoints        []string `json:"key_points"`                  // 3-5 key bullet points
+	Context          string   `json:"context"`                     // Background/why this matters
+	MainInsight      string   `json:"main_insight"`                // Core takeaway (1-2 sentences)
+	TechnicalDetails string   `json:"technical_details,omitempty"` // Optional: Technical aspects
+	Impact           string   `json:"impact,omitempty"`            // Optional: Who/how it affects
 }
 
 // Digest represents a complete digest with user's take (v3.0 simplified)
@@ -374,3 +393,17 @@ const (
 	ManualURLStatusProcessed  = "processed"
 	ManualURLStatusFailed     = "failed"
 )
+
+// Citation represents source attribution metadata for an article (Phase 1)
+type Citation struct {
+	ID            string                 `json:"id"`                      // Unique identifier
+	ArticleID     string                 `json:"article_id"`              // Reference to source article
+	URL           string                 `json:"url"`                     // Canonical URL
+	Title         string                 `json:"title,omitempty"`         // Original title from source
+	Publisher     string                 `json:"publisher,omitempty"`     // Publisher or domain name
+	Author        string                 `json:"author,omitempty"`        // Article author if available
+	PublishedDate *time.Time             `json:"published_date,omitempty"` // Original publication date
+	AccessedDate  time.Time              `json:"accessed_date"`           // When we fetched this article
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`      // Additional metadata (DOI, ISBN, etc.)
+	CreatedAt     time.Time              `json:"created_at"`              // Citation record creation
+}

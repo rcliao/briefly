@@ -20,7 +20,7 @@ type ThemeCategorizer struct {
 func NewThemeCategorizer(db persistence.Database, llmClient *llm.TracedClient, posthog *observability.PostHogClient) *ThemeCategorizer {
 	return &ThemeCategorizer{
 		db:         db,
-		classifier: themes.NewClassifier(llmClient, posthog),
+		classifier: themes.NewClassifierWithClients(llmClient, posthog),
 	}
 }
 

@@ -64,6 +64,7 @@ Examples:
 	// Add subcommands
 	rootCmd.AddCommand(NewMigrateCmd())            // NEW: Database migrations
 	rootCmd.AddCommand(NewAggregateCmd())          // NEW: News aggregation
+	rootCmd.AddCommand(NewClassifyCmd())           // NEW: Article classification (Phase 1)
 	rootCmd.AddCommand(NewFeedCmd())               // NEW: Feed management
 	rootCmd.AddCommand(NewThemeCmd())              // NEW: Theme management (Phase 0)
 	rootCmd.AddCommand(NewManualURLCmd())          // NEW: Manual URL management (Phase 0)

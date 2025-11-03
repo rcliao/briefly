@@ -1,12 +1,14 @@
 package pipeline
 
 import (
+	"briefly/internal/citations"
 	"briefly/internal/clustering"
 	"briefly/internal/core"
 	"briefly/internal/fetch"
 	"briefly/internal/llm"
 	"briefly/internal/narrative"
 	"briefly/internal/parser"
+	"briefly/internal/persistence"
 	"briefly/internal/render"
 	"briefly/internal/store"
 	"context"
@@ -491,4 +493,27 @@ func NewCategorizerAdapter(categorizer interface {
 
 func (a *CategorizerAdapter) CategorizeArticle(ctx context.Context, article *core.Article, summary *core.Summary) (string, error) {
 	return a.categorizer.CategorizeArticle(ctx, article, summary)
+}
+
+// CitationTrackerAdapter wraps internal/citations to implement CitationTracker
+type CitationTrackerAdapter struct {
+	tracker *citations.Tracker
+}
+
+func NewCitationTrackerAdapter(db persistence.Database) *CitationTrackerAdapter {
+	return &CitationTrackerAdapter{
+		tracker: citations.NewTracker(db),
+	}
+}
+
+func (a *CitationTrackerAdapter) TrackArticle(ctx context.Context, article *core.Article) (*core.Citation, error) {
+	return a.tracker.TrackArticle(ctx, article)
+}
+
+func (a *CitationTrackerAdapter) TrackBatch(ctx context.Context, articles []core.Article) (map[string]*core.Citation, error) {
+	return a.tracker.TrackBatch(ctx, articles)
+}
+
+func (a *CitationTrackerAdapter) GetCitation(ctx context.Context, articleID string) (*core.Citation, error) {
+	return a.tracker.GetCitation(ctx, articleID)
 }

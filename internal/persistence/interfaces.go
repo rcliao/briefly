@@ -193,6 +193,33 @@ type ManualURLRepository interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// CitationRepository handles citation persistence operations (Phase 1)
+type CitationRepository interface {
+	// Create inserts a new citation
+	Create(ctx context.Context, citation *core.Citation) error
+
+	// Get retrieves a citation by ID
+	Get(ctx context.Context, id string) (*core.Citation, error)
+
+	// GetByArticleID retrieves citation for a specific article
+	GetByArticleID(ctx context.Context, articleID string) (*core.Citation, error)
+
+	// GetByArticleIDs retrieves citations for multiple articles (batch lookup)
+	GetByArticleIDs(ctx context.Context, articleIDs []string) (map[string]*core.Citation, error)
+
+	// List retrieves citations with pagination
+	List(ctx context.Context, opts ListOptions) ([]core.Citation, error)
+
+	// Update updates an existing citation
+	Update(ctx context.Context, citation *core.Citation) error
+
+	// Delete removes a citation by ID
+	Delete(ctx context.Context, id string) error
+
+	// DeleteByArticleID removes citation for a specific article
+	DeleteByArticleID(ctx context.Context, articleID string) error
+}
+
 // ListOptions provides common filtering and pagination options
 type ListOptions struct {
 	Limit  int               // Maximum number of results (0 for no limit)
@@ -224,6 +251,9 @@ type Database interface {
 
 	// ManualURLs returns the manual URL repository (Phase 0)
 	ManualURLs() ManualURLRepository
+
+	// Citations returns the citation repository (Phase 1)
+	Citations() CitationRepository
 
 	// Close closes the database connection
 	Close() error

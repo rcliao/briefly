@@ -47,9 +47,10 @@ type Client struct {
 
 // TextGenerationOptions contains options for text generation
 type TextGenerationOptions struct {
-	MaxTokens   int32   // Maximum number of tokens to generate
-	Temperature float32 // Temperature for randomness (0.0 to 1.0)
-	Model       string  // Model to use (optional, defaults to client's model)
+	MaxTokens      int32        // Maximum number of tokens to generate
+	Temperature    float32      // Temperature for randomness (0.0 to 1.0)
+	Model          string       // Model to use (optional, defaults to client's model)
+	ResponseSchema *genai.Schema // Optional: Schema for structured output (Phase 1)
 }
 
 // NewClient creates a new LLM client.
@@ -686,13 +687,18 @@ func (c *Client) GenerateText(ctx context.Context, prompt string, options TextGe
 	}
 
 	// Set generation config if options are provided
-	if options.MaxTokens > 0 || options.Temperature > 0 {
+	if options.MaxTokens > 0 || options.Temperature > 0 || options.ResponseSchema != nil {
 		config := &genai.GenerationConfig{}
 		if options.MaxTokens > 0 {
 			config.MaxOutputTokens = &options.MaxTokens
 		}
 		if options.Temperature > 0 {
 			config.Temperature = &options.Temperature
+		}
+		// Phase 1: Structured output support
+		if options.ResponseSchema != nil {
+			config.ResponseMIMEType = "application/json"
+			config.ResponseSchema = options.ResponseSchema
 		}
 		model.GenerationConfig = *config
 	}

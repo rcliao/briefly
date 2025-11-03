@@ -385,3 +385,320 @@ func (m *Manager) AggregateManualURLs(ctx context.Context, maxURLs int) (*Manual
 
 	return result, nil
 }
+
+// ClassificationOptions configures the classification process
+type ClassificationOptions struct {
+	MaxArticles    int     // Maximum number of articles to classify (0 = no limit)
+	MinRelevance   float64 // Minimum relevance score to assign a theme (0.0-1.0)
+	ThemeFilter    string  // Optional: Only classify articles matching this theme
+	SkipProcessed  bool    // Skip articles that already have a theme assigned
+	FetchContent   bool    // Whether to fetch full content for classification
+	MaxConcurrency int     // Number of articles to process concurrently
+}
+
+// DefaultClassificationOptions returns sensible defaults
+func DefaultClassificationOptions() ClassificationOptions {
+	return ClassificationOptions{
+		MaxArticles:    100,
+		MinRelevance:   0.4, // 40% relevance threshold (same as Phase 0)
+		ThemeFilter:    "",
+		SkipProcessed:  true,
+		FetchContent:   true,
+		MaxConcurrency: 5,
+	}
+}
+
+// ArticleClassificationResult contains classification statistics
+type ArticleClassificationResult struct {
+	ArticlesProcessed   int
+	ArticlesClassified  int
+	ArticlesFiltered    int // Below relevance threshold
+	ArticlesFailed      int
+	ThemeDistribution   map[string]int // theme_name -> count
+	Errors              []error
+}
+
+// ClassifyFeedItems processes unprocessed feed items and classifies them by theme
+// This is the Phase 1 RSS enhancement feature that adds theme-based filtering during aggregation
+func (m *Manager) ClassifyFeedItems(ctx context.Context, processor ArticleProcessor, classifier ThemeClassifier, opts ClassificationOptions) (*ArticleClassificationResult, error) {
+	result := &ArticleClassificationResult{
+		ThemeDistribution: make(map[string]int),
+	}
+
+	// Get unprocessed feed items
+	limit := opts.MaxArticles
+	if limit == 0 {
+		limit = 1000 // Default max
+	}
+
+	feedItems, err := m.db.FeedItems().GetUnprocessed(ctx, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unprocessed feed items: %w", err)
+	}
+
+	if len(feedItems) == 0 {
+		m.log.Info("No unprocessed feed items to classify")
+		return result, nil
+	}
+
+	m.log.Info("Starting theme classification", "item_count", len(feedItems), "min_relevance", opts.MinRelevance)
+
+	// Get available themes (enabled only)
+	themes, err := m.db.Themes().List(ctx, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active themes: %w", err)
+	}
+
+	if len(themes) == 0 {
+		m.log.Warn("No active themes found - articles will be stored without classification")
+	}
+
+	// Process items with concurrency control
+	sem := make(chan struct{}, opts.MaxConcurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for _, item := range feedItems {
+		select {
+		case <-ctx.Done():
+			m.log.Warn("Classification cancelled", "reason", ctx.Err())
+			return result, ctx.Err()
+		default:
+		}
+
+		wg.Add(1)
+		sem <- struct{}{} // Acquire semaphore
+
+		go func(feedItem core.FeedItem) {
+			defer wg.Done()
+			defer func() { <-sem }() // Release semaphore
+
+			itemResult := m.classifyFeedItem(ctx, feedItem, processor, classifier, themes, opts)
+
+			mu.Lock()
+			result.ArticlesProcessed++
+			if itemResult.Classified {
+				result.ArticlesClassified++
+				if itemResult.ThemeName != "" {
+					result.ThemeDistribution[itemResult.ThemeName]++
+				}
+			} else if itemResult.Filtered {
+				result.ArticlesFiltered++
+			} else if itemResult.Error != nil {
+				result.ArticlesFailed++
+				result.Errors = append(result.Errors, itemResult.Error)
+			}
+			mu.Unlock()
+		}(item)
+	}
+
+	wg.Wait()
+
+	m.log.Info("Classification completed",
+		"processed", result.ArticlesProcessed,
+		"classified", result.ArticlesClassified,
+		"filtered", result.ArticlesFiltered,
+		"failed", result.ArticlesFailed,
+	)
+
+	return result, nil
+}
+
+// ItemClassificationResult contains results for a single item classification
+type ItemClassificationResult struct {
+	Classified bool
+	Filtered   bool   // True if below relevance threshold
+	ThemeName  string // Name of assigned theme
+	Error      error
+}
+
+// classifyFeedItem processes a single feed item: fetches content, classifies, and stores
+func (m *Manager) classifyFeedItem(ctx context.Context, item core.FeedItem, processor ArticleProcessor, classifier ThemeClassifier, themes []core.Theme, opts ClassificationOptions) ItemClassificationResult {
+	result := ItemClassificationResult{}
+
+	// Fetch and process article content
+	article, err := processor.ProcessArticle(ctx, item.Link)
+	if err != nil {
+		m.log.Error("Failed to process article", "url", item.Link, "error", err)
+		result.Error = fmt.Errorf("process %s: %w", item.Link, err)
+
+		// Mark feed item as processed even if failed (avoid retry loops)
+		_ = m.db.FeedItems().MarkProcessed(ctx, item.ID)
+		return result
+	}
+
+	// Enrich article with feed item metadata
+	if article.Title == "" {
+		article.Title = item.Title
+	}
+	article.DatePublished = item.Published
+
+	// Skip classification if no themes available
+	if len(themes) == 0 {
+		// Store article without theme
+		if err := m.db.Articles().Create(ctx, article); err != nil {
+			m.log.Error("Failed to store article", "url", item.Link, "error", err)
+			result.Error = fmt.Errorf("store %s: %w", item.Link, err)
+			return result
+		}
+
+		// Mark feed item as processed
+		_ = m.db.FeedItems().MarkProcessed(ctx, item.ID)
+		result.Classified = false
+		return result
+	}
+
+	// Classify article
+	bestMatch, err := classifier.GetBestMatch(ctx, *article, themes, opts.MinRelevance)
+	if err != nil {
+		m.log.Error("Failed to classify article", "url", item.Link, "error", err)
+		result.Error = fmt.Errorf("classify %s: %w", item.Link, err)
+		return result
+	}
+
+	// Check if article passes relevance threshold
+	if bestMatch == nil {
+		m.log.Debug("Article filtered (below relevance threshold)", "url", item.Link, "min_relevance", opts.MinRelevance)
+		result.Filtered = true
+
+		// Mark feed item as processed (but don't store article)
+		_ = m.db.FeedItems().MarkProcessed(ctx, item.ID)
+		return result
+	}
+
+	// Check theme filter if specified
+	if opts.ThemeFilter != "" && bestMatch.GetThemeName() != opts.ThemeFilter {
+		m.log.Debug("Article filtered (theme mismatch)", "url", item.Link, "theme", bestMatch.GetThemeName(), "filter", opts.ThemeFilter)
+		result.Filtered = true
+
+		// Mark feed item as processed
+		_ = m.db.FeedItems().MarkProcessed(ctx, item.ID)
+		return result
+	}
+
+	// Assign theme to article (use interface methods)
+	themeID := bestMatch.GetThemeID()
+	relevanceScore := bestMatch.GetRelevanceScore()
+	article.ThemeID = &themeID
+	article.ThemeRelevanceScore = &relevanceScore
+
+	// Store article
+	if err := m.db.Articles().Create(ctx, article); err != nil {
+		m.log.Error("Failed to store article", "url", item.Link, "error", err)
+		result.Error = fmt.Errorf("store %s: %w", item.Link, err)
+		return result
+	}
+
+	// Mark feed item as processed
+	if err := m.db.FeedItems().MarkProcessed(ctx, item.ID); err != nil {
+		m.log.Error("Failed to mark feed item as processed", "id", item.ID, "error", err)
+	}
+
+	result.Classified = true
+	result.ThemeName = bestMatch.GetThemeName()
+	m.log.Info("Article classified and stored",
+		"url", item.Link,
+		"theme", bestMatch.GetThemeName(),
+		"relevance", fmt.Sprintf("%.2f", bestMatch.GetRelevanceScore()),
+	)
+
+	return result
+}
+
+// ArticleProcessor interface for article content processing
+type ArticleProcessor interface {
+	ProcessArticle(ctx context.Context, url string) (*core.Article, error)
+}
+
+// ThemeClassifier interface for theme classification
+// This is an abstract interface that can be implemented by themes.Classifier
+type ThemeClassifier interface {
+	GetBestMatch(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (ThemeClassificationResult, error)
+}
+
+// ThemeClassificationResult contains the result of theme classification
+// This is defined to avoid import cycle with themes package
+type ThemeClassificationResult interface {
+	GetThemeID() string
+	GetThemeName() string
+	GetRelevanceScore() float64
+	GetReasoning() string
+}
+
+// ClassificationResultAdapter adapts themes.ClassificationResult to ThemeClassificationResult
+type ClassificationResultAdapter struct {
+	ThemeID        string
+	ThemeName      string
+	RelevanceScore float64
+	Reasoning      string
+}
+
+func (c ClassificationResultAdapter) GetThemeID() string {
+	return c.ThemeID
+}
+
+func (c ClassificationResultAdapter) GetThemeName() string {
+	return c.ThemeName
+}
+
+func (c ClassificationResultAdapter) GetRelevanceScore() float64 {
+	return c.RelevanceScore
+}
+
+func (c ClassificationResultAdapter) GetReasoning() string {
+	return c.Reasoning
+}
+
+// ThemeClassifierAdapter wraps a classifier with a concrete getBestMatch implementation
+type ThemeClassifierAdapter struct {
+	// Store the actual implementation as a function
+	getBestMatchFunc func(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (ThemeClassificationResult, error)
+}
+
+// NewThemeClassifierAdapter creates an adapter from a classifier
+// The classifier must have a GetBestMatch method that returns a result implementing ThemeClassificationResult
+func NewThemeClassifierAdapter(classifier interface{}) *ThemeClassifierAdapter {
+	// Define the expected interface
+	type classifierWithGetBestMatch interface {
+		GetBestMatch(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (ThemeClassificationResult, error)
+	}
+
+	// Try direct cast first
+	if c, ok := classifier.(classifierWithGetBestMatch); ok {
+		return &ThemeClassifierAdapter{
+			getBestMatchFunc: c.GetBestMatch,
+		}
+	}
+
+	// Otherwise, we need to wrap the result
+	// This handles classifiers that return concrete types (like *themes.ClassificationResult)
+	return &ThemeClassifierAdapter{
+		getBestMatchFunc: func(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (ThemeClassificationResult, error) {
+			// Use reflection-free approach: call the method directly via interface{}
+			type anyResultClassifier interface {
+				GetBestMatch(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (interface{}, error)
+			}
+
+			if c, ok := classifier.(anyResultClassifier); ok {
+				result, err := c.GetBestMatch(ctx, article, themes, minRelevance)
+				if err != nil {
+					return nil, err
+				}
+				if result == nil {
+					return nil, nil
+				}
+				// The result should implement ThemeClassificationResult
+				if tcr, ok := result.(ThemeClassificationResult); ok {
+					return tcr, nil
+				}
+			}
+
+			panic(fmt.Sprintf("classifier %T does not implement expected GetBestMatch signature", classifier))
+		},
+	}
+}
+
+// GetBestMatch implements the ThemeClassifier interface
+func (a *ThemeClassifierAdapter) GetBestMatch(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (ThemeClassificationResult, error) {
+	return a.getBestMatchFunc(ctx, article, themes, minRelevance)
+}

@@ -22,7 +22,8 @@ type Pipeline struct {
 	narrative     NarrativeGenerator
 	renderer      MarkdownRenderer
 	cache         CacheManager
-	banner        BannerGenerator // Optional
+	banner        BannerGenerator   // Optional
+	citationTracker CitationTracker // Phase 1: Track citations for articles
 
 	// Configuration
 	config *Config
@@ -47,6 +48,9 @@ type Config struct {
 	// Quality settings
 	MinArticleLength  int     // Minimum chars for valid article
 	MinSummaryQuality float64 // 0-1 quality threshold
+
+	// Phase 1: Summary settings
+	UseStructuredSummaries bool // Use structured summaries with sections (default: false)
 }
 
 // DefaultConfig returns sensible default configuration
@@ -62,6 +66,7 @@ func DefaultConfig() *Config {
 		BannerStyle:          "tech",
 		MinArticleLength:     100,
 		MinSummaryQuality:    0.5,
+		UseStructuredSummaries: false, // Default to simple summaries for backward compatibility
 	}
 }
 
@@ -78,6 +83,7 @@ func NewPipeline(
 	renderer MarkdownRenderer,
 	cache CacheManager,
 	banner BannerGenerator,
+	citationTracker CitationTracker,
 	config *Config,
 ) *Pipeline {
 	if config == nil {
@@ -85,18 +91,19 @@ func NewPipeline(
 	}
 
 	return &Pipeline{
-		parser:      parser,
-		fetcher:     fetcher,
-		summarizer:  summarizer,
-		categorizer: categorizer,
-		embedder:    embedder,
-		clusterer:   clusterer,
-		orderer:     orderer,
-		narrative:   narrative,
-		renderer:    renderer,
-		cache:       cache,
-		banner:      banner,
-		config:      config,
+		parser:          parser,
+		fetcher:         fetcher,
+		summarizer:      summarizer,
+		categorizer:     categorizer,
+		embedder:        embedder,
+		clusterer:       clusterer,
+		orderer:         orderer,
+		narrative:       narrative,
+		renderer:        renderer,
+		cache:           cache,
+		banner:          banner,
+		citationTracker: citationTracker,
+		config:          config,
 	}
 }
 
@@ -371,6 +378,15 @@ func (p *Pipeline) processArticles(ctx context.Context, links []core.Link, stats
 			// Log error but continue with other articles
 			fmt.Printf("           ✗ Summarization failed: %v\n", err)
 			continue
+		}
+
+		// Track citation (Phase 1) - non-fatal if it fails
+		if p.citationTracker != nil {
+			_, err := p.citationTracker.TrackArticle(ctx, article)
+			if err != nil {
+				// Log warning but continue - citation tracking is not critical
+				fmt.Printf("           ⚠️  Citation tracking failed: %v\n", err)
+			}
 		}
 
 		// Cache result

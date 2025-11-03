@@ -20,8 +20,9 @@ type PostgresDB struct {
 	feeds            FeedRepository
 	feedItems        FeedItemRepository
 	digests          DigestRepository
-	themes           ThemeRepository    // Phase 0
+	themes           ThemeRepository     // Phase 0
 	manualURLs       ManualURLRepository // Phase 0
+	citations        CitationRepository  // Phase 1
 }
 
 // NewPostgresDB creates a new PostgreSQL database connection
@@ -51,6 +52,7 @@ func NewPostgresDB(connectionString string) (*PostgresDB, error) {
 	pgDB.digests = &postgresDigestRepo{db: db}
 	pgDB.themes = &postgresThemeRepo{db: db}           // Phase 0
 	pgDB.manualURLs = &postgresManualURLRepo{db: db}    // Phase 0
+	pgDB.citations = &postgresCitationRepo{db: db}     // Phase 1
 
 	return pgDB, nil
 }
@@ -62,6 +64,7 @@ func (p *PostgresDB) FeedItems() FeedItemRepository     { return p.feedItems }
 func (p *PostgresDB) Digests() DigestRepository         { return p.digests }
 func (p *PostgresDB) Themes() ThemeRepository           { return p.themes }       // Phase 0
 func (p *PostgresDB) ManualURLs() ManualURLRepository   { return p.manualURLs }   // Phase 0
+func (p *PostgresDB) Citations() CitationRepository     { return p.citations }    // Phase 1
 
 func (p *PostgresDB) Close() error {
 	return p.db.Close()
@@ -85,6 +88,7 @@ func (p *PostgresDB) BeginTx(ctx context.Context) (Transaction, error) {
 		digests:    &postgresDigestRepo{db: p.db, tx: tx},
 		themes:     &postgresThemeRepo{db: p.db, tx: tx},        // Phase 0
 		manualURLs: &postgresManualURLRepo{db: p.db, tx: tx},    // Phase 0
+		citations:  &postgresCitationRepo{db: p.db, tx: tx},     // Phase 1
 	}, nil
 }
 
@@ -98,6 +102,7 @@ type postgresTx struct {
 	digests    DigestRepository
 	themes     ThemeRepository     // Phase 0
 	manualURLs ManualURLRepository // Phase 0
+	citations  CitationRepository  // Phase 1
 }
 
 func (t *postgresTx) Commit() error                      { return t.tx.Commit() }
@@ -109,6 +114,7 @@ func (t *postgresTx) FeedItems() FeedItemRepository      { return t.feedItems }
 func (t *postgresTx) Digests() DigestRepository          { return t.digests }
 func (t *postgresTx) Themes() ThemeRepository            { return t.themes }      // Phase 0
 func (t *postgresTx) ManualURLs() ManualURLRepository    { return t.manualURLs }  // Phase 0
+func (t *postgresTx) Citations() CitationRepository      { return t.citations }   // Phase 1
 
 // postgresArticleRepo implements ArticleRepository for PostgreSQL
 type postgresArticleRepo struct {

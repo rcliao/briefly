@@ -9,6 +9,8 @@ import (
 	"briefly/internal/summarize"
 	"context"
 	"fmt"
+
+	"github.com/google/generative-ai-go/genai" // Phase 1: For structured summaries
 )
 
 // Builder helps construct a fully configured Pipeline
@@ -145,8 +147,19 @@ func (b *Builder) Build() (*Pipeline, error) {
 
 	// Create summarizer adapter using the new summarize package
 	llmClientForSummarize := &LLMClientForSummarize{client: b.llmClient}
-	summarizerCore := summarize.NewSummarizerWithDefaults(llmClientForSummarize)
-	summarizer := &SummarizerAdapter{summarizer: summarizerCore}
+	var summarizerCore summarize.SummarizerInterface
+	summarizerCore = summarize.NewSummarizerWithDefaults(llmClientForSummarize)
+
+	// Phase 1: Wrap with LangFuse tracking if available
+	if b.langfuse != nil && b.langfuse.IsEnabled() {
+		fmt.Println("📊 LangFuse tracking enabled for summarization")
+		summarizerCore = summarize.NewTracedSummarizer(summarizerCore.(*summarize.Summarizer), b.langfuse)
+	}
+
+	summarizer := &SummarizerAdapter{
+		summarizer:    summarizerCore,
+		useStructured: b.config.UseStructuredSummaries, // Phase 1
+	}
 
 	// Create categorizer: use theme-based if database is available, otherwise use legacy
 	var categorizer ArticleCategorizer
@@ -162,6 +175,13 @@ func (b *Builder) Build() (*Pipeline, error) {
 		categorizer = NewCategorizerAdapter(categorizerCore)
 	}
 
+	// Create citation tracker if database is available (Phase 1)
+	var citationTracker CitationTracker
+	if b.db != nil {
+		fmt.Println("📚 Citation tracking enabled")
+		citationTracker = NewCitationTrackerAdapter(b.db)
+	}
+
 	// Build pipeline
 	pipeline := NewPipeline(
 		parser,
@@ -175,6 +195,7 @@ func (b *Builder) Build() (*Pipeline, error) {
 		renderer,
 		cache,
 		banner,
+		citationTracker,
 		b.config,
 	)
 
@@ -183,10 +204,15 @@ func (b *Builder) Build() (*Pipeline, error) {
 
 // SummarizerAdapter wraps internal/summarize to implement pipeline.ArticleSummarizer
 type SummarizerAdapter struct {
-	summarizer *summarize.Summarizer
+	summarizer    summarize.SummarizerInterface // Phase 1: Use interface for flexibility
+	useStructured bool                          // Phase 1: Use structured summaries
 }
 
 func (s *SummarizerAdapter) SummarizeArticle(ctx context.Context, article *core.Article) (*core.Summary, error) {
+	// Phase 1: Choose between simple and structured summaries
+	if s.useStructured {
+		return s.summarizer.SummarizeArticleStructured(ctx, article)
+	}
 	return s.summarizer.SummarizeArticle(ctx, article)
 }
 
@@ -204,5 +230,23 @@ type LLMClientForSummarize struct {
 }
 
 func (l *LLMClientForSummarize) GenerateText(ctx context.Context, prompt string, options interface{}) (string, error) {
-	return l.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
+	// Phase 1: Handle structured summary options with ResponseSchema
+	llmOptions := llm.TextGenerationOptions{}
+
+	// Try to extract options if provided
+	if options != nil {
+		// Handle struct with ResponseSchema (for structured summaries)
+		type StructuredOptions struct {
+			ResponseSchema *genai.Schema
+			Temperature    float32
+		}
+
+		// Type assertion to check if it's our structured options
+		if structOpts, ok := options.(StructuredOptions); ok {
+			llmOptions.ResponseSchema = structOpts.ResponseSchema
+			llmOptions.Temperature = structOpts.Temperature
+		}
+	}
+
+	return l.client.GenerateText(ctx, prompt, llmOptions)
 }

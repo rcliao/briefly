@@ -9,20 +9,38 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/google/generative-ai-go/genai"
 )
+
+// LLMClient interface for theme classification
+type LLMClient interface {
+	GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error)
+}
+
+// PostHogTracker interface for analytics tracking
+type PostHogTracker interface {
+	IsEnabled() bool
+	TrackThemeClassification(ctx context.Context, articleID string, themeName string, relevance float64) error
+}
 
 // Classifier classifies articles into themes using LLM
 type Classifier struct {
-	llmClient *llm.TracedClient
-	posthog   *observability.PostHogClient
+	llmClient LLMClient
+	posthog   PostHogTracker
 }
 
 // NewClassifier creates a new theme classifier
-func NewClassifier(llmClient *llm.TracedClient, posthog *observability.PostHogClient) *Classifier {
+func NewClassifier(llmClient LLMClient, posthog PostHogTracker) *Classifier {
 	return &Classifier{
 		llmClient: llmClient,
 		posthog:   posthog,
 	}
+}
+
+// NewClassifierWithClients creates a new theme classifier with concrete types (convenience method)
+func NewClassifierWithClients(llmClient *llm.TracedClient, posthog *observability.PostHogClient) *Classifier {
+	return NewClassifier(llmClient, posthog)
 }
 
 // ClassificationResult contains the results of theme classification
@@ -31,6 +49,68 @@ type ClassificationResult struct {
 	ThemeName      string  // Name of the matched theme
 	RelevanceScore float64 // Relevance score (0.0-1.0)
 	Reasoning      string  // Why this theme was chosen
+}
+
+// Interface methods for sources.ThemeClassificationResult compatibility
+func (c *ClassificationResult) GetThemeID() string {
+	if c == nil {
+		return ""
+	}
+	return c.ThemeID
+}
+
+func (c *ClassificationResult) GetThemeName() string {
+	if c == nil {
+		return ""
+	}
+	return c.ThemeName
+}
+
+func (c *ClassificationResult) GetRelevanceScore() float64 {
+	if c == nil {
+		return 0.0
+	}
+	return c.RelevanceScore
+}
+
+func (c *ClassificationResult) GetReasoning() string {
+	if c == nil {
+		return ""
+	}
+	return c.Reasoning
+}
+
+// CreateClassificationSchema creates a Gemini response schema for theme classification
+// This ensures the LLM returns properly structured JSON without parsing issues
+func CreateClassificationSchema() *genai.Schema {
+	return &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"classifications": {
+				Type:        genai.TypeArray,
+				Description: "List of theme classifications with relevance scores",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"theme_name": {
+							Type:        genai.TypeString,
+							Description: "Exact name of the theme from the provided list",
+						},
+						"relevance_score": {
+							Type:        genai.TypeNumber,
+							Description: "Relevance score from 0.0 to 1.0 indicating how well the article matches this theme",
+						},
+						"reasoning": {
+							Type:        genai.TypeString,
+							Description: "Brief explanation (1-2 sentences) for why this theme was assigned with this score",
+						},
+					},
+					Required: []string{"theme_name", "relevance_score", "reasoning"},
+				},
+			},
+		},
+		Required: []string{"classifications"},
+	}
 }
 
 // ClassifyArticle classifies an article against a list of themes
@@ -43,10 +123,14 @@ func (c *Classifier) ClassifyArticle(ctx context.Context, article core.Article, 
 	// Build the classification prompt
 	prompt := c.buildClassificationPrompt(article, themes)
 
-	// Use the LLM to classify
+	// Create schema for structured output
+	schema := CreateClassificationSchema()
+
+	// Use the LLM to classify with structured output (guaranteed valid JSON)
 	response, err := c.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
-		Temperature: 0.3, // Low temperature for more consistent classification
-		MaxTokens:   1000,
+		Temperature:    0.3, // Low temperature for more consistent classification
+		MaxTokens:      1000,
+		ResponseSchema: schema, // Phase 1: Structured output eliminates JSON parsing errors
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to classify article: %w", err)
@@ -129,44 +213,25 @@ func (c *Classifier) buildClassificationPrompt(article core.Article, themes []co
 	}
 
 	sb.WriteString("TASK:\n")
-	sb.WriteString("For each theme, provide a relevance score from 0.0 to 1.0 indicating how well the article matches that theme.\n")
-	sb.WriteString("Also provide a brief reasoning for your classification.\n\n")
+	sb.WriteString("For each theme above, provide:\n")
+	sb.WriteString("1. A relevance score from 0.0 to 1.0 indicating how well the article matches that theme\n")
+	sb.WriteString("2. Brief reasoning (1-2 sentences) explaining your classification\n\n")
 
-	sb.WriteString("Respond in JSON format:\n")
-	sb.WriteString("{\n")
-	sb.WriteString("  \"classifications\": [\n")
-	sb.WriteString("    {\n")
-	sb.WriteString("      \"theme_name\": \"Theme Name\",\n")
-	sb.WriteString("      \"relevance_score\": 0.85,\n")
-	sb.WriteString("      \"reasoning\": \"Brief explanation\"\n")
-	sb.WriteString("    }\n")
-	sb.WriteString("  ]\n")
-	sb.WriteString("}\n\n")
-
-	sb.WriteString("Important:\n")
+	sb.WriteString("Guidelines:\n")
 	sb.WriteString("- Only include themes with relevance_score > 0.1\n")
 	sb.WriteString("- Be honest and conservative with scores\n")
 	sb.WriteString("- Consider both the title and content\n")
 	sb.WriteString("- Match against theme keywords and descriptions\n")
+	sb.WriteString("- Use the exact theme name from the list above\n")
 
 	return sb.String()
 }
 
 // parseClassificationResponse parses the LLM JSON response into results
+// With structured output (ResponseSchema), the response is guaranteed to be valid JSON
 func (c *Classifier) parseClassificationResponse(response string, themes []core.Theme) ([]ClassificationResult, error) {
-	// Extract JSON from response (sometimes LLMs add markdown code blocks)
-	response = strings.TrimSpace(response)
-	if strings.HasPrefix(response, "```json") {
-		response = strings.TrimPrefix(response, "```json")
-		response = strings.TrimSuffix(response, "```")
-		response = strings.TrimSpace(response)
-	} else if strings.HasPrefix(response, "```") {
-		response = strings.TrimPrefix(response, "```")
-		response = strings.TrimSuffix(response, "```")
-		response = strings.TrimSpace(response)
-	}
-
-	// Parse JSON
+	// Parse JSON directly - no need to extract from markdown blocks
+	// because ResponseSchema guarantees clean JSON output
 	var parsed struct {
 		Classifications []struct {
 			ThemeName      string  `json:"theme_name"`
@@ -175,7 +240,7 @@ func (c *Classifier) parseClassificationResponse(response string, themes []core.
 		} `json:"classifications"`
 	}
 
-	if err := json.Unmarshal([]byte(response), &parsed); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimSpace(response)), &parsed); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON response: %w\nResponse: %s", err, response)
 	}
 

@@ -16,6 +16,15 @@ type LLMClient interface {
 	GenerateText(ctx context.Context, prompt string, options interface{}) (string, error)
 }
 
+// SummarizerInterface defines the interface for article summarization
+// Both Summarizer and TracedSummarizer implement this interface
+type SummarizerInterface interface {
+	SummarizeArticle(ctx context.Context, article *core.Article) (*core.Summary, error)
+	SummarizeArticleStructured(ctx context.Context, article *core.Article) (*core.Summary, error)
+	GenerateKeyPoints(ctx context.Context, content string) ([]string, error)
+	ExtractTitle(ctx context.Context, content string) (string, error)
+}
+
 // Summarizer handles article summarization using LLM
 type Summarizer struct {
 	llmClient LLMClient
