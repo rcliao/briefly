@@ -330,7 +330,7 @@ func generateDigestWithSummaries(ctx context.Context, db *persistence.PostgresDB
 		}
 
 		// Generate new summary
-		summary, err := summarizer.SummarizeArticleStructured(ctx, &article)
+		summary, err := summarizer.SummarizeArticle(ctx, &article)
 		if err != nil {
 			log.Warn("Failed to generate summary", "article_id", article.ID, "error", err)
 			// Create fallback summary
