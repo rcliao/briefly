@@ -561,7 +561,15 @@ func (r *postgresDigestRepo) Create(ctx context.Context, digest *core.Digest) er
 		return fmt.Errorf("failed to marshal digest: %w", err)
 	}
 
-	query := `INSERT INTO digests (id, date, content, created_at) VALUES ($1, $2, $3, $4)`
+	query := `
+		INSERT INTO digests (id, date, content, created_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (date)
+		DO UPDATE SET
+			id = EXCLUDED.id,
+			content = EXCLUDED.content,
+			created_at = EXCLUDED.created_at
+	`
 	_, err = r.query().ExecContext(ctx, query,
 		digest.ID, digest.Metadata.DateGenerated, digestJSON, time.Now().UTC(),
 	)

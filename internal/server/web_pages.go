@@ -534,6 +534,7 @@ const digestDetailPageTemplate = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Digest - Briefly</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.0/marked.min.js"></script>
     {{if .PostHogEnabled}}
     <script>
         !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
@@ -541,12 +542,17 @@ const digestDetailPageTemplate = `<!DOCTYPE html>
     </script>
     {{end}}
     <style>
-        .prose { max-width: 65ch; }
-        .prose h2 { font-size: 1.5rem; font-weight: 700; margin-top: 2rem; margin-bottom: 1rem; }
-        .prose h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+        .prose { max-width: none; }
+        .prose h2 { font-size: 1.5rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 1rem; color: #1f2937; }
+        .prose h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.75rem; color: #374151; }
         .prose p { margin-bottom: 1rem; line-height: 1.75; }
         .prose a { color: #2563eb; text-decoration: underline; }
         .prose a:hover { color: #1d4ed8; }
+        .prose strong { font-weight: 700; color: #1f2937; }
+        .prose em { font-style: italic; }
+        .prose ul, .prose ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .prose li { margin-bottom: 0.5rem; line-height: 1.75; }
+        .prose code { background-color: #f3f4f6; padding: 0.125rem 0.25rem; border-radius: 0.25rem; font-size: 0.875rem; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -600,7 +606,7 @@ const digestDetailPageTemplate = `<!DOCTYPE html>
                 if (digest.executive_summary) {
                     html += '<div class="bg-blue-50 border-l-4 border-blue-500 p-6 mb-8">';
                     html += '<h2 class="text-2xl font-bold text-gray-900 mb-4">🎯 Executive Summary</h2>';
-                    html += '<div class="prose text-gray-700">' + digest.executive_summary + '</div>';
+                    html += '<div class="prose text-gray-700">' + marked.parse(digest.executive_summary) + '</div>';
                     html += '</div>';
                 }
 
