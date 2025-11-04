@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="description" content="AI-curated tech news digest with weekly insights">
+
+    <title>{{ block "title" . }}Briefly - Tech News Digest{{ end }}</title>
+
+    <!-- Tailwind CSS + daisyUI -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.24/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.0/marked.min.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/custom.css">
+
+    <!-- PostHog Analytics -->
+    {{ if .PostHogEnabled }}
+    <script>
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+        posthog.init('{{ .PostHogAPIKey }}', {api_host: '{{ .PostHogHost }}'})
+    </script>
+    {{ end }}
+
+    <!-- Theme initialization script -->
+    <script>
+        // Initialize theme from localStorage or default to light
+        const theme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+    </script>
+
+    {{ block "head" . }}{{ end }}
+</head>
+<body class="bg-base-200 min-h-screen">
+    <!-- Header -->
+    {{ template "partials/header.html" . }}
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-6 md:py-8 max-w-6xl">
+        {{ block "content" . }}{{ end }}
+    </main>
+
+    <!-- Footer -->
+    {{ template "partials/footer.html" . }}
+
+    <!-- Toast notifications -->
+    <div id="toast-container" class="toast toast-end z-50">
+        <!-- HTMX will inject toasts here -->
+    </div>
+
+    <!-- Dark mode toggle script -->
+    <script>
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+
+            // Track theme change
+            if (window.posthog) {
+                posthog.capture('theme_toggled', { theme: newTheme });
+            }
+        }
+    </script>
+
+    {{ block "scripts" . }}{{ end }}
+</body>
+</html>

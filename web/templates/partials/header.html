@@ -1,0 +1,57 @@
+<header class="bg-base-100 shadow-sm sticky top-0 z-40">
+    <div class="container mx-auto px-4 max-w-6xl">
+        <div class="navbar min-h-16 px-0">
+            <!-- Logo -->
+            <div class="flex-1">
+                <a href="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                    <div class="text-3xl md:text-4xl">📰</div>
+                    <div>
+                        <h1 class="text-xl md:text-2xl font-bold">Briefly</h1>
+                        <p class="text-xs text-base-content/70 hidden md:block">Tech News Digest</p>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex-none flex items-center gap-2">
+                <!-- Search (placeholder for later) -->
+                <!--
+                <button class="btn btn-ghost btn-circle md:btn-md btn-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </button>
+                -->
+
+                <!-- Dark mode toggle -->
+                <button
+                    onclick="toggleTheme()"
+                    class="btn btn-ghost btn-circle md:btn-md btn-sm"
+                    aria-label="Toggle dark mode">
+                    <svg class="w-5 h-5 swap-on fill-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <!-- Moon icon (dark mode) -->
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                </button>
+
+                <!-- Dropdown menu (mobile) -->
+                <div class="dropdown dropdown-end">
+                    <label tabindex="0" class="btn btn-ghost btn-circle md:btn-md btn-sm">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </label>
+                    <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+                        <li><a href="/">Home</a></li>
+                        <li><a href="/digests">All Digests</a></li>
+                        <li class="menu-title">
+                            <span>Admin (API Only)</span>
+                        </li>
+                        <li class="disabled"><span class="text-xs text-base-content/50">Theme Management</span></li>
+                        <li class="disabled"><span class="text-xs text-base-content/50">URL Submission</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>

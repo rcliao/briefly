@@ -1,0 +1,104 @@
+{{ define "title" }}Briefly - Your Tech News Digest{{ end }}
+
+{{ define "content" }}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl md:text-4xl font-bold">Tech News Digest</h1>
+            <p class="text-sm md:text-base text-base-content/70 mt-1 md:mt-2">
+                {{ if .TotalArticles }}
+                AI-curated insights from {{ .TotalArticles }} articles across {{ .TotalThemes }} themes
+                {{ else }}
+                AI-curated insights from the latest tech articles
+                {{ end }}
+            </p>
+        </div>
+
+        <!-- Stats badges (desktop only) -->
+        <div class="hidden md:flex gap-2 flex-wrap">
+            {{ if .TotalDigests }}
+            <div class="stat bg-base-100 rounded-box shadow-sm p-4">
+                <div class="stat-value text-2xl">{{ .TotalDigests }}</div>
+                <div class="stat-desc">Total Digests</div>
+            </div>
+            {{ end }}
+            {{ if .LatestDigestDate }}
+            <div class="stat bg-base-100 rounded-box shadow-sm p-4">
+                <div class="stat-value text-sm">{{ formatDate .LatestDigestDate }}</div>
+                <div class="stat-desc">Latest Update</div>
+            </div>
+            {{ end }}
+        </div>
+    </div>
+
+    <!-- Mobile stats (compact) -->
+    <div class="md:hidden bg-base-100 rounded-box shadow-sm p-3 flex justify-around text-center">
+        {{ if .TotalDigests }}
+        <div>
+            <div class="text-xl font-bold">{{ .TotalDigests }}</div>
+            <div class="text-xs text-base-content/60">Digests</div>
+        </div>
+        {{ end }}
+        {{ if .TotalArticles }}
+        <div class="divider divider-horizontal m-0"></div>
+        <div>
+            <div class="text-xl font-bold">{{ .TotalArticles }}</div>
+            <div class="text-xs text-base-content/60">Articles</div>
+        </div>
+        {{ end }}
+        {{ if .TotalThemes }}
+        <div class="divider divider-horizontal m-0"></div>
+        <div>
+            <div class="text-xl font-bold">{{ .TotalThemes }}</div>
+            <div class="text-xs text-base-content/60">Themes</div>
+        </div>
+        {{ end }}
+    </div>
+
+    <!-- Theme Tabs -->
+    {{ template "partials/theme-tabs.html" . }}
+
+    <!-- Digest List -->
+    <div id="digest-list">
+        {{ template "partials/digest-list.html" .Digests }}
+    </div>
+
+    <!-- Load more (future implementation) -->
+    {{ if .HasMore }}
+    <div class="flex justify-center mt-6">
+        <button
+            class="btn btn-outline gap-2"
+            hx-get="/api/digests?offset={{ .NextOffset }}&theme={{ .ActiveTheme }}"
+            hx-target="#digest-list"
+            hx-swap="beforeend">
+            Load More
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+    </div>
+    {{ end }}
+</div>
+{{ end }}
+
+{{ define "scripts" }}
+<script>
+    // Render markdown in summaries after HTMX swaps
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        document.querySelectorAll('.markdown-content').forEach(el => {
+            if (el.textContent && !el.innerHTML.includes('<')) {
+                el.innerHTML = marked.parse(el.textContent);
+            }
+        });
+    });
+
+    // Track page view
+    if (window.posthog) {
+        posthog.capture('homepage_viewed', {
+            theme: '{{ .ActiveTheme }}' || 'all',
+            digest_count: {{ len .Digests }}
+        });
+    }
+</script>
+{{ end }}

@@ -1,0 +1,54 @@
+<!-- Theme tabs with horizontal scroll for mobile -->
+<div class="mb-6">
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg md:text-xl font-semibold">Browse by Theme</h2>
+        <span id="tab-loading" class="loading loading-spinner loading-sm htmx-indicator"></span>
+    </div>
+
+    <!-- Scrollable tabs container -->
+    <div class="relative">
+        <div class="tabs tabs-boxed bg-base-100 shadow-sm p-2 overflow-x-auto flex-nowrap gap-1 scrollbar-thin">
+            <!-- All Themes tab -->
+            <a
+                class="tab whitespace-nowrap {{ if not .ActiveTheme }}tab-active{{ end }}"
+                hx-get="/?theme=all"
+                hx-target="#digest-list"
+                hx-swap="innerHTML transition:true"
+                hx-push-url="true"
+                hx-indicator="#tab-loading"
+                onclick="if(window.posthog) posthog.capture('theme_tab_clicked', {theme: 'all'})">
+                <span class="text-base">📋</span>
+                <span class="ml-1.5">All</span>
+                {{ if .AllCount }}
+                <div class="badge badge-sm badge-primary ml-1.5">{{ .AllCount }}</div>
+                {{ end }}
+            </a>
+
+            <!-- Individual theme tabs -->
+            {{ range .Themes }}
+            <a
+                class="tab whitespace-nowrap {{ if eq .ID $.ActiveTheme }}tab-active{{ end }}"
+                hx-get="/?theme={{ .ID }}"
+                hx-target="#digest-list"
+                hx-swap="innerHTML transition:true"
+                hx-push-url="true"
+                hx-indicator="#tab-loading"
+                onclick="if(window.posthog) posthog.capture('theme_tab_clicked', {theme: '{{ .Name }}'})">
+                <span class="text-base">{{ themeEmoji .Name }}</span>
+                <span class="ml-1.5">{{ .Name }}</span>
+                {{ if .DigestCount }}
+                <div class="badge badge-sm badge-ghost ml-1.5">{{ .DigestCount }}</div>
+                {{ end }}
+            </a>
+            {{ end }}
+        </div>
+
+        <!-- Scroll hint for mobile (shows on overflow) -->
+        <div class="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-base-200 to-transparent pointer-events-none md:hidden"></div>
+    </div>
+
+    <!-- Mobile hint text -->
+    <p class="text-xs text-base-content/50 mt-2 md:hidden">
+        ← Swipe to see more themes →
+    </p>
+</div>

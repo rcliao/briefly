@@ -1,0 +1,40 @@
+<footer class="bg-base-100 mt-16 border-t border-base-300">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- About -->
+            <div>
+                <h3 class="font-bold text-lg mb-3">About Briefly</h3>
+                <p class="text-sm text-base-content/70">
+                    AI-curated tech news digest delivering weekly insights from the latest articles, research, and trends.
+                </p>
+            </div>
+
+            <!-- Links -->
+            <div>
+                <h3 class="font-bold text-lg mb-3">Quick Links</h3>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="/" class="link link-hover">Home</a></li>
+                    <li><a href="/digests" class="link link-hover">All Digests</a></li>
+                    <li><a href="/api/health" class="link link-hover">API Status</a></li>
+                </ul>
+            </div>
+
+            <!-- Info -->
+            <div>
+                <h3 class="font-bold text-lg mb-3">Built With</h3>
+                <div class="flex flex-wrap gap-2">
+                    <span class="badge badge-outline badge-sm">Go</span>
+                    <span class="badge badge-outline badge-sm">HTMX</span>
+                    <span class="badge badge-outline badge-sm">daisyUI</span>
+                    <span class="badge badge-outline badge-sm">Gemini AI</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="divider my-6"></div>
+
+        <div class="text-center text-sm text-base-content/70">
+            <p>&copy; {{ .CurrentYear }} Briefly. All rights reserved.</p>
+        </div>
+    </div>
+</footer>

@@ -1,0 +1,332 @@
+/* Custom CSS for Briefly - Mobile-First Design */
+
+/* ===== HTMX Transitions ===== */
+.htmx-swapping {
+    opacity: 0;
+    transition: opacity 200ms ease-out;
+}
+
+.htmx-settling {
+    opacity: 1;
+    transition: opacity 300ms ease-in;
+}
+
+.htmx-indicator {
+    opacity: 0;
+    transition: opacity 200ms ease-in;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+    opacity: 1;
+}
+
+/* ===== Line Clamping ===== */
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* ===== Scrollbar Styling ===== */
+.scrollbar-thin::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--bc) / 0.2);
+    border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--bc) / 0.3);
+}
+
+/* Hide scrollbar on mobile but keep functionality */
+@media (max-width: 768px) {
+    .tabs-boxed::-webkit-scrollbar {
+        display: none;
+    }
+    .tabs-boxed {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+}
+
+/* ===== Card Hover Effects ===== */
+.card-hover {
+    transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+.card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 10px 10px -5px rgb(0 0 0 / 0.04);
+}
+
+/* Disable hover transform on mobile */
+@media (hover: none) {
+    .card-hover:hover {
+        transform: none;
+    }
+}
+
+/* ===== Focus Styles for Accessibility ===== */
+.focus-ring:focus,
+.focus-ring:focus-visible {
+    outline: 2px solid hsl(var(--p));
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+}
+
+/* Ensure all interactive elements have focus styles */
+button:focus-visible,
+a:focus-visible,
+.tab:focus-visible {
+    outline: 2px solid hsl(var(--p));
+    outline-offset: 2px;
+}
+
+/* ===== Tab Improvements ===== */
+.tabs-boxed .tab {
+    transition: all 150ms ease;
+}
+
+.tabs-boxed .tab:active {
+    transform: scale(0.95);
+}
+
+/* Improve touch targets on mobile */
+@media (max-width: 768px) {
+    .tabs-boxed .tab {
+        min-height: 44px;
+        padding: 0.5rem 1rem;
+    }
+}
+
+/* ===== Smooth Scroll Behavior ===== */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ===== Toast Animations ===== */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.toast > * {
+    animation: slideInRight 300ms ease-out;
+}
+
+/* ===== Loading States ===== */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.loading-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ===== Mobile Optimizations ===== */
+
+/* Improve tap targets */
+@media (max-width: 768px) {
+    .btn-sm {
+        min-height: 2.5rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .btn-circle {
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+    }
+}
+
+/* Prevent zoom on input focus (iOS) */
+@media (max-width: 768px) {
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    textarea,
+    select {
+        font-size: 16px !important;
+    }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: env(safe-area-inset-bottom)) {
+    body {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+/* ===== Dark Mode Specific Adjustments ===== */
+[data-theme="dark"] .card {
+    background-color: hsl(var(--b2));
+}
+
+[data-theme="dark"] .card:hover {
+    background-color: hsl(var(--b3));
+}
+
+/* ===== Print Styles ===== */
+@media print {
+    header,
+    footer,
+    .btn,
+    .tabs,
+    #toast-container {
+        display: none !important;
+    }
+
+    .card {
+        page-break-inside: avoid;
+        border: 1px solid #000;
+        box-shadow: none;
+    }
+}
+
+/* ===== Utility Classes ===== */
+.text-balance {
+    text-wrap: balance;
+}
+
+.text-pretty {
+    text-wrap: pretty;
+}
+
+/* ===== Markdown Content Styling ===== */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+    font-weight: 600;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+}
+
+.markdown-content p {
+    margin-bottom: 0.75em;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    margin-left: 1.5em;
+    margin-bottom: 0.75em;
+}
+
+.markdown-content code {
+    background-color: hsl(var(--b3));
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+}
+
+.markdown-content pre {
+    background-color: hsl(var(--b3));
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+
+.markdown-content a {
+    color: hsl(var(--p));
+    text-decoration: underline;
+}
+
+.markdown-content a:hover {
+    opacity: 0.8;
+}
+
+/* ===== Performance Optimizations ===== */
+/* Use GPU acceleration for transforms */
+.card,
+.btn,
+.tab {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* ===== Accessibility Improvements ===== */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Skip to main content link */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: hsl(var(--p));
+    color: hsl(var(--pc));
+    padding: 8px;
+    text-decoration: none;
+    z-index: 100;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* ===== Gradient Fade for Scrollable Tabs ===== */
+.tabs-boxed::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 2rem;
+    background: linear-gradient(to right, transparent, hsl(var(--b1)));
+    pointer-events: none;
+}
+
+@media (max-width: 768px) {
+    .tabs-boxed::after {
+        width: 1.5rem;
+    }
+}

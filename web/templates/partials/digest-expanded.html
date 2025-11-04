@@ -1,0 +1,72 @@
+<!-- Expanded Digest Content -->
+<div class="space-y-4 animate-fadeIn">
+    <!-- Executive Summary -->
+    {{ if .DigestSummary }}
+    <div class="alert bg-primary/10 border border-primary/20">
+        <svg class="w-5 h-5 md:w-6 md:h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div class="text-sm md:text-base">
+            <h3 class="font-bold mb-1">Executive Summary</h3>
+            <div class="markdown-content text-base-content/90">{{ .DigestSummary }}</div>
+        </div>
+    </div>
+    {{ end }}
+
+    <!-- Article Groups by Theme -->
+    {{ range .ArticleGroups }}
+    <div class="space-y-3">
+        <!-- Theme divider -->
+        <div class="divider divider-start text-sm md:text-base font-semibold">
+            <span>{{ themeEmoji .Theme }}</span>
+            <span class="ml-2">{{ .Theme }}</span>
+            <span class="badge badge-ghost badge-sm ml-2">{{ len .Articles }} articles</span>
+        </div>
+
+        <!-- Group summary (if available) -->
+        {{ if .Summary }}
+        <div class="bg-base-200 p-3 md:p-4 rounded-lg text-sm md:text-base">
+            <p class="text-base-content/80">{{ .Summary }}</p>
+        </div>
+        {{ end }}
+
+        <!-- Articles in this group -->
+        <div class="space-y-3">
+            {{ range .Articles }}
+                {{ template "partials/article-card.html" . }}
+            {{ end }}
+        </div>
+    </div>
+    {{ end }}
+
+    <!-- Collapse button -->
+    <div class="flex justify-center pt-2">
+        <button
+            class="btn btn-ghost btn-sm gap-2"
+            hx-get="/api/digests/{{ .ID }}/collapse"
+            hx-target="#digest-content-{{ .ID }}"
+            hx-swap="innerHTML transition:true"
+            onclick="document.querySelector('#digest-{{ .ID }} .btn-primary').style.display='inline-flex'; if(window.posthog) posthog.capture('digest_collapsed', {digest_id: '{{ .ID }}'})">
+            <svg class="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+            <span>Collapse</span>
+        </button>
+    </div>
+</div>
+
+<style>
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.animate-fadeIn {
+    animation: fadeIn 300ms ease-out;
+}
+</style>
