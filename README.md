@@ -4,7 +4,26 @@ Briefly is a modern command-line application written in Go that transforms lengt
 
 ## Features
 
-### 🔍 Phase 0: Observability & Manual Curation (New - Implemented)
+### 🎯 Phase 1: Digest Generation & Web Viewer (New - 85% Complete)
+
+- **Database-Driven Digest Generation**: Generate digests from classified articles stored in PostgreSQL
+  - Command: `briefly digest generate --since N` for date-based digest creation
+  - LLM-powered article summarization with intelligent caching
+  - Executive summary generation from top articles in each cluster
+  - Theme-based grouping with relevance scores
+  - ON CONFLICT upsert for digest regeneration
+  - LinkedIn-ready markdown output
+- **Web Digest Viewer**: Beautiful, responsive digest viewing experience
+  - Digest list page with card layout (`/digests`)
+  - Digest detail page with full content (`/digests/{id}`)
+  - Markdown-rendered executive summaries using marked.js
+  - Theme-grouped article display with emoji indicators
+  - Article summaries with relevance scoring
+  - REST API endpoints: list, detail, latest digest
+  - Mobile-responsive TailwindCSS design
+  - PostHog analytics integration
+
+### 🔍 Phase 0: Observability & Manual Curation (Complete)
 
 - **Theme-Based Classification**: LLM-powered article categorization with 10 predefined themes (AI & ML, Cloud & DevOps, Software Engineering, Web Development, Data Engineering, Security, Programming Languages, Mobile, Open Source, Product & Startup)
 - **Manual URL Submission**: Submit individual articles via CLI, REST API, or web form for one-off processing
@@ -131,17 +150,40 @@ briefly manual-url retry <url-id>
 briefly manual-url delete <url-id>
 ```
 
-**Web Server with Phase 0 Features:**
+**Digest Generation (Phase 1):**
 ```bash
-# Start web server (includes theme and manual URL pages)
+# Generate digest from classified articles in database
+briefly digest generate --since 7   # Last 7 days
+
+# Filter by theme
+briefly digest generate --theme "AI & Machine Learning" --since 7
+
+# Generates:
+# - LLM-powered article summaries (cached when available)
+# - Executive summary from top articles
+# - Theme-grouped LinkedIn-ready markdown
+# - Saves to database and digests/ directory
+```
+
+**Web Server (Phase 0 + Phase 1):**
+```bash
+# Start web server (includes digest viewer, theme management, URL submission)
 briefly serve
 
 # Access web interfaces:
 # - http://localhost:8080/ - Homepage
+# - http://localhost:8080/digests - View all digests (Phase 1)
+# - http://localhost:8080/digests/{id} - View digest detail (Phase 1)
 # - http://localhost:8080/themes - Theme management
 # - http://localhost:8080/submit - URL submission
-# - http://localhost:8080/api/themes - Theme REST API
-# - http://localhost:8080/api/manual-urls - Manual URL REST API
+
+# REST API endpoints:
+# - GET /api/digests - List digests (Phase 1)
+# - GET /api/digests/{id} - Get digest detail (Phase 1)
+# - GET /api/digests/latest - Get latest digest (Phase 1)
+# - GET /api/themes - Theme REST API
+# - POST /api/themes - Create theme
+# - GET /api/manual-urls - Manual URL REST API
 ```
 
 ## Configuration
@@ -804,34 +846,53 @@ briefly/
 
 ## Further Development
 
-See [`docs/requirements/v2-smart-concise-digests.md`](docs/requirements/v2-smart-concise-digests.md) for the complete v2.0 development roadmap.
+See [`docs/executions/2025-10-31.md`](docs/executions/2025-10-31.md) for the current implementation roadmap.
 
-**Current Status**: 🔍 **Phase 0: Observability & Manual Curation - Complete** | 🎯 **v2.0 Smart Concise Digests - Phase 1 Complete**
+**Current Status**:
+- ✅ **Phase 0: Observability & Manual Curation - Complete**
+- 🎯 **Phase 1: Digest Generation & Web Viewer - 85% Complete**
 
-✅ **Phase 1 Implemented (High Priority)**:
-- REQ-1: Word count optimization (200-500 words per digest)
-- REQ-2: Unified relevance scoring architecture with KeywordScorer
-- REQ-3: Digest content filtering with configurable thresholds
-- REQ-4: Enhanced actionability with "⚡ Try This Week" recommendations
-
-**Next Priority - Phase 2 (Medium Priority)**:
-- REQ-5: Research command unification with shared relevance interface
-- REQ-6: Scoring profiles for different contexts (digest, research, TUI)
-- REQ-7: Alert system streamlining with relevance filtering
-
-**Future - Phase 3 (Lower Priority)**:
-- REQ-8: TUI command relevance integration for content discovery
-- REQ-9: Adaptive scoring with learning capabilities
-
-**🔍 Phase 0 Implemented** (Observability & Manual Curation):
-- ✅ Theme-based article classification with LLM
+### ✅ Phase 0 Complete (Observability & Manual Curation)
+- ✅ Theme-based article classification with LLM (10 default themes)
 - ✅ Manual URL submission system (CLI, API, Web)
 - ✅ LangFuse integration for LLM observability
 - ✅ PostHog integration for product analytics
-- ✅ Theme management (10 default themes seeded)
+- ✅ Theme management with full CRUD operations
 - ✅ Web pages with PostHog tracking
 - ✅ TracedClient pattern for observability-wrapped LLM calls
-- ✅ Database migrations for themes and manual URLs
+- ✅ Database migrations for themes, manual URLs, and article themes
+
+### 🎯 Phase 1: Digest Generation & Web Viewer (85% Complete)
+✅ **Completed Features**:
+- ✅ **Digest Generation Command** - `briefly digest generate --since N`
+  - Generate digests from database articles by date/theme
+  - LLM-powered article summarization with caching
+  - Executive summary generation from top articles
+  - Theme-based grouping with relevance scores
+  - Save to PostgreSQL with ON CONFLICT upsert
+  - LinkedIn-ready markdown output
+- ✅ **Web Digest Viewer**
+  - REST API: GET /api/digests (list, detail, latest)
+  - HTML pages: /digests (list), /digests/{id} (detail)
+  - Markdown rendering for executive summaries
+  - Theme-grouped article display
+  - Mobile-responsive TailwindCSS design
+
+⏳ **Remaining**:
+- RSS feed aggregation with inline theme classification
+- Scheduled digest generation automation
+
+### Phase 2: REST API Enhancements (Planned)
+- Implement full CRUD for articles, digests, feeds
+- Add pagination, filtering, search
+- Populate database statistics in status endpoint
+- Theme-based filtering for all endpoints
+
+### Phase 3: Production Deployment (Planned)
+- Dockerfile and containerization
+- Deploy to Railway/Fly.io
+- Production database setup and migrations
+- Monitoring and alerting
 
 **v1.0 Multi-Channel Features** (Production Ready):
 - ✅ HTML email output with responsive templates

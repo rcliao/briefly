@@ -224,15 +224,52 @@ type MarkdownRenderer interface {
 - Chi router with middleware (CORS, logging, recovery, timeout)
 - Health check and status endpoints
 - RESTful API for articles, digests, feeds
+- HTML pages for digest viewing
 - Graceful shutdown support
 
 **Endpoints:**
+
+*Health & Status:*
 - `GET /health` - Health check with database status
 - `GET /api/status` - Server uptime and statistics
+
+*Digest API (Phase 1 - Complete):*
+- `GET /api/digests` - List all digests with metadata (title, article count, theme count, date)
+- `GET /api/digests/{id}` - Get full digest with articles, summaries, executive summary, and themes
+- `GET /api/digests/latest` - Get most recent digest
+
+*Digest HTML Pages (Phase 1 - Complete):*
+- `GET /` - Homepage with server info and digest viewing links
+- `GET /digests` - Digest list page with card layout
+- `GET /digests/{id}` - Digest detail page with:
+  - Markdown-rendered executive summary (using marked.js)
+  - Theme-grouped article display with emojis
+  - Article summaries with relevance scores
+  - Mobile-responsive TailwindCSS design
+
+*Theme API (Phase 0 - Complete):*
+- `GET /api/themes` - List themes
+- `POST /api/themes` - Create theme
+- `GET /api/themes/{id}` - Get theme
+- `PATCH /api/themes/{id}` - Update theme
+- `DELETE /api/themes/{id}` - Delete theme
+
+*Theme HTML Pages (Phase 0 - Complete):*
+- `GET /themes` - Theme management page with PostHog tracking
+
+*Manual URL API (Phase 0 - Complete):*
+- `POST /api/manual-urls` - Submit URLs (batch)
+- `GET /api/manual-urls` - List URLs (with status filter)
+- `GET /api/manual-urls/{id}` - Get single URL
+- `POST /api/manual-urls/{id}/retry` - Retry failed URL
+- `DELETE /api/manual-urls/{id}` - Delete URL
+
+*Manual URL HTML Pages (Phase 0 - Complete):*
+- `GET /submit` - URL submission page with PostHog tracking
+
+*Future:*
 - `GET /api/articles` - List articles (Phase 2)
-- `GET /api/digests` - List digests (Phase 2)
 - `GET /api/feeds` - List RSS feeds (Phase 2)
-- `GET /` - Homepage with server info
 
 **Location:** `internal/server/`, `cmd/handlers/serve.go`
 
@@ -786,11 +823,24 @@ The following packages were removed as they were not part of the core weekly dig
 - ✅ Web pages with PostHog tracking
 - ✅ TracedClient for observability-wrapped LLM calls
 
-### Phase 1: RSS Feed Integration (Current)
-- Re-add RSS feed processing with theme classification
-- Scheduled digest generation using themes
-- Feed subscription management UI
-- Automatic aggregation with manual URL integration
+### ✅ Phase 1: Digest Generation & Web Viewer (85% Complete)
+- ✅ **Digest generation from database** - `briefly digest generate --since N`
+  - ✅ Query classified articles from database by date/theme
+  - ✅ LLM-powered article summarization (with caching)
+  - ✅ Executive summary generation from top articles
+  - ✅ Theme-based grouping in output
+  - ✅ Save to digests table with ON CONFLICT upsert
+  - ✅ LinkedIn-ready markdown output
+- ✅ **Web digest viewer** - REST API and HTML pages
+  - ✅ REST API: GET /api/digests (list, detail, latest)
+  - ✅ HTML pages: /digests (list), /digests/{id} (detail)
+  - ✅ Markdown rendering with marked.js for executive summaries
+  - ✅ Theme-grouped article display with relevance scores
+  - ✅ Mobile-responsive TailwindCSS design
+- ⏳ **RSS feed integration** (Deferred to Phase 1.5)
+  - Re-add RSS feed processing with inline theme classification
+  - Automatic aggregation with manual URL integration
+  - Scheduled digest generation
 
 ### Phase 2: REST API Enhancements
 - Implement full CRUD for articles, digests, feeds
