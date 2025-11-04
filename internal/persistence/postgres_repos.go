@@ -563,7 +563,7 @@ func (r *postgresDigestRepo) Create(ctx context.Context, digest *core.Digest) er
 
 	query := `INSERT INTO digests (id, date, content, created_at) VALUES ($1, $2, $3, $4)`
 	_, err = r.query().ExecContext(ctx, query,
-		digest.Metadata.Title, digest.Metadata.DateGenerated, digestJSON, time.Now().UTC(),
+		digest.ID, digest.Metadata.DateGenerated, digestJSON, time.Now().UTC(),
 	)
 	return err
 }
