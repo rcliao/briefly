@@ -2,9 +2,47 @@
 
 **Version:** 2.1
 **Date:** 2025-10-31
-**Last Updated:** 2025-10-31
+**Last Updated:** 2025-11-03
 
-This document describes the high-level architecture and technical design of Briefly. This should be the living document that is always up-to-date with the current implementation.
+This document describes the high-level architecture and technical design of Briefly. This combines current implementation status with planned future architecture.
+
+**📋 For implementation roadmap and task tracking, see [`executions/2025-10-31.md`](executions/2025-10-31.md)**
+
+---
+
+## Implementation Status (as of 2025-11-03)
+
+### ✅ Phase 0: Complete (Observability & Manual Curation)
+- Theme-based article classification with LLM
+- Manual URL submission (CLI, API, Web)
+- LangFuse integration (local logging approach)
+- PostHog integration (full SDK)
+- Theme management CRUD operations
+- Web pages with PostHog tracking
+
+### 🎯 Phase 1: 85% Complete (Digest Generation & Web Viewer)
+**Implemented:**
+- ✅ Digest generation from database (`briefly digest generate --since N`)
+- ✅ LLM-powered article summarization with caching
+- ✅ Executive summary generation from top articles
+- ✅ Web digest viewer with REST API and HTML pages
+- ✅ Markdown rendering for executive summaries (marked.js)
+- ✅ Theme-grouped article display with relevance scores
+- ✅ ON CONFLICT upsert for digest regeneration
+
+**API Endpoints (Implemented):**
+- `GET /api/digests` - List all digests
+- `GET /api/digests/{id}` - Get digest detail
+- `GET /api/digests/latest` - Get latest digest
+- `GET /digests` - Digest list HTML page
+- `GET /digests/{id}` - Digest detail HTML page
+
+**Remaining:**
+- ⏳ RSS feed aggregation with inline theme classification
+- ⏳ Scheduled digest automation
+
+### 📋 Phase 2+: Planned
+The sections below describe the planned architecture for future phases. See sections marked with ⚠️ PLANNED for features not yet implemented.
 
 ---
 
