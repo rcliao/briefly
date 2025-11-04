@@ -139,8 +139,10 @@ func (s *Server) setupRoutes() {
 		})
 	})
 
-	// Web routes (HTML pages - Phase 3)
+	// Web routes (HTML pages)
 	s.router.Get("/", s.handleHomePage)
+	s.router.Get("/digests", s.handleDigestsPage)
+	s.router.Get("/digests/{id}", s.handleDigestDetailPage)
 	s.router.Get("/themes", s.handleThemesPage)
 	s.router.Get("/submit", s.handleSubmitPage)
 

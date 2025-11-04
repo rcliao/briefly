@@ -96,30 +96,7 @@ func (s *Server) handleRecentArticles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleListDigests handles GET /api/digests
-func (s *Server) handleListDigests(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 2
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Digests API - Coming in Phase 2",
-		"data":    []interface{}{},
-	})
-}
-
-// handleGetDigest handles GET /api/digests/{id}
-func (s *Server) handleGetDigest(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 2
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Single digest API - Coming in Phase 2",
-	})
-}
-
-// handleLatestDigest handles GET /api/digests/latest
-func (s *Server) handleLatestDigest(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement in Phase 2
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"message": "Latest digest API - Coming in Phase 2",
-	})
-}
+// Digest handlers are now in digest_handlers.go
 
 // handleListFeeds handles GET /api/feeds
 func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
@@ -184,23 +161,38 @@ func (s *Server) handleHomePage(w http.ResponseWriter, r *http.Request) {
             </div>
 
             <div class="bg-blue-50 rounded-lg p-6 mb-8">
-                <h3 class="text-lg font-semibold mb-3">Try These Endpoints:</h3>
+                <h3 class="text-lg font-semibold mb-3">Web Pages:</h3>
                 <div class="space-y-2 text-sm">
                     <div class="bg-white rounded px-4 py-2">
-                        <code class="text-blue-600">GET /health</code> - Health check
+                        <a href="/digests" class="text-blue-600 hover:text-blue-800">📰 View Digests</a>
                     </div>
                     <div class="bg-white rounded px-4 py-2">
-                        <code class="text-blue-600">GET /api/status</code> - Server status
+                        <a href="/themes" class="text-blue-600 hover:text-blue-800">🎨 Manage Themes</a>
                     </div>
                     <div class="bg-white rounded px-4 py-2">
-                        <code class="text-blue-600">GET /api/articles</code> - Articles API (Phase 2)
+                        <a href="/submit" class="text-blue-600 hover:text-blue-800">📝 Submit URLs</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-green-50 rounded-lg p-6 mb-8">
+                <h3 class="text-lg font-semibold mb-3">API Endpoints:</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="bg-white rounded px-4 py-2">
+                        <code class="text-green-600">GET /health</code> - Health check
+                    </div>
+                    <div class="bg-white rounded px-4 py-2">
+                        <code class="text-green-600">GET /api/digests</code> - List digests
+                    </div>
+                    <div class="bg-white rounded px-4 py-2">
+                        <code class="text-green-600">GET /api/themes</code> - List themes
                     </div>
                 </div>
             </div>
 
             <div class="text-gray-500 text-sm">
-                <p>Phase 2: REST API Endpoints - Coming soon</p>
-                <p>Phase 3: Web Frontend - Coming soon</p>
+                <p>✅ Digest generation with LLM summaries</p>
+                <p>✅ Web viewer for showcasing digests</p>
             </div>
         </div>
     </div>
@@ -221,13 +213,4 @@ func (s *Server) respondJSON(w http.ResponseWriter, status int, data interface{}
 	}
 }
 
-// respondError writes an error response (to be used in Phase 2)
-// Commented out to avoid unused function warning
-// func (s *Server) respondError(w http.ResponseWriter, status int, message string) {
-// 	s.respondJSON(w, status, map[string]interface{}{
-// 		"error": map[string]interface{}{
-// 			"status":  status,
-// 			"message": message,
-// 		},
-// 	})
-// }
+// respondError is now in digest_handlers.go

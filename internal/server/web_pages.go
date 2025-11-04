@@ -74,6 +74,7 @@ const themesPageTemplate = `<!DOCTYPE html>
             <div class="flex items-center justify-between">
                 <a href="/" class="text-2xl font-bold text-blue-600">Briefly</a>
                 <div class="space-x-4">
+                    <a href="/digests" class="text-gray-600 hover:text-blue-600">Digests</a>
                     <a href="/themes" class="text-blue-600 font-semibold">Themes</a>
                     <a href="/submit" class="text-gray-600 hover:text-blue-600">Submit URL</a>
                 </div>
@@ -403,6 +404,261 @@ https://example.com/article2"
         }
 
         loadURLs();
+    </script>
+</body>
+</html>`
+
+// handleDigestsPage handles GET /digests (HTML page - digest list)
+func (s *Server) handleDigestsPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+
+	apiKey, host := s.getPostHogConfig()
+
+	tmpl := template.Must(template.New("digests").Parse(digestsPageTemplate))
+	data := map[string]interface{}{
+		"PostHogAPIKey":  apiKey,
+		"PostHogHost":    host,
+		"PostHogEnabled": apiKey != "",
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		s.log.Error("Failed to render digests page", "error", err)
+	}
+}
+
+// handleDigestDetailPage handles GET /digests/{id} (HTML page - single digest)
+func (s *Server) handleDigestDetailPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+
+	apiKey, host := s.getPostHogConfig()
+
+	tmpl := template.Must(template.New("digestDetail").Parse(digestDetailPageTemplate))
+	data := map[string]interface{}{
+		"PostHogAPIKey":  apiKey,
+		"PostHogHost":    host,
+		"PostHogEnabled": apiKey != "",
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		s.log.Error("Failed to render digest detail page", "error", err)
+	}
+}
+
+const digestsPageTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digests - Briefly</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2/dist/tailwind.min.css" rel="stylesheet">
+    {{if .PostHogEnabled}}
+    <script>
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+        posthog.init('{{.PostHogAPIKey}}', {api_host: '{{.PostHogHost}}'})
+    </script>
+    {{end}}
+</head>
+<body class="bg-gray-50">
+    <nav class="bg-white shadow-sm border-b">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <a href="/" class="text-2xl font-bold text-blue-600">Briefly</a>
+                <div class="space-x-4">
+                    <a href="/digests" class="text-blue-600 font-semibold">Digests</a>
+                    <a href="/themes" class="text-gray-600 hover:text-blue-600">Themes</a>
+                    <a href="/submit" class="text-gray-600 hover:text-blue-600">Submit URL</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="text-3xl font-bold text-gray-900">📰 Weekly Digests</h1>
+            </div>
+
+            <div id="digests-container" class="space-y-4">
+                <div class="text-center py-8 text-gray-500">Loading digests...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadDigests() {
+            try {
+                const response = await fetch('/api/digests');
+                const data = await response.json();
+                const container = document.getElementById('digests-container');
+
+                if (data.digests.length === 0) {
+                    container.innerHTML = '<div class="text-center py-8 text-gray-500">No digests yet. Run: <code class="bg-gray-100 px-2 py-1 rounded">briefly digest generate --since 7</code></div>';
+                    return;
+                }
+
+                container.innerHTML = data.digests.map(digest => {
+                    const date = new Date(digest.date_generated);
+                    return '<a href="/digests/' + digest.id + '" class="block bg-white rounded-lg shadow hover:shadow-lg transition p-6">' +
+                           '<div class="flex justify-between items-start">' +
+                           '<div class="flex-1">' +
+                           '<h3 class="text-xl font-semibold text-gray-900 mb-2">' + digest.title + '</h3>' +
+                           '<div class="flex items-center gap-4 text-sm text-gray-600">' +
+                           '<span>📅 ' + date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + '</span>' +
+                           '<span>📊 ' + digest.article_count + ' articles</span>' +
+                           '<span>🎨 ' + digest.theme_count + ' themes</span>' +
+                           '</div></div>' +
+                           '<svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>' +
+                           '</div></a>';
+                }).join('');
+
+                {{if .PostHogEnabled}}
+                if (window.posthog) posthog.capture('digests_page_viewed', { digest_count: data.digests.length });
+                {{end}}
+            } catch (error) {
+                console.error('Failed to load digests:', error);
+                document.getElementById('digests-container').innerHTML = '<div class="text-center py-8 text-red-500">Failed to load digests. Please try again.</div>';
+            }
+        }
+
+        loadDigests();
+    </script>
+</body>
+</html>`
+
+const digestDetailPageTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digest - Briefly</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2/dist/tailwind.min.css" rel="stylesheet">
+    {{if .PostHogEnabled}}
+    <script>
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+        posthog.init('{{.PostHogAPIKey}}', {api_host: '{{.PostHogHost}}'})
+    </script>
+    {{end}}
+    <style>
+        .prose { max-width: 65ch; }
+        .prose h2 { font-size: 1.5rem; font-weight: 700; margin-top: 2rem; margin-bottom: 1rem; }
+        .prose h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+        .prose p { margin-bottom: 1rem; line-height: 1.75; }
+        .prose a { color: #2563eb; text-decoration: underline; }
+        .prose a:hover { color: #1d4ed8; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <nav class="bg-white shadow-sm border-b">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <a href="/" class="text-2xl font-bold text-blue-600">Briefly</a>
+                <div class="space-x-4">
+                    <a href="/digests" class="text-gray-600 hover:text-blue-600">← Back to Digests</a>
+                    <a href="/themes" class="text-gray-600 hover:text-blue-600">Themes</a>
+                    <a href="/submit" class="text-gray-600 hover:text-blue-600">Submit URL</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <div id="digest-content">
+                <div class="text-center py-8 text-gray-500">Loading digest...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadDigest() {
+            try {
+                const digestId = window.location.pathname.split('/').pop();
+                const response = await fetch('/api/digests/' + digestId);
+                
+                if (!response.ok) {
+                    throw new Error('Digest not found');
+                }
+
+                const digest = await response.json();
+                const container = document.getElementById('digest-content');
+
+                let html = '<div class="bg-white rounded-lg shadow-lg p-8">';
+                
+                // Header
+                html += '<div class="border-b pb-6 mb-6">';
+                html += '<h1 class="text-4xl font-bold text-gray-900 mb-4">🗞️ ' + digest.title + '</h1>';
+                html += '<div class="flex items-center gap-4 text-sm text-gray-600">';
+                const date = new Date(digest.metadata.date_generated);
+                html += '<span>📅 ' + date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + '</span>';
+                html += '<span>📊 ' + digest.metadata.article_count + ' articles</span>';
+                html += '<span>🎨 ' + digest.metadata.theme_count + ' themes</span>';
+                html += '</div></div>';
+
+                // Executive Summary
+                if (digest.executive_summary) {
+                    html += '<div class="bg-blue-50 border-l-4 border-blue-500 p-6 mb-8">';
+                    html += '<h2 class="text-2xl font-bold text-gray-900 mb-4">🎯 Executive Summary</h2>';
+                    html += '<div class="prose text-gray-700">' + digest.executive_summary + '</div>';
+                    html += '</div>';
+                }
+
+                // Article Groups by Theme
+                digest.article_groups.forEach(group => {
+                    html += '<div class="mb-8">';
+                    html += '<h2 class="text-2xl font-bold text-gray-900 mb-4">' + getThemeEmoji(group.theme) + ' ' + group.theme + '</h2>';
+                    
+                    // Articles in this theme
+                    group.articles.forEach((article, idx) => {
+                        html += '<div class="' + (idx > 0 ? 'mt-6 pt-6 border-t' : '') + '">';
+                        html += '<h3 class="text-xl font-semibold text-gray-900 mb-2">' + article.title + '</h3>';
+                        html += '<div class="flex items-center gap-3 mb-3">';
+                        html += '<a href="' + article.url + '" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm">🔗 Read Article →</a>';
+                        if (article.theme_relevance_text) {
+                            html += '<span class="px-2 py-1 bg-green-50 text-green-700 text-xs rounded">' + article.theme_relevance_text + '</span>';
+                        }
+                        html += '</div>';
+                        if (article.summary) {
+                            html += '<div class="prose text-gray-700">' + article.summary + '</div>';
+                        }
+                        html += '</div>';
+                    });
+                    
+                    html += '</div>';
+                });
+
+                html += '</div>';
+                container.innerHTML = html;
+
+                {{if .PostHogEnabled}}
+                if (window.posthog) posthog.capture('digest_viewed', { digest_id: digest.id, article_count: digest.metadata.article_count });
+                {{end}}
+            } catch (error) {
+                console.error('Failed to load digest:', error);
+                document.getElementById('digest-content').innerHTML = 
+                    '<div class="bg-red-50 border border-red-200 rounded-lg p-8 text-center">' +
+                    '<p class="text-red-600">Failed to load digest. <a href="/digests" class="underline">Back to list</a></p>' +
+                    '</div>';
+            }
+        }
+
+        function getThemeEmoji(theme) {
+            const themeUpper = theme.toUpperCase();
+            if (themeUpper.includes('AI') || themeUpper.includes('MACHINE LEARNING')) return '🤖';
+            if (themeUpper.includes('SECURITY') || themeUpper.includes('PRIVACY')) return '🔒';
+            if (themeUpper.includes('CLOUD') || themeUpper.includes('DEVOPS')) return '☁️';
+            if (themeUpper.includes('DATA') || themeUpper.includes('ANALYTICS')) return '📊';
+            if (themeUpper.includes('MOBILE')) return '📱';
+            if (themeUpper.includes('WEB') || themeUpper.includes('FRONTEND')) return '🌐';
+            if (themeUpper.includes('OPEN SOURCE')) return '🔓';
+            if (themeUpper.includes('PRODUCT') || themeUpper.includes('STARTUP')) return '🚀';
+            if (themeUpper.includes('PROGRAMMING') || themeUpper.includes('LANGUAGE')) return '💻';
+            if (themeUpper.includes('ENGINEERING')) return '⚙️';
+            return '📌';
+        }
+
+        loadDigest();
     </script>
 </body>
 </html>`
