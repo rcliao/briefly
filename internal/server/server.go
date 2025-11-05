@@ -22,17 +22,27 @@ type Server struct {
 	db         persistence.Database
 	config     config.Server
 	log        *slog.Logger
+	renderer   *TemplateRenderer
+	analytics  interface{} // Optional analytics client
 }
 
 // New creates a new HTTP server instance
 func New(db persistence.Database, cfg config.Server) *Server {
 	log := logger.Get()
 
+	// Initialize template renderer
+	renderer, err := NewTemplateRenderer(true, "web/templates") // devMode=true for hot reload
+	if err != nil {
+		log.Warn("Failed to initialize template renderer, web pages may not work", "error", err)
+	}
+
 	s := &Server{
-		router: chi.NewRouter(),
-		db:     db,
-		config: cfg,
-		log:    log,
+		router:    chi.NewRouter(),
+		db:        db,
+		config:    cfg,
+		log:       log,
+		renderer:  renderer,
+		analytics: nil, // TODO: Initialize analytics client if configured
 	}
 
 	// Setup middleware
@@ -141,10 +151,13 @@ func (s *Server) setupRoutes() {
 
 	// Web routes (HTML pages)
 	s.router.Get("/", s.handleHomePage)
-	s.router.Get("/digests", s.handleDigestsPage)
 	s.router.Get("/digests/{id}", s.handleDigestDetailPage)
 	s.router.Get("/themes", s.handleThemesPage)
 	s.router.Get("/submit", s.handleSubmitPage)
+
+	// HTMX partial routes
+	s.router.Get("/api/digests/{id}/expand", s.handleExpandDigest)
+	s.router.Get("/api/digests/{id}/collapse", s.handleCollapseDigest)
 
 	// Static files (if directory exists)
 	// TODO: Add static file serving in Phase 3

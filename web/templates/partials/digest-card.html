@@ -59,10 +59,8 @@
 
         <!-- Executive Summary Preview -->
         {{ if .DigestSummary }}
-        <div class="mt-3">
-            <p class="text-sm md:text-base text-base-content/80 line-clamp-3">
-                {{ truncate .DigestSummary 250 }}
-            </p>
+        <div class="mt-3 markdown-content prose prose-sm md:prose-base prose-invert max-w-none">
+            <div class="line-clamp-3 text-base-content/80">{{ truncate .DigestSummary 250 }}</div>
         </div>
         {{ end }}
 

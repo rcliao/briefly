@@ -84,13 +84,35 @@
 
 {{ define "scripts" }}
 <script>
-    // Render markdown in summaries after HTMX swaps
-    document.body.addEventListener('htmx:afterSwap', function(evt) {
+    // Function to render markdown content
+    function renderMarkdown() {
         document.querySelectorAll('.markdown-content').forEach(el => {
-            if (el.textContent && !el.innerHTML.includes('<')) {
-                el.innerHTML = marked.parse(el.textContent);
+            // Get the text content (stripping any HTML tags)
+            const textContent = el.textContent.trim();
+
+            // Check if it looks like markdown (contains ##, **, etc.) and hasn't been processed
+            if (textContent && (textContent.includes('**') || textContent.includes('##') || textContent.includes('- ')) &&
+                !el.hasAttribute('data-markdown-processed')) {
+
+                // Parse and render the markdown
+                try {
+                    el.innerHTML = marked.parse(textContent);
+                    el.setAttribute('data-markdown-processed', 'true');
+                } catch (e) {
+                    console.error('Failed to parse markdown:', e);
+                }
             }
         });
+    }
+
+    // Render markdown on initial page load
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(renderMarkdown, 100); // Small delay to ensure content is loaded
+    });
+
+    // Render markdown after HTMX swaps
+    document.body.addEventListener('htmx:afterSwap', function() {
+        setTimeout(renderMarkdown, 50);
     });
 
     // Track page view

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
@@ -30,8 +30,8 @@
 
     <!-- Theme initialization script -->
     <script>
-        // Initialize theme from localStorage or default to light
-        const theme = localStorage.getItem('theme') || 'light';
+        // Initialize theme from localStorage or default to dark
+        const theme = localStorage.getItem('theme') || 'dark';
         document.documentElement.setAttribute('data-theme', theme);
     </script>
 
@@ -56,6 +56,24 @@
 
     <!-- Dark mode toggle script -->
     <script>
+        function updateThemeIcon() {
+            const theme = document.documentElement.getAttribute('data-theme');
+            const sunIcon = document.getElementById('sun-icon');
+            const moonIcon = document.getElementById('moon-icon');
+
+            if (sunIcon && moonIcon) {
+                if (theme === 'dark') {
+                    // In dark mode, show sun icon (click to go to light)
+                    sunIcon.classList.remove('hidden');
+                    moonIcon.classList.add('hidden');
+                } else {
+                    // In light mode, show moon icon (click to go to dark)
+                    sunIcon.classList.add('hidden');
+                    moonIcon.classList.remove('hidden');
+                }
+            }
+        }
+
         function toggleTheme() {
             const html = document.documentElement;
             const currentTheme = html.getAttribute('data-theme');
@@ -63,11 +81,17 @@
             html.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
 
+            // Update icon to reflect new theme
+            updateThemeIcon();
+
             // Track theme change
             if (window.posthog) {
                 posthog.capture('theme_toggled', { theme: newTheme });
             }
         }
+
+        // Set initial icon when page loads
+        document.addEventListener('DOMContentLoaded', updateThemeIcon);
     </script>
 
     {{ block "scripts" . }}{{ end }}

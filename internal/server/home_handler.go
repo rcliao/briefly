@@ -1,12 +1,12 @@
 package server
 
 import (
+	"briefly/internal/core"
+	"briefly/internal/persistence"
 	"context"
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/rcliao/briefly/internal/core"
 )
 
 // HomePageData contains all data needed for the homepage
@@ -80,21 +80,21 @@ func (s *Server) handleHomePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Render the full page
+	// Render the full page through base layout
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.renderer.Render(w, "pages/home.html", data); err != nil {
+	if err := s.renderer.Render(w, "layouts/base.html", data); err != nil {
 		slog.Error("Failed to render homepage", "error", err)
 		http.Error(w, "Failed to render page", http.StatusInternalServerError)
 		return
 	}
 
-	// Track page view
-	if s.analytics != nil {
-		s.analytics.TrackEvent(ctx, "homepage_viewed", map[string]interface{}{
-			"theme":        themeID,
-			"digest_count": len(data.Digests),
-		})
-	}
+	// Track page view (TODO: implement analytics tracking)
+	// if s.analytics != nil {
+	// 	s.analytics.TrackEvent(ctx, "homepage_viewed", map[string]interface{}{
+	// 		"theme":        themeID,
+	// 		"digest_count": len(data.Digests),
+	// 	})
+	// }
 }
 
 // handleHomePagePartial renders just the digest list for HTMX requests
@@ -119,7 +119,7 @@ func (s *Server) handleHomePagePartial(w http.ResponseWriter, r *http.Request, c
 // getHomePageData retrieves all data needed for the homepage
 func (s *Server) getHomePageData(ctx context.Context, activeThemeID string) (*HomePageData, error) {
 	// Get all enabled themes
-	themes, err := s.repos.Theme.List(ctx)
+	themes, err := s.db.Themes().ListEnabled(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (s *Server) getHomePageData(ctx context.Context, activeThemeID string) (*Ho
 	}
 
 	// Get stats
-	allDigests, err := s.repos.Digest.List(ctx, 1000, 0)
+	allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 1000, Offset: 0})
 	if err != nil {
 		slog.Warn("Failed to get digest count", "error", err)
 	}
@@ -164,13 +164,10 @@ func (s *Server) getHomePageData(ctx context.Context, activeThemeID string) (*Ho
 		totalArticles += d.Metadata.ArticleCount
 	}
 
-	// PostHog configuration
-	postHogEnabled := s.config.GetString("posthog.api_key") != ""
-	postHogAPIKey := s.config.GetString("posthog.api_key")
-	postHogHost := s.config.GetString("posthog.host")
-	if postHogHost == "" {
-		postHogHost = "https://app.posthog.com"
-	}
+	// PostHog configuration (TODO: add to config struct)
+	postHogEnabled := false
+	postHogAPIKey := ""
+	postHogHost := "https://app.posthog.com"
 
 	return &HomePageData{
 		Themes:           themesWithCount,
@@ -197,11 +194,11 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]Dige
 
 	if themeID == "" {
 		// Get all digests
-		digests, err = s.repos.Digest.List(ctx, 20, 0)
+		digests, err = s.db.Digests().List(ctx, persistence.ListOptions{Limit: 20, Offset: 0})
 	} else {
 		// Get digests for specific theme (TODO: implement in repository)
 		// For now, get all and filter in memory
-		allDigests, err := s.repos.Digest.List(ctx, 100, 0)
+		allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 100, Offset: 0})
 		if err != nil {
 			return nil, err
 		}
@@ -245,7 +242,7 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]Dige
 			Metadata: DigestMetadataView{
 				Title:         d.Metadata.Title,
 				ArticleCount:  d.Metadata.ArticleCount,
-				ThemeCount:    d.Metadata.ThemeCount,
+				ThemeCount:    len(d.ArticleGroups), // Calculate from article groups
 				DateGenerated: d.Metadata.DateGenerated,
 				QualityScore:  d.Metadata.QualityScore,
 			},
