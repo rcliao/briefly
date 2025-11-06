@@ -111,7 +111,9 @@ func (s *Server) handleCollapseDigest(w http.ResponseWriter, r *http.Request) {
 
 	// Return empty HTML to clear the container
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(""))
+	if _, err := w.Write([]byte("")); err != nil {
+		slog.Error("Failed to write response", "error", err)
+	}
 
 	// Track collapse event (TODO: implement analytics tracking)
 	// if s.analytics != nil {

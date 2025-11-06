@@ -13,11 +13,8 @@ func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 		"PostHogHost":    "https://app.posthog.com",
 	}
 
-	// If analytics is configured, provide the keys
-	if s.analytics != nil {
-		// TODO: Get PostHog config from server if needed
-		// For now, PostHog is initialized in base.html template
-	}
+	// TODO: Get PostHog config from server if needed
+	// For now, PostHog is initialized in base.html template
 
 	// Render the about page (it will automatically use base layout via block inheritance)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -267,10 +267,3 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]Dige
 
 	return result, nil
 }
-
-// containsThemeByID checks if an article group contains a theme with the given ID
-func containsThemeByID(group core.ArticleGroup, themeID string) bool {
-	// This is a placeholder - you may need to implement theme ID lookup
-	// For now, we're matching by theme name
-	return false
-}
