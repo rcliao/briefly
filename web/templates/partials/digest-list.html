@@ -1,0 +1,14 @@
+<!-- Digest List -->
+{{ if . }}
+<ol class="digest-list">
+    {{ range . }}
+        {{ template "partials/digest-item.html" . }}
+    {{ end }}
+</ol>
+{{ else }}
+<!-- Empty state -->
+<div class="empty-state">
+    <p>No digests found for this theme.</p>
+    <p><a href="/?theme=all">View all digests</a></p>
+</div>
+{{ end }}

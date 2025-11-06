@@ -1,0 +1,269 @@
+package server
+
+import (
+	"briefly/internal/core"
+	"briefly/internal/persistence"
+	"context"
+	"log/slog"
+	"net/http"
+	"sort"
+	"time"
+)
+
+// HomePageData contains all data needed for the homepage
+type HomePageData struct {
+	Themes           []ThemeWithCount
+	Digests          []DigestSummaryView
+	ActiveTheme      string
+	AllCount         int
+	TotalDigests     int
+	TotalArticles    int
+	TotalThemes      int
+	LatestDigestDate time.Time
+	HasMore          bool
+	NextOffset       int
+	CurrentYear      int
+
+	// PostHog integration
+	PostHogEnabled bool
+	PostHogAPIKey  string
+	PostHogHost    string
+}
+
+// ThemeWithCount includes digest count for each theme
+type ThemeWithCount struct {
+	ID          string
+	Name        string
+	Description string
+	Keywords    []string
+	Enabled     bool
+	DigestCount int
+}
+
+// DigestSummaryView is the view model for digest cards
+type DigestSummaryView struct {
+	ID             string
+	Themes         []string
+	DigestSummary  string
+	SummaryPreview string // Truncated summary for homepage preview (~100 chars)
+	Metadata       DigestMetadataView
+}
+
+// DigestMetadataView contains digest metadata for the view
+type DigestMetadataView struct {
+	Title        string
+	ArticleCount int
+	ThemeCount   int
+	DateGenerated time.Time
+	QualityScore float64
+}
+
+// handleHomePage renders the homepage with theme tabs and digests
+func (s *Server) handleHomePage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Get theme filter from query param
+	themeID := r.URL.Query().Get("theme")
+	if themeID == "all" {
+		themeID = ""
+	}
+
+	// Check if this is an HTMX request for partial update
+	if isHTMXRequest(r) {
+		s.handleHomePagePartial(w, r, ctx, themeID)
+		return
+	}
+
+	// Full page render
+	data, err := s.getHomePageData(ctx, themeID)
+	if err != nil {
+		slog.Error("Failed to get homepage data", "error", err)
+		http.Error(w, "Failed to load homepage", http.StatusInternalServerError)
+		return
+	}
+
+	// Render the home page (it will automatically use base layout via block inheritance)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderer.Render(w, "pages/home.html", data); err != nil {
+		slog.Error("Failed to render homepage", "error", err)
+		http.Error(w, "Failed to render page", http.StatusInternalServerError)
+		return
+	}
+
+	// Track page view (TODO: implement analytics tracking)
+	// if s.analytics != nil {
+	// 	s.analytics.TrackEvent(ctx, "homepage_viewed", map[string]interface{}{
+	// 		"theme":        themeID,
+	// 		"digest_count": len(data.Digests),
+	// 	})
+	// }
+}
+
+// handleHomePagePartial renders just the digest list for HTMX requests
+func (s *Server) handleHomePagePartial(w http.ResponseWriter, r *http.Request, ctx context.Context, themeID string) {
+	// Get digests for the theme
+	digests, err := s.getDigestsForTheme(ctx, themeID)
+	if err != nil {
+		slog.Error("Failed to get digests", "error", err, "theme", themeID)
+		http.Error(w, "Failed to load digests", http.StatusInternalServerError)
+		return
+	}
+
+	// Render only the digest-list partial
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.renderer.Render(w, "partials/digest-list.html", digests); err != nil {
+		slog.Error("Failed to render digest list", "error", err)
+		http.Error(w, "Failed to render content", http.StatusInternalServerError)
+		return
+	}
+}
+
+// getHomePageData retrieves all data needed for the homepage
+func (s *Server) getHomePageData(ctx context.Context, activeThemeID string) (*HomePageData, error) {
+	// Get all enabled themes
+	themes, err := s.db.Themes().ListEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter to enabled themes only and convert to view model
+	themesWithCount := []ThemeWithCount{}
+	for _, theme := range themes {
+		if theme.Enabled {
+			// Get digest count for this theme (TODO: implement in repository)
+			count := 0 // Placeholder
+			themesWithCount = append(themesWithCount, ThemeWithCount{
+				ID:          theme.ID,
+				Name:        theme.Name,
+				Description: theme.Description,
+				Keywords:    theme.Keywords,
+				Enabled:     theme.Enabled,
+				DigestCount: count,
+			})
+		}
+	}
+
+	// Get digests (filtered by theme if specified)
+	digests, err := s.getDigestsForTheme(ctx, activeThemeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get stats
+	allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 1000, Offset: 0})
+	if err != nil {
+		slog.Warn("Failed to get digest count", "error", err)
+	}
+
+	var latestDate time.Time
+	if len(allDigests) > 0 {
+		latestDate = allDigests[0].Metadata.DateGenerated
+	}
+
+	// Count total articles (approximate from digests)
+	totalArticles := 0
+	for _, d := range allDigests {
+		totalArticles += d.Metadata.ArticleCount
+	}
+
+	// PostHog configuration (TODO: add to config struct)
+	postHogEnabled := false
+	postHogAPIKey := ""
+	postHogHost := "https://app.posthog.com"
+
+	return &HomePageData{
+		Themes:           themesWithCount,
+		Digests:          digests,
+		ActiveTheme:      activeThemeID,
+		AllCount:         len(allDigests),
+		TotalDigests:     len(allDigests),
+		TotalArticles:    totalArticles,
+		TotalThemes:      len(themesWithCount),
+		LatestDigestDate: latestDate,
+		HasMore:          false, // TODO: implement pagination
+		NextOffset:       0,
+		CurrentYear:      time.Now().Year(),
+		PostHogEnabled:   postHogEnabled,
+		PostHogAPIKey:    postHogAPIKey,
+		PostHogHost:      postHogHost,
+	}, nil
+}
+
+// getDigestsForTheme retrieves digests, optionally filtered by theme
+func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]DigestSummaryView, error) {
+	var digests []core.Digest
+	var err error
+
+	if themeID == "" {
+		// Get top 5 most recent digests
+		digests, err = s.db.Digests().List(ctx, persistence.ListOptions{Limit: 5, Offset: 0})
+	} else {
+		// Look up the theme name from the ID
+		// ArticleGroups store theme names, not IDs
+		theme, err := s.db.Themes().Get(ctx, themeID)
+		if err != nil {
+			slog.Warn("Failed to lookup theme by ID", "theme_id", themeID, "error", err)
+			// If lookup fails, fall back to using the ID as-is (maybe it's already a name)
+			theme = &core.Theme{Name: themeID}
+		}
+
+		themeName := theme.Name
+
+		// Get digests for specific theme
+		// For now, get all and filter in memory
+		allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 100, Offset: 0})
+		if err != nil {
+			return nil, err
+		}
+
+		// Filter digests that contain articles with this theme
+		for _, d := range allDigests {
+			hasTheme := false
+			for _, group := range d.ArticleGroups {
+				if group.Theme == themeName {
+					hasTheme = true
+					break
+				}
+			}
+			if hasTheme {
+				digests = append(digests, d)
+			}
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to view models
+	result := make([]DigestSummaryView, 0, len(digests))
+	for _, d := range digests {
+		// Extract unique themes
+		themeSet := make(map[string]bool)
+		for _, group := range d.ArticleGroups {
+			themeSet[group.Theme] = true
+		}
+		themes := make([]string, 0, len(themeSet))
+		for theme := range themeSet {
+			themes = append(themes, theme)
+		}
+		// Sort themes alphabetically for consistent display order
+		sort.Strings(themes)
+
+		result = append(result, DigestSummaryView{
+			ID:             d.ID,
+			Themes:         themes,
+			DigestSummary:  d.DigestSummary,
+			SummaryPreview: d.Metadata.TLDRSummary, // Use generated TL;DR summary
+			Metadata: DigestMetadataView{
+				Title:         d.Metadata.Title,
+				ArticleCount:  d.Metadata.ArticleCount,
+				ThemeCount:    len(d.ArticleGroups), // Calculate from article groups
+				DateGenerated: d.Metadata.DateGenerated,
+				QualityScore:  d.Metadata.QualityScore,
+			},
+		})
+	}
+
+	return result, nil
+}

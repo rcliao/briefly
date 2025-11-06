@@ -295,13 +295,15 @@ type ArticleGroup struct {
 
 // DigestMetadata contains digest processing information (v3.0)
 type DigestMetadata struct {
-	Title           string         `json:"title"`
-	DateGenerated   time.Time      `json:"date_generated"`
-	WordCount       int            `json:"word_count"`
-	ArticleCount    int            `json:"article_count"`
-	ProcessingTime  time.Duration  `json:"processing_time"`
-	ProcessingCost  ProcessingCost `json:"processing_cost"`
-	QualityScore    float64        `json:"quality_score"`    // Overall digest quality
+	Title          string        `json:"title"`
+	TLDRSummary    string        `json:"tldr_summary"` // One-line summary for homepage preview
+	KeyMoments     []string      `json:"key_moments"`  // 3-5 key developments/highlights
+	DateGenerated  time.Time     `json:"date_generated"`
+	WordCount      int           `json:"word_count"`
+	ArticleCount   int           `json:"article_count"`
+	ProcessingTime time.Duration `json:"processing_time"`
+	ProcessingCost ProcessingCost `json:"processing_cost"`
+	QualityScore   float64       `json:"quality_score"` // Overall digest quality
 }
 
 // UserFeedback captures user ratings and comments (v3.0)

@@ -5,6 +5,7 @@ import (
 	"briefly/internal/core"
 	"briefly/internal/llm"
 	"briefly/internal/logger"
+	"briefly/internal/narrative"
 	"briefly/internal/persistence"
 	"briefly/internal/summarize"
 	"context"
@@ -25,6 +26,16 @@ type llmClientAdapter struct {
 
 // GenerateText implements summarize.LLMClient interface
 func (a *llmClientAdapter) GenerateText(ctx context.Context, prompt string, opts interface{}) (string, error) {
+	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
+}
+
+// narrativeLLMAdapter adapts llm.Client to narrative.LLMClient interface
+type narrativeLLMAdapter struct {
+	client *llm.Client
+}
+
+// GenerateText implements narrative.LLMClient interface
+func (a *narrativeLLMAdapter) GenerateText(ctx context.Context, prompt string) (string, error) {
 	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
 }
 
@@ -377,24 +388,74 @@ func generateDigestWithSummaries(ctx context.Context, db *persistence.PostgresDB
 		return articleGroups[i].Priority > articleGroups[j].Priority
 	})
 
-	// Generate executive summary
-	fmt.Println("   ✨ Generating executive summary...")
-	executiveSummary := generateExecutiveSummaryFromThemes(ctx, llmClient, articleGroups, articleSummaries)
+	// Generate Title, TL;DR, Key Moments, and Executive Summary using narrative generator
+	fmt.Println("   ✨ Generating title, TL;DR, key moments, and executive summary...")
 
-	// Build digest structure
-	digestDate := time.Now()
-	if themeFilter != "" {
-		digestDate = since // Use since date if filtering
+	// Create narrative generator with adapter
+	narrativeAdapter := &narrativeLLMAdapter{client: llmClient}
+	narrativeGen := narrative.NewGenerator(narrativeAdapter)
+
+	// Convert articleGroups to TopicClusters and build maps
+	clusters := make([]core.TopicCluster, 0, len(articleGroups))
+	articleMap := make(map[string]core.Article)
+	summaryMap := make(map[string]core.Summary)
+
+	for _, group := range articleGroups {
+		// Create cluster from article group
+		articleIDs := make([]string, 0, len(group.Articles))
+		for _, article := range group.Articles {
+			articleIDs = append(articleIDs, article.ID)
+			articleMap[article.ID] = article
+		}
+
+		cluster := core.TopicCluster{
+			Label:      group.Theme,
+			ArticleIDs: articleIDs,
+		}
+		clusters = append(clusters, cluster)
 	}
 
+	// Build summary map
+	for _, summary := range summaryList {
+		for _, articleID := range summary.ArticleIDs {
+			summaryMap[articleID] = summary
+		}
+	}
+
+	// Generate content (Title, TL;DR, Summary)
+	digestContent, err := narrativeGen.GenerateDigestContent(ctx, clusters, articleMap, summaryMap)
+	if err != nil {
+		log.Warn("Failed to generate digest content with narrative generator", "error", err)
+		// Fallback to simple generation
+		digestDate := time.Now()
+		if themeFilter != "" {
+			digestDate = since
+		}
+		digestContent = &narrative.DigestContent{
+			Title:            fmt.Sprintf("Weekly Tech Digest - %s", digestDate.Format("Jan 2, 2006")),
+			TLDRSummary:      fmt.Sprintf("This week's digest covers %d articles across %d themes.", len(articles), len(themeGroups)),
+			KeyMoments:       []string{},
+			ExecutiveSummary: generateFallbackExecutiveSummary(articleGroups),
+		}
+	}
+
+	// Log generated content
+	fmt.Printf("   ✓ Title: %s\n", digestContent.Title)
+	fmt.Printf("   ✓ TL;DR: %s\n", digestContent.TLDRSummary)
+	fmt.Printf("   ✓ Key Moments: %d\n", len(digestContent.KeyMoments))
+	fmt.Printf("   ✓ Summary: %d words\n", len(digestContent.ExecutiveSummary)/5)
+
+	// Build digest structure with generated content
 	digest := &core.Digest{
 		ID:            uuid.NewString(),
 		ArticleGroups: articleGroups,
 		Summaries:     summaryList,
-		DigestSummary: executiveSummary,
-		Title:         fmt.Sprintf("Weekly Tech Digest - %s", digestDate.Format("Jan 2, 2006")),
+		DigestSummary: digestContent.ExecutiveSummary,
+		Title:         digestContent.Title,
 		Metadata: core.DigestMetadata{
-			Title:         fmt.Sprintf("Weekly Tech Digest - %s", digestDate.Format("Jan 2, 2006")),
+			Title:         digestContent.Title,
+			TLDRSummary:   digestContent.TLDRSummary,
+			KeyMoments:    digestContent.KeyMoments,
 			ArticleCount:  len(articles),
 			DateGenerated: time.Now(),
 		},
@@ -419,47 +480,6 @@ func generateThemeSummary(articles []core.Article, summaries map[string]*core.Su
 }
 
 // generateExecutiveSummaryFromThemes creates an executive summary from theme groups
-func generateExecutiveSummaryFromThemes(ctx context.Context, llmClient *llm.Client, articleGroups []core.ArticleGroup, summaries map[string]*core.Summary) string {
-	log := logger.Get()
-
-	// Build prompt for executive summary
-	var prompt strings.Builder
-	prompt.WriteString("Generate a compelling executive summary (200 words max) for this weekly tech digest.\n\n")
-	prompt.WriteString("The digest covers the following themes and articles:\n\n")
-
-	for _, group := range articleGroups {
-		prompt.WriteString(fmt.Sprintf("**%s** (%d articles):\n", group.Theme, len(group.Articles)))
-		for i, article := range group.Articles {
-			if i >= 3 {
-				break // Only use top 3 per theme
-			}
-			summary := summaries[article.ID]
-			if summary != nil {
-				prompt.WriteString(fmt.Sprintf("- %s: %s\n", article.Title, summary.SummaryText))
-			} else {
-				prompt.WriteString(fmt.Sprintf("- %s\n", article.Title))
-			}
-		}
-		prompt.WriteString("\n")
-	}
-
-	prompt.WriteString("\nWrite an engaging executive summary that:\n")
-	prompt.WriteString("1. Highlights the most important trends and insights\n")
-	prompt.WriteString("2. Connects themes and shows relationships\n")
-	prompt.WriteString("3. Is written for technical leaders and engineers\n")
-	prompt.WriteString("4. Uses a professional but engaging tone\n")
-	prompt.WriteString("5. Focuses on actionable insights\n\n")
-	prompt.WriteString("Executive Summary:\n")
-
-	// Generate using LLM
-	response, err := llmClient.GenerateText(ctx, prompt.String(), llm.TextGenerationOptions{})
-	if err != nil {
-		log.Warn("Failed to generate executive summary", "error", err)
-		return generateFallbackExecutiveSummary(articleGroups)
-	}
-
-	return strings.TrimSpace(response)
-}
 
 // generateFallbackExecutiveSummary creates a simple fallback if LLM fails
 func generateFallbackExecutiveSummary(articleGroups []core.ArticleGroup) string {
