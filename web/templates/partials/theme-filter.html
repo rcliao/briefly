@@ -1,0 +1,28 @@
+<!-- Theme filter -->
+<nav class="theme-filter">
+    <!-- All Themes -->
+    <a href="/?theme=all"
+       class="theme-tab {{ if not .ActiveTheme }}active{{ end }}"
+       data-theme-id="all"
+       hx-get="/?theme=all"
+       hx-target="#digest-list"
+       hx-swap="innerHTML transition:true"
+       hx-push-url="true"
+       onclick="if(window.posthog) posthog.capture('theme_filter_clicked', {theme: 'all'})">
+        All
+    </a>
+
+    <!-- Individual themes -->
+    {{ range .Themes }}
+    <a href="/?theme={{ .ID }}"
+       class="theme-tab {{ if eq .ID $.ActiveTheme }}active{{ end }}"
+       data-theme-id="{{ .ID }}"
+       hx-get="/?theme={{ .ID }}"
+       hx-target="#digest-list"
+       hx-swap="innerHTML transition:true"
+       hx-push-url="true"
+       onclick="if(window.posthog) posthog.capture('theme_filter_clicked', {theme: '{{ .Name }}'})">
+        {{ .Name }}
+    </a>
+    {{ end }}
+</nav>

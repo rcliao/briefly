@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="description" content="AI-curated tech news digest with weekly insights">
+
+    <title>{{ .Title }} - Briefly</title>
+
+    <!-- Nord Minimal Theme -->
+    <link rel="stylesheet" href="/static/css/nord-minimal.css">
+    <link rel="stylesheet" href="/static/css/keyboard-nav.css">
+
+    <!-- HTMX for partial updates -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Keyboard Navigation (new system) -->
+    <script src="/static/js/keyboard-nav-base.js"></script>
+    <script src="/static/js/keyboard-nav-components.js"></script>
+    <script src="/static/js/keyboard-nav-digest.js"></script>
+
+    <!-- PostHog Analytics -->
+    {{ if .PostHogEnabled }}
+    <script>
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+        posthog.init('{{ .PostHogAPIKey }}', {api_host: '{{ .PostHogHost }}'})
+    </script>
+    {{ end }}
+</head>
+<body>
+    <!-- Header -->
+    {{ template "partials/header.html" . }}
+
+    <!-- Main Content -->
+    <main class="container">
+        <div class="digest-layout">
+            <!-- Sidebar -->
+            <aside class="digest-sidebar">
+                <section class="sidebar-section">
+                    <h2>Recent Digests</h2>
+                    <ol class="digest-nav-list">
+                        {{ range .RecentDigests }}
+                        <li class="digest-nav-item {{ if .IsActive }}active{{ end }}">
+                            <a href="/digests/{{ .ID }}">
+                                <div class="digest-nav-title">{{ .Title }}</div>
+                                <div class="digest-nav-meta">
+                                    <time>{{ .DateGenerated.Format "Jan 2" }}</time>
+                                    <span>{{ .ArticleCount }} articles</span>
+                                </div>
+                            </a>
+                        </li>
+                        {{ end }}
+                    </ol>
+                </section>
+            </aside>
+
+            <!-- Main Content Area -->
+            <article class="digest-detail" data-page="digest-detail">
+                <!-- Digest Header -->
+                <header class="digest-header">
+                    <h1>{{ .Title }}</h1>
+                    <div class="digest-meta">
+                        <time datetime="{{ .DateGenerated.Format "2006-01-02" }}">
+                            {{ .DateGenerated.Format "January 2, 2006" }}
+                        </time>
+                        <span class="meta-separator">·</span>
+                        <span class="article-count">{{ .ArticleCount }} articles</span>
+                    </div>
+                </header>
+
+            <!-- Summary Section -->
+            <section id="summary" class="digest-section navigable-section" data-section="summary" tabindex="0">
+                <h2>Summary</h2>
+                <div class="summary-content">
+                    {{ .SummaryHTML }}
+                </div>
+            </section>
+
+            <!-- Key Moments Section -->
+            {{ if .KeyMoments }}
+            <section id="key-moments" class="digest-section navigable-section key-moments-section" data-section="key-moments" tabindex="0">
+                <h2>Key Moments</h2>
+                <ol class="key-moments">
+                    {{ range .KeyMoments }}
+                    <li>{{ . }}</li>
+                    {{ end }}
+                </ol>
+            </section>
+            {{ end }}
+
+            <!-- All Articles Section -->
+            <section id="articles" class="digest-section navigable-section" data-section="articles" tabindex="0">
+                <h2>All Articles</h2>
+                <ol class="article-list">
+                    {{ range .Articles }}
+                        {{ template "partials/article-item.html" . }}
+                    {{ end }}
+                </ol>
+            </section>
+            </article>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    {{ template "partials/footer.html" . }}
+
+    <script>
+        // Track digest view
+        if (window.posthog) {
+            posthog.capture('digest_viewed', {
+                digest_id: '{{ .ID }}',
+                article_count: {{ .ArticleCount }},
+                has_perspectives: {{ if .Perspectives }}true{{ else }}false{{ end }}
+            });
+        }
+    </script>
+</body>
+</html>

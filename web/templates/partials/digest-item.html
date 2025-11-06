@@ -1,0 +1,21 @@
+<!-- Digest Item -->
+<li class="digest-item" data-digest-id="{{ .ID }}">
+    <div class="digest-item-header">
+        <div class="digest-title-row">
+            <a href="/digests/{{ .ID }}" class="digest-title">
+                {{ .Metadata.Title }}
+                {{ if .Themes }}
+                    <span class="digest-theme-list">({{ range $i, $theme := .Themes }}{{ if $i }}, {{ end }}<span class="digest-theme-tag" data-theme-name="{{ $theme }}">{{ $theme }}</span>{{ end }})</span>
+                {{ end }}
+            </a>
+        </div>
+        <div class="digest-meta">
+            <time datetime="{{ .Metadata.DateGenerated.Format "2006-01-02" }}">{{ formatTimeAgo .Metadata.DateGenerated }}</time>
+            <span class="meta-separator">·</span>
+            <span class="article-count">{{ .Metadata.ArticleCount }} articles</span>
+        </div>
+    </div>
+    {{ if .SummaryPreview }}
+    <p class="digest-preview">{{ .SummaryPreview }}</p>
+    {{ end }}
+</li>

@@ -1,0 +1,648 @@
+/**
+ * Keyboard Navigation Styles
+ *
+ * Styles for context-based keyboard navigation:
+ * - Context indicator
+ * - Highlights (nav, theme, digest, section, article)
+ * - Transitions and animations
+ * - Mobile/touch support
+ */
+
+/* ============================================================
+   Context Indicator (Bottom-Right)
+   ============================================================ */
+
+.context-indicator {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 100;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Show indicator when in keyboard mode */
+body.keyboard-mode .context-indicator {
+  opacity: 0.9;
+  pointer-events: auto;
+}
+
+/* Context-specific colors (Nord theme) */
+.context-indicator.context-nav {
+  background: var(--nord8, #88c0d0);  /* Blue - matches nav highlight */
+  color: var(--nord0, #2e3440);
+}
+
+.context-indicator.context-theme {
+  background: var(--nord10, #5e81ac);  /* Blue */
+  color: var(--nord6, #eceff4);
+}
+
+.context-indicator.context-digest {
+  background: var(--nord14, #a3be8c);  /* Green */
+  color: var(--nord0, #2e3440);
+}
+
+.context-indicator.context-content {
+  background: var(--nord9, #81a1c1);   /* Light blue */
+  color: var(--nord6, #eceff4);
+}
+
+.context-indicator.context-section {
+  background: var(--nord13, #ebcb8b);  /* Yellow */
+  color: var(--nord0, #2e3440);
+}
+
+.context-indicator.context-sidebar {
+  background: var(--nord15, #b48ead);  /* Purple/Pink */
+  color: var(--nord6, #eceff4);
+}
+
+.context-indicator.context-article {
+  background: var(--nord8, #88c0d0);  /* Blue - matches article highlight */
+  color: var(--nord0, #2e3440);
+}
+
+/* ============================================================
+   Navigation Link Highlights (NAV Context)
+   ============================================================ */
+
+/* Add padding to nav links for better highlight size */
+header nav a {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+/* Only show nav highlights when in NAV context */
+body.context-nav header nav a.highlighted {
+  outline: 3px solid var(--nord8, #88c0d0);
+  outline-offset: 2px;
+  background: rgba(136, 192, 208, 0.1);
+  transition: all 0.2s ease;
+}
+
+/* ============================================================
+   Theme Tab Highlights (THEME Context)
+   ============================================================ */
+
+/* Base styling for all theme tabs */
+.theme-tab {
+  border-radius: 0.375rem;
+  padding: 0.5rem 1rem;
+  margin-right: 0.5rem;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+/* Navigation cursor (h/l) - only show in THEME context */
+body.context-theme .theme-tab.cursor {
+  outline: 3px solid var(--nord8, #88c0d0);
+  outline-offset: 2px;
+  transform: scale(1.05);
+  transition: all 0.2s ease;
+  z-index: 1;
+}
+
+/* Selected for filtering (Space) - always visible */
+.theme-tab.selected {
+  background: var(--nord10, #5e81ac);
+  color: var(--nord6, #eceff4);
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.theme-tab.selected::after {
+  content: " ✓";
+  margin-left: 0.25rem;
+  font-weight: bold;
+}
+
+/* Both cursor and selected */
+body.context-theme .theme-tab.cursor.selected {
+  outline-color: var(--nord14, #a3be8c);
+}
+
+/* Hover (mouse) - distinct from keyboard selection */
+.theme-tab:hover:not(.cursor):not(.selected) {
+  background: rgba(136, 192, 208, 0.1);
+  transform: scale(1.02);
+  transition: all 0.15s ease;
+}
+
+/* ============================================================
+   Digest Item Highlights (DIGEST Context)
+   ============================================================ */
+
+/* Base styling for digest list */
+.digest-list {
+  list-style-position: inside;
+}
+
+/* Base styling for all digest items */
+.digest-item {
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  transition: all 0.2s ease;
+}
+
+/* Make the first child inline-block to prevent line break after marker */
+.digest-item > .digest-item-header {
+  display: inline-block;
+  width: calc(100% - 2rem); /* Account for the list marker space */
+  vertical-align: top;
+}
+
+/* Digest item header layout - stack title and meta */
+.digest-item-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.digest-title-row {
+  display: block;
+}
+
+.digest-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--nord6, #eceff4);
+}
+
+.digest-theme-list {
+  font-weight: 400;
+  margin-left: 0.25rem;
+}
+
+/* Consistent colors for themes across tabs and digest tags */
+
+/* AI Applications & Use Cases - Light Blue */
+.theme-tab[data-theme-id="theme-ai-applications"],
+.digest-theme-tag[data-theme-name="AI Applications & Use Cases"] {
+  color: var(--nord9, #81a1c1);
+}
+
+/* AI Development Tools & Platforms - Green */
+.theme-tab[data-theme-id="theme-ai-dev-tools"],
+.digest-theme-tag[data-theme-name="AI Development Tools & Platforms"] {
+  color: var(--nord14, #a3be8c);
+}
+
+/* LLM Models & Research - Purple */
+.theme-tab[data-theme-id="theme-llm-research"],
+.digest-theme-tag[data-theme-name="LLM Models & Research"] {
+  color: var(--nord15, #b48ead);
+}
+
+/* Unknown Theme - Yellow */
+.digest-theme-tag[data-theme-name="Unknown Theme"] {
+  color: var(--nord13, #ebcb8b);
+}
+
+/* Legacy themes fallback colors */
+.theme-tab[data-theme-id="theme-ai-ml"],
+.digest-theme-tag[data-theme-name="AI & Machine Learning"] {
+  color: var(--nord9, #81a1c1);
+}
+
+.theme-tab[data-theme-id="theme-security"],
+.digest-theme-tag[data-theme-name="Security & Privacy"] {
+  color: var(--nord12, #d08770);
+}
+
+/* Grey metadata row */
+.digest-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--nord4, #d8dee9);
+  opacity: 0.7;
+}
+
+/* Remove border-bottom from digest detail page header */
+.digest-header {
+  border-bottom: none;
+}
+
+/* Override automatic separators from base CSS */
+.digest-meta span::after {
+  content: none !important;
+}
+
+.meta-separator {
+  color: var(--nord4, #d8dee9);
+}
+
+.digest-item > .digest-preview {
+  display: block;
+  margin-top: 0.5rem;
+  margin-left: 2rem; /* Align with title text after the list marker */
+}
+
+/* Only show digest highlights when in DIGEST context */
+body.context-digest .digest-item.highlighted {
+  outline: 3px solid var(--nord8, #88c0d0);
+  outline-offset: 2px;
+  background: var(--nord1, #3b4252);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 1;
+}
+
+/* Hover (mouse) - subtle, distinct from keyboard highlight */
+.digest-item:hover:not(.highlighted) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.15s ease;
+}
+
+/* Both highlighted and hover */
+.digest-item.highlighted:hover {
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* ============================================================
+   Sidebar Navigation Item Highlights (SIDEBAR Context)
+   ============================================================ */
+
+/* Base styling for all sidebar items */
+.digest-nav-item {
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+/* Only show sidebar highlights when in SIDEBAR context */
+body.context-sidebar .digest-nav-item.highlighted {
+  background: var(--nord1, #3b4252);
+  border-left: 4px solid var(--nord13, #ebcb8b);
+  padding-left: 0.75rem;
+  margin-left: -0.75rem;
+  transition: all 0.2s ease;
+}
+
+body.context-sidebar .digest-nav-item.highlighted a {
+  color: var(--nord6, #eceff4);
+  font-weight: 500;
+}
+
+/* Hover for sidebar items */
+.digest-nav-item:hover:not(.highlighted) {
+  background: var(--nord1, #3b4252);
+  opacity: 0.8;
+  transition: all 0.15s ease;
+}
+
+/* ============================================================
+   Section Highlights (CONTENT/SECTION Context)
+   ============================================================ */
+
+/* Base styling for all sections */
+.content-section,
+.digest-section,
+.about-section {
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+/* Reduce spacing for about page sections */
+.about-section {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Reduce h2 top margin in about sections */
+.about-section h2 {
+  margin-top: 0.5rem;
+}
+
+/* Only show section highlights when in CONTENT or SECTION context */
+body.context-content .content-section.highlighted,
+body.context-content .digest-section.highlighted,
+body.context-content .about-section.highlighted,
+body.context-section .content-section.highlighted,
+body.context-section .digest-section.highlighted,
+body.context-section .about-section.highlighted {
+  border-left: 4px solid var(--nord8, #88c0d0);
+  padding-left: 1rem;
+  background: rgba(136, 192, 208, 0.05);
+  margin-left: -1rem;
+  transition: all 0.3s ease;
+}
+
+/* Fix shift issue for about sections - don't pull back with negative margin */
+body.context-content .about-section.highlighted,
+body.context-section .about-section.highlighted {
+  margin-left: 0;
+  padding-left: calc(1rem - 4px); /* Subtract border width to prevent shift */
+}
+
+/* ============================================================
+   Article Highlights (ARTICLE Context)
+   ============================================================ */
+
+/* Base styling for all article items */
+.article-item {
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+/* Only show article highlights when in ARTICLE context */
+body.context-article .article-item.highlighted {
+  outline: 3px solid var(--nord8, #88c0d0);
+  outline-offset: 2px;
+  background: rgba(136, 192, 208, 0.1);
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.article-item:hover:not(.highlighted) {
+  background: rgba(136, 192, 208, 0.05);
+  transform: translateX(2px);
+  transition: all 0.15s ease;
+}
+
+/* ============================================================
+   Smooth Scroll Behavior
+   ============================================================ */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Disable smooth scroll when user prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .digest-card.highlighted,
+  .article-item.highlighted,
+  .theme-tab.cursor,
+  .context-indicator {
+    transition: none;
+  }
+}
+
+/* ============================================================
+   Notification Toast (for copy actions, etc.)
+   ============================================================ */
+
+.keyboard-notification {
+  position: fixed;
+  bottom: 4rem;
+  right: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--nord0, #2e3440);
+  color: var(--nord6, #eceff4);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  opacity: 0;
+  transform: translateY(1rem);
+  transition: all 0.3s ease;
+  z-index: 101;
+}
+
+.keyboard-notification.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ============================================================
+   Context Menu (Mobile Long Press)
+   ============================================================ */
+
+.context-menu {
+  position: fixed;
+  background: var(--nord0, #2e3440);
+  border: 1px solid var(--nord3, #4c566a);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  min-width: 150px;
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background: none;
+  border: none;
+  color: var(--nord6, #eceff4);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  transition: background 0.15s ease;
+}
+
+.context-menu-item:hover,
+.context-menu-item:focus {
+  background: var(--nord3, #4c566a);
+  outline: none;
+}
+
+/* ============================================================
+   Modal Enhancements (Help Modal)
+   ============================================================ */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  position: relative;
+  background: var(--nord0, #2e3440);
+  border-radius: 0.5rem;
+  width: 90%;
+  max-width: 42rem;
+  max-height: 80vh;
+  overflow-y: auto;
+  margin: 1rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--nord3, #4c566a);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--nord6, #eceff4);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--nord4, #d8dee9);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+  transition: color 0.15s ease;
+}
+
+.modal-close:hover {
+  color: var(--nord6, #eceff4);
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.shortcut-section {
+  margin-bottom: 2rem;
+}
+
+.shortcut-section:last-child {
+  margin-bottom: 0;
+}
+
+.shortcut-section h3 {
+  font-size: 1rem;
+  color: var(--nord8, #88c0d0);
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.shortcut-item {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.shortcut-item dt {
+  flex-shrink: 0;
+  min-width: 7rem;
+  font-weight: normal;
+}
+
+.shortcut-item dd {
+  margin: 0;
+  color: var(--nord5, #e5e9f0);
+}
+
+.shortcut-item kbd {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  background: var(--nord1, #3b4252);
+  border: 1px solid var(--nord3, #4c566a);
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-family: monospace;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Highlight current context in help modal */
+.shortcut-section.current-context h3::before {
+  content: "⭐ ";
+}
+
+.shortcut-section.current-context {
+  border-left: 3px solid var(--nord8, #88c0d0);
+  padding-left: 1rem;
+  margin-left: -1rem;
+}
+
+/* ============================================================
+   Mobile Optimizations
+   ============================================================ */
+
+@media (max-width: 640px) {
+  .context-indicator {
+    bottom: 0.75rem;
+    right: 0.75rem;
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+  }
+
+  .keyboard-notification {
+    bottom: 3.5rem;
+    right: 0.75rem;
+    left: 0.75rem;
+    text-align: center;
+  }
+
+  .modal-content {
+    max-width: calc(100% - 2rem);
+    margin: 1rem;
+  }
+
+  .shortcut-item {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .shortcut-item dt {
+    min-width: auto;
+  }
+}
+
+/* ============================================================
+   Focus Visible (Accessibility)
+   ============================================================ */
+
+/* Hide default focus outline when using keyboard nav */
+*:focus {
+  outline: none;
+}
+
+/* Show focus outline for tab navigation */
+*:focus-visible {
+  outline: 2px solid var(--nord8, #88c0d0);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   Print Styles
+   ============================================================ */
+
+@media print {
+  .context-indicator,
+  .keyboard-notification,
+  .context-menu {
+    display: none !important;
+  }
+}

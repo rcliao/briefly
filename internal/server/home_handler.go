@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 )
 
@@ -41,10 +42,11 @@ type ThemeWithCount struct {
 
 // DigestSummaryView is the view model for digest cards
 type DigestSummaryView struct {
-	ID            string
-	Themes        []string
-	DigestSummary string
-	Metadata      DigestMetadataView
+	ID             string
+	Themes         []string
+	DigestSummary  string
+	SummaryPreview string // Truncated summary for homepage preview (~100 chars)
+	Metadata       DigestMetadataView
 }
 
 // DigestMetadataView contains digest metadata for the view
@@ -80,9 +82,9 @@ func (s *Server) handleHomePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Render the full page through base layout
+	// Render the home page (it will automatically use base layout via block inheritance)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.renderer.Render(w, "layouts/base.html", data); err != nil {
+	if err := s.renderer.Render(w, "pages/home.html", data); err != nil {
 		slog.Error("Failed to render homepage", "error", err)
 		http.Error(w, "Failed to render page", http.StatusInternalServerError)
 		return
@@ -193,10 +195,21 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]Dige
 	var err error
 
 	if themeID == "" {
-		// Get all digests
-		digests, err = s.db.Digests().List(ctx, persistence.ListOptions{Limit: 20, Offset: 0})
+		// Get top 5 most recent digests
+		digests, err = s.db.Digests().List(ctx, persistence.ListOptions{Limit: 5, Offset: 0})
 	} else {
-		// Get digests for specific theme (TODO: implement in repository)
+		// Look up the theme name from the ID
+		// ArticleGroups store theme names, not IDs
+		theme, err := s.db.Themes().Get(ctx, themeID)
+		if err != nil {
+			slog.Warn("Failed to lookup theme by ID", "theme_id", themeID, "error", err)
+			// If lookup fails, fall back to using the ID as-is (maybe it's already a name)
+			theme = &core.Theme{Name: themeID}
+		}
+
+		themeName := theme.Name
+
+		// Get digests for specific theme
 		// For now, get all and filter in memory
 		allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 100, Offset: 0})
 		if err != nil {
@@ -207,7 +220,7 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]Dige
 		for _, d := range allDigests {
 			hasTheme := false
 			for _, group := range d.ArticleGroups {
-				if group.Theme == themeID || containsThemeByID(group, themeID) {
+				if group.Theme == themeName {
 					hasTheme = true
 					break
 				}
@@ -234,11 +247,14 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]Dige
 		for theme := range themeSet {
 			themes = append(themes, theme)
 		}
+		// Sort themes alphabetically for consistent display order
+		sort.Strings(themes)
 
 		result = append(result, DigestSummaryView{
-			ID:            d.ID,
-			Themes:        themes,
-			DigestSummary: d.DigestSummary,
+			ID:             d.ID,
+			Themes:         themes,
+			DigestSummary:  d.DigestSummary,
+			SummaryPreview: d.Metadata.TLDRSummary, // Use generated TL;DR summary
 			Metadata: DigestMetadataView{
 				Title:         d.Metadata.Title,
 				ArticleCount:  d.Metadata.ArticleCount,
