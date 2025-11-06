@@ -480,47 +480,6 @@ func generateThemeSummary(articles []core.Article, summaries map[string]*core.Su
 }
 
 // generateExecutiveSummaryFromThemes creates an executive summary from theme groups
-func generateExecutiveSummaryFromThemes(ctx context.Context, llmClient *llm.Client, articleGroups []core.ArticleGroup, summaries map[string]*core.Summary) string {
-	log := logger.Get()
-
-	// Build prompt for executive summary
-	var prompt strings.Builder
-	prompt.WriteString("Generate a compelling executive summary (200 words max) for this weekly tech digest.\n\n")
-	prompt.WriteString("The digest covers the following themes and articles:\n\n")
-
-	for _, group := range articleGroups {
-		prompt.WriteString(fmt.Sprintf("**%s** (%d articles):\n", group.Theme, len(group.Articles)))
-		for i, article := range group.Articles {
-			if i >= 3 {
-				break // Only use top 3 per theme
-			}
-			summary := summaries[article.ID]
-			if summary != nil {
-				prompt.WriteString(fmt.Sprintf("- %s: %s\n", article.Title, summary.SummaryText))
-			} else {
-				prompt.WriteString(fmt.Sprintf("- %s\n", article.Title))
-			}
-		}
-		prompt.WriteString("\n")
-	}
-
-	prompt.WriteString("\nWrite an engaging executive summary that:\n")
-	prompt.WriteString("1. Highlights the most important trends and insights\n")
-	prompt.WriteString("2. Connects themes and shows relationships\n")
-	prompt.WriteString("3. Is written for technical leaders and engineers\n")
-	prompt.WriteString("4. Uses a professional but engaging tone\n")
-	prompt.WriteString("5. Focuses on actionable insights\n\n")
-	prompt.WriteString("Executive Summary:\n")
-
-	// Generate using LLM
-	response, err := llmClient.GenerateText(ctx, prompt.String(), llm.TextGenerationOptions{})
-	if err != nil {
-		log.Warn("Failed to generate executive summary", "error", err)
-		return generateFallbackExecutiveSummary(articleGroups)
-	}
-
-	return strings.TrimSpace(response)
-}
 
 // generateFallbackExecutiveSummary creates a simple fallback if LLM fails
 func generateFallbackExecutiveSummary(articleGroups []core.ArticleGroup) string {
