@@ -1,9 +1,15 @@
 package server
 
 import (
+	"context"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"os"
+	"time"
+
+	"briefly/internal/core"
+	"briefly/internal/persistence"
 )
 
 // getPostHogConfig returns PostHog configuration
@@ -429,21 +435,172 @@ func (s *Server) handleDigestsPage(w http.ResponseWriter, r *http.Request) {
 
 // handleDigestDetailPage handles GET /digests/{id} (HTML page - single digest)
 func (s *Server) handleDigestDetailPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Extract digest ID from URL path
+	digestID := r.PathValue("id")
+	if digestID == "" {
+		http.Error(w, "Digest ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch digest from database
+	digest, err := s.db.Digests().Get(ctx, digestID)
+	if err != nil {
+		s.log.Error("Failed to fetch digest", "error", err, "id", digestID)
+		http.Error(w, "Digest not found", http.StatusNotFound)
+		return
+	}
+
+	// Prepare data for template
+	data, err := s.prepareDigestDetailData(ctx, digest)
+	if err != nil {
+		s.log.Error("Failed to prepare digest detail data", "error", err)
+		http.Error(w, "Failed to load digest", http.StatusInternalServerError)
+		return
+	}
+
+	// Render the digest detail page (which extends base layout)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-
-	apiKey, host := s.getPostHogConfig()
-
-	tmpl := template.Must(template.New("digestDetail").Parse(digestDetailPageTemplate))
-	data := map[string]interface{}{
-		"PostHogAPIKey":  apiKey,
-		"PostHogHost":    host,
-		"PostHogEnabled": apiKey != "",
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := s.renderer.Render(w, "pages/digest-detail.html", data); err != nil {
 		s.log.Error("Failed to render digest detail page", "error", err)
+		http.Error(w, "Failed to render page", http.StatusInternalServerError)
+		return
 	}
+}
+
+// prepareDigestDetailData prepares view model for digest detail page
+func (s *Server) prepareDigestDetailData(ctx context.Context, digest *core.Digest) (*DigestDetailPageData, error) {
+	// Render markdown server-side
+	summaryHTML := renderMarkdown(digest.DigestSummary)
+
+	// Use key moments from metadata and render markdown (e.g., **bold** formatting)
+	keyMomentsHTML := make([]template.HTML, 0, len(digest.Metadata.KeyMoments))
+	for _, moment := range digest.Metadata.KeyMoments {
+		keyMomentsHTML = append(keyMomentsHTML, renderMarkdown(moment))
+	}
+
+	// Map article groups to perspectives
+	perspectives := make([]PerspectiveView, 0, len(digest.ArticleGroups))
+	for _, group := range digest.ArticleGroups {
+		perspectives = append(perspectives, PerspectiveView{
+			Title:       group.Theme,
+			ContentHTML: renderMarkdown(group.Summary),
+			Category:    group.Category,
+		})
+	}
+
+	// Collect all articles from all groups
+	articles := make([]ArticleView, 0)
+	for _, group := range digest.ArticleGroups {
+		for _, article := range group.Articles {
+			articles = append(articles, ArticleView{
+				ID:          article.ID,
+				URL:         article.URL,
+				Title:       article.Title,
+				Domain:      extractDomain(article.URL),
+				ContentType: string(article.ContentType),
+				DateFetched: article.DateFetched,
+			})
+		}
+	}
+
+	// Get recent digests for sidebar (last 10)
+	recentDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{
+		Limit:  10,
+		Offset: 0,
+	})
+	if err != nil {
+		slog.Warn("Failed to get recent digests", "error", err)
+		recentDigests = []core.Digest{} // Empty list on error
+	}
+
+	// Convert to DigestListItem
+	recentDigestItems := make([]DigestListItem, 0, len(recentDigests))
+	for _, d := range recentDigests {
+		recentDigestItems = append(recentDigestItems, DigestListItem{
+			ID:            d.ID,
+			Title:         d.Metadata.Title,
+			DateGenerated: d.Metadata.DateGenerated,
+			ArticleCount:  d.Metadata.ArticleCount,
+			IsActive:      d.ID == digest.ID,
+		})
+	}
+
+	// PostHog configuration
+	postHogEnabled := false
+	postHogAPIKey := ""
+	postHogHost := "https://app.posthog.com"
+	// TODO: Load from config
+
+	return &DigestDetailPageData{
+		ID:             digest.ID,
+		Title:          digest.Metadata.Title,
+		ArticleCount:   digest.Metadata.ArticleCount,
+		ThemeCount:     len(digest.ArticleGroups),
+		DateGenerated:  digest.Metadata.DateGenerated,
+		QualityScore:   digest.Metadata.QualityScore,
+		SummaryHTML:    summaryHTML,
+		KeyMoments:     keyMomentsHTML,
+		Perspectives:   perspectives,
+		Articles:       articles,
+		Themes:         []ThemeWithCount{}, // Empty for digest detail page (theme filter not shown)
+		RecentDigests:  recentDigestItems,
+		ActiveTheme:    "",                 // No active theme on digest detail page
+		CurrentYear:    time.Now().Year(),
+		PostHogEnabled: postHogEnabled,
+		PostHogAPIKey:  postHogAPIKey,
+		PostHogHost:    postHogHost,
+	}, nil
+}
+
+// DigestDetailPageData contains all data for the digest detail page
+type DigestDetailPageData struct {
+	ID             string
+	Title          string
+	ArticleCount   int
+	ThemeCount     int
+	DateGenerated  time.Time
+	QualityScore   float64
+	SummaryHTML    template.HTML
+	KeyMoments     []template.HTML
+	Perspectives   []PerspectiveView
+	Articles       []ArticleView
+	Themes         []ThemeWithCount    // Themes for this digest
+	RecentDigests  []DigestListItem    // Recent digests list for sidebar
+	ActiveTheme    string              // Added for theme-filter compatibility (unused on detail page)
+	CurrentYear    int
+
+	// PostHog integration
+	PostHogEnabled bool
+	PostHogAPIKey  string
+	PostHogHost    string
+}
+
+// DigestListItem represents a digest in the recent digests sidebar
+type DigestListItem struct {
+	ID            string
+	Title         string
+	DateGenerated time.Time
+	ArticleCount  int
+	IsActive      bool // True if this is the current digest being viewed
+}
+
+// PerspectiveView represents a thematic perspective in the digest
+type PerspectiveView struct {
+	Title       string
+	ContentHTML template.HTML
+	Category    string
+}
+
+// ArticleView represents an article for the view layer
+type ArticleView struct {
+	ID          string
+	URL         string
+	Title       string
+	Domain      string
+	ContentType string
+	DateFetched time.Time
 }
 
 const digestsPageTemplate = `<!DOCTYPE html>

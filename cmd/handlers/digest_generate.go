@@ -5,6 +5,7 @@ import (
 	"briefly/internal/core"
 	"briefly/internal/llm"
 	"briefly/internal/logger"
+	"briefly/internal/narrative"
 	"briefly/internal/persistence"
 	"briefly/internal/summarize"
 	"context"
@@ -25,6 +26,16 @@ type llmClientAdapter struct {
 
 // GenerateText implements summarize.LLMClient interface
 func (a *llmClientAdapter) GenerateText(ctx context.Context, prompt string, opts interface{}) (string, error) {
+	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
+}
+
+// narrativeLLMAdapter adapts llm.Client to narrative.LLMClient interface
+type narrativeLLMAdapter struct {
+	client *llm.Client
+}
+
+// GenerateText implements narrative.LLMClient interface
+func (a *narrativeLLMAdapter) GenerateText(ctx context.Context, prompt string) (string, error) {
 	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
 }
 
@@ -377,24 +388,74 @@ func generateDigestWithSummaries(ctx context.Context, db *persistence.PostgresDB
 		return articleGroups[i].Priority > articleGroups[j].Priority
 	})
 
-	// Generate executive summary
-	fmt.Println("   ✨ Generating executive summary...")
-	executiveSummary := generateExecutiveSummaryFromThemes(ctx, llmClient, articleGroups, articleSummaries)
+	// Generate Title, TL;DR, Key Moments, and Executive Summary using narrative generator
+	fmt.Println("   ✨ Generating title, TL;DR, key moments, and executive summary...")
 
-	// Build digest structure
-	digestDate := time.Now()
-	if themeFilter != "" {
-		digestDate = since // Use since date if filtering
+	// Create narrative generator with adapter
+	narrativeAdapter := &narrativeLLMAdapter{client: llmClient}
+	narrativeGen := narrative.NewGenerator(narrativeAdapter)
+
+	// Convert articleGroups to TopicClusters and build maps
+	clusters := make([]core.TopicCluster, 0, len(articleGroups))
+	articleMap := make(map[string]core.Article)
+	summaryMap := make(map[string]core.Summary)
+
+	for _, group := range articleGroups {
+		// Create cluster from article group
+		articleIDs := make([]string, 0, len(group.Articles))
+		for _, article := range group.Articles {
+			articleIDs = append(articleIDs, article.ID)
+			articleMap[article.ID] = article
+		}
+
+		cluster := core.TopicCluster{
+			Label:      group.Theme,
+			ArticleIDs: articleIDs,
+		}
+		clusters = append(clusters, cluster)
 	}
 
+	// Build summary map
+	for _, summary := range summaryList {
+		for _, articleID := range summary.ArticleIDs {
+			summaryMap[articleID] = summary
+		}
+	}
+
+	// Generate content (Title, TL;DR, Summary)
+	digestContent, err := narrativeGen.GenerateDigestContent(ctx, clusters, articleMap, summaryMap)
+	if err != nil {
+		log.Warn("Failed to generate digest content with narrative generator", "error", err)
+		// Fallback to simple generation
+		digestDate := time.Now()
+		if themeFilter != "" {
+			digestDate = since
+		}
+		digestContent = &narrative.DigestContent{
+			Title:            fmt.Sprintf("Weekly Tech Digest - %s", digestDate.Format("Jan 2, 2006")),
+			TLDRSummary:      fmt.Sprintf("This week's digest covers %d articles across %d themes.", len(articles), len(themeGroups)),
+			KeyMoments:       []string{},
+			ExecutiveSummary: generateFallbackExecutiveSummary(articleGroups),
+		}
+	}
+
+	// Log generated content
+	fmt.Printf("   ✓ Title: %s\n", digestContent.Title)
+	fmt.Printf("   ✓ TL;DR: %s\n", digestContent.TLDRSummary)
+	fmt.Printf("   ✓ Key Moments: %d\n", len(digestContent.KeyMoments))
+	fmt.Printf("   ✓ Summary: %d words\n", len(digestContent.ExecutiveSummary)/5)
+
+	// Build digest structure with generated content
 	digest := &core.Digest{
 		ID:            uuid.NewString(),
 		ArticleGroups: articleGroups,
 		Summaries:     summaryList,
-		DigestSummary: executiveSummary,
-		Title:         fmt.Sprintf("Weekly Tech Digest - %s", digestDate.Format("Jan 2, 2006")),
+		DigestSummary: digestContent.ExecutiveSummary,
+		Title:         digestContent.Title,
 		Metadata: core.DigestMetadata{
-			Title:         fmt.Sprintf("Weekly Tech Digest - %s", digestDate.Format("Jan 2, 2006")),
+			Title:         digestContent.Title,
+			TLDRSummary:   digestContent.TLDRSummary,
+			KeyMoments:    digestContent.KeyMoments,
 			ArticleCount:  len(articles),
 			DateGenerated: time.Now(),
 		},

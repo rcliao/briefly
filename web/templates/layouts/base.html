@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
@@ -7,18 +7,14 @@
 
     <title>{{ block "title" . }}Briefly - Tech News Digest{{ end }}</title>
 
-    <!-- Tailwind CSS + daisyUI -->
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.24/dist/full.min.css" rel="stylesheet" type="text/css" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Nord Minimal Theme -->
+    <link rel="stylesheet" href="/static/css/nord-minimal.css">
 
-    <!-- HTMX -->
+    <!-- HTMX for partial updates -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
-    <!-- Marked.js for markdown rendering -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.0/marked.min.js"></script>
-
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/custom.css">
+    <!-- Keyboard Navigation -->
+    <script src="/static/js/keyboard-nav.js"></script>
 
     <!-- PostHog Analytics -->
     {{ if .PostHogEnabled }}
@@ -28,71 +24,100 @@
     </script>
     {{ end }}
 
-    <!-- Theme initialization script -->
-    <script>
-        // Initialize theme from localStorage or default to dark
-        const theme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', theme);
-    </script>
-
     {{ block "head" . }}{{ end }}
 </head>
-<body class="bg-base-200 min-h-screen">
+<body>
     <!-- Header -->
     {{ template "partials/header.html" . }}
 
     <!-- Main Content -->
-    <main class="container mx-auto px-4 py-6 md:py-8 max-w-6xl">
+    <main class="container">
         {{ block "content" . }}{{ end }}
     </main>
 
     <!-- Footer -->
     {{ template "partials/footer.html" . }}
 
-    <!-- Toast notifications -->
-    <div id="toast-container" class="toast toast-end z-50">
-        <!-- HTMX will inject toasts here -->
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="keyboard-help-modal" class="modal" style="display: none;" role="dialog" aria-labelledby="modal-title" aria-modal="true">
+        <div class="modal-overlay" onclick="closeKeyboardModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Keyboard Shortcuts</h2>
+                <button class="modal-close" onclick="closeKeyboardModal()" aria-label="Close modal">×</button>
+            </div>
+            <div class="modal-body">
+                <!-- Homepage Shortcuts -->
+                <section class="shortcut-section">
+                    <h3>Homepage</h3>
+                    <dl class="shortcut-list">
+                        <div class="shortcut-item">
+                            <dt><kbd>h</kbd> / <kbd>l</kbd> or <kbd>←</kbd> / <kbd>→</kbd></dt>
+                            <dd>Navigate themes</dd>
+                        </div>
+                        <div class="shortcut-item">
+                            <dt><kbd>j</kbd> / <kbd>k</kbd></dt>
+                            <dd>Navigate digests</dd>
+                        </div>
+                        <div class="shortcut-item">
+                            <dt><kbd>Enter</kbd> / <kbd>o</kbd></dt>
+                            <dd>Open digest or activate theme</dd>
+                        </div>
+                        <div class="shortcut-item">
+                            <dt><kbd>y</kbd></dt>
+                            <dd>Copy focused content</dd>
+                        </div>
+                        <div class="shortcut-item">
+                            <dt><kbd>Esc</kbd></dt>
+                            <dd>Exit digest mode</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <!-- Digest Detail Shortcuts -->
+                <section class="shortcut-section">
+                    <h3>Digest Detail</h3>
+                    <dl class="shortcut-list">
+                        <div class="shortcut-item">
+                            <dt><kbd>j</kbd> / <kbd>k</kbd></dt>
+                            <dd>Next/previous section or article</dd>
+                        </div>
+                        <div class="shortcut-item">
+                            <dt><kbd>Enter</kbd> / <kbd>o</kbd></dt>
+                            <dd>Enter articles or open link</dd>
+                        </div>
+                        <div class="shortcut-item">
+                            <dt><kbd>y</kbd></dt>
+                            <dd>Copy focused content</dd>
+                        </div>
+                        <div class="shortcut-item">
+                            <dt><kbd>Esc</kbd></dt>
+                            <dd>Exit article mode</dd>
+                        </div>
+                        <div class="shortcut-item">
+                            <dt><kbd>h</kbd></dt>
+                            <dd>Back to home</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <!-- General Shortcuts -->
+                <section class="shortcut-section">
+                    <h3>General</h3>
+                    <dl class="shortcut-list">
+                        <div class="shortcut-item">
+                            <dt><kbd>?</kbd></dt>
+                            <dd>Show this help</dd>
+                        </div>
+                        <div class="shortcut-item">
+                            <dt><kbd>Esc</kbd></dt>
+                            <dd>Close modal</dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>
+        </div>
     </div>
-
-    <!-- Dark mode toggle script -->
-    <script>
-        function updateThemeIcon() {
-            const theme = document.documentElement.getAttribute('data-theme');
-            const sunIcon = document.getElementById('sun-icon');
-            const moonIcon = document.getElementById('moon-icon');
-
-            if (sunIcon && moonIcon) {
-                if (theme === 'dark') {
-                    // In dark mode, show sun icon (click to go to light)
-                    sunIcon.classList.remove('hidden');
-                    moonIcon.classList.add('hidden');
-                } else {
-                    // In light mode, show moon icon (click to go to dark)
-                    sunIcon.classList.add('hidden');
-                    moonIcon.classList.remove('hidden');
-                }
-            }
-        }
-
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-
-            // Update icon to reflect new theme
-            updateThemeIcon();
-
-            // Track theme change
-            if (window.posthog) {
-                posthog.capture('theme_toggled', { theme: newTheme });
-            }
-        }
-
-        // Set initial icon when page loads
-        document.addEventListener('DOMContentLoaded', updateThemeIcon);
-    </script>
 
     {{ block "scripts" . }}{{ end }}
 </body>

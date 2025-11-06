@@ -187,6 +187,10 @@ func (a *NarrativeAdapter) GenerateExecutiveSummary(ctx context.Context, cluster
 	return a.generator.GenerateExecutiveSummary(ctx, clusters, articles, summaries)
 }
 
+func (a *NarrativeAdapter) GenerateDigestContent(ctx context.Context, clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (*narrative.DigestContent, error) {
+	return a.generator.GenerateDigestContent(ctx, clusters, articles, summaries)
+}
+
 func (a *NarrativeAdapter) GenerateText(ctx context.Context, prompt string) (string, error) {
 	return a.llmClient.GenerateText(ctx, prompt)
 }

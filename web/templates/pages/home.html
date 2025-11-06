@@ -1,126 +1,59 @@
-{{ define "title" }}Briefly - Your Tech News Digest{{ end }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="description" content="AI-curated tech news digest with weekly insights">
 
-{{ define "content" }}
-<div class="space-y-6">
-    <!-- Page Header -->
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-            <h1 class="text-2xl md:text-4xl font-bold">Tech News Digest</h1>
-            <p class="text-sm md:text-base text-base-content/70 mt-1 md:mt-2">
-                {{ if .TotalArticles }}
-                AI-curated insights from {{ .TotalArticles }} articles across {{ .TotalThemes }} themes
-                {{ else }}
-                AI-curated insights from the latest tech articles
-                {{ end }}
-            </p>
-        </div>
+    <title>Briefly - Tech News Digest</title>
 
-        <!-- Stats badges (desktop only) -->
-        <div class="hidden md:flex gap-2 flex-wrap">
-            {{ if .TotalDigests }}
-            <div class="stat bg-base-100 rounded-box shadow-sm p-4">
-                <div class="stat-value text-2xl">{{ .TotalDigests }}</div>
-                <div class="stat-desc">Total Digests</div>
-            </div>
-            {{ end }}
-            {{ if .LatestDigestDate }}
-            <div class="stat bg-base-100 rounded-box shadow-sm p-4">
-                <div class="stat-value text-sm">{{ formatDate .LatestDigestDate }}</div>
-                <div class="stat-desc">Latest Update</div>
-            </div>
-            {{ end }}
-        </div>
-    </div>
+    <!-- Nord Minimal Theme -->
+    <link rel="stylesheet" href="/static/css/nord-minimal.css">
+    <link rel="stylesheet" href="/static/css/keyboard-nav.css">
 
-    <!-- Mobile stats (compact) -->
-    <div class="md:hidden bg-base-100 rounded-box shadow-sm p-3 flex justify-around text-center">
-        {{ if .TotalDigests }}
-        <div>
-            <div class="text-xl font-bold">{{ .TotalDigests }}</div>
-            <div class="text-xs text-base-content/60">Digests</div>
-        </div>
-        {{ end }}
-        {{ if .TotalArticles }}
-        <div class="divider divider-horizontal m-0"></div>
-        <div>
-            <div class="text-xl font-bold">{{ .TotalArticles }}</div>
-            <div class="text-xs text-base-content/60">Articles</div>
-        </div>
-        {{ end }}
-        {{ if .TotalThemes }}
-        <div class="divider divider-horizontal m-0"></div>
-        <div>
-            <div class="text-xl font-bold">{{ .TotalThemes }}</div>
-            <div class="text-xs text-base-content/60">Themes</div>
-        </div>
-        {{ end }}
-    </div>
+    <!-- HTMX for partial updates -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
-    <!-- Theme Tabs -->
-    {{ template "partials/theme-tabs.html" . }}
+    <!-- Keyboard Navigation (new system) -->
+    <script src="/static/js/keyboard-nav-base.js"></script>
+    <script src="/static/js/keyboard-nav-components.js"></script>
+    <script src="/static/js/keyboard-nav-home.js"></script>
 
-    <!-- Digest List -->
-    <div id="digest-list">
-        {{ template "partials/digest-list.html" .Digests }}
-    </div>
-
-    <!-- Load more (future implementation) -->
-    {{ if .HasMore }}
-    <div class="flex justify-center mt-6">
-        <button
-            class="btn btn-outline gap-2"
-            hx-get="/api/digests?offset={{ .NextOffset }}&theme={{ .ActiveTheme }}"
-            hx-target="#digest-list"
-            hx-swap="beforeend">
-            Load More
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-        </button>
-    </div>
+    <!-- PostHog Analytics -->
+    {{ if .PostHogEnabled }}
+    <script>
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+        posthog.init('{{ .PostHogAPIKey }}', {api_host: '{{ .PostHogHost }}'})
+    </script>
     {{ end }}
-</div>
-{{ end }}
+</head>
+<body>
+    <!-- Header -->
+    {{ template "partials/header.html" . }}
 
-{{ define "scripts" }}
-<script>
-    // Function to render markdown content
-    function renderMarkdown() {
-        document.querySelectorAll('.markdown-content').forEach(el => {
-            // Get the text content (stripping any HTML tags)
-            const textContent = el.textContent.trim();
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Theme Filter -->
+        {{ template "partials/theme-filter.html" . }}
 
-            // Check if it looks like markdown (contains ##, **, etc.) and hasn't been processed
-            if (textContent && (textContent.includes('**') || textContent.includes('##') || textContent.includes('- ')) &&
-                !el.hasAttribute('data-markdown-processed')) {
+        <!-- Digest List -->
+        <div id="digest-list" class="digest-list-container">
+            {{ template "partials/digest-list.html" .Digests }}
+        </div>
+    </main>
 
-                // Parse and render the markdown
-                try {
-                    el.innerHTML = marked.parse(textContent);
-                    el.setAttribute('data-markdown-processed', 'true');
-                } catch (e) {
-                    console.error('Failed to parse markdown:', e);
-                }
-            }
-        });
-    }
+    <!-- Footer -->
+    {{ template "partials/footer.html" . }}
 
-    // Render markdown on initial page load
-    document.addEventListener('DOMContentLoaded', function() {
-        setTimeout(renderMarkdown, 100); // Small delay to ensure content is loaded
-    });
-
-    // Render markdown after HTMX swaps
-    document.body.addEventListener('htmx:afterSwap', function() {
-        setTimeout(renderMarkdown, 50);
-    });
-
-    // Track page view
-    if (window.posthog) {
-        posthog.capture('homepage_viewed', {
-            theme: '{{ .ActiveTheme }}' || 'all',
-            digest_count: {{ len .Digests }}
-        });
-    }
-</script>
-{{ end }}
+    <!-- Analytics -->
+    <script>
+        // Track page view
+        if (window.posthog) {
+            posthog.capture('homepage_viewed', {
+                theme: '{{ .ActiveTheme }}' || 'all',
+                digest_count: {{ len .Digests }}
+            });
+        }
+    </script>
+</body>
+</html>

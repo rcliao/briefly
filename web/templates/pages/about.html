@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="description" content="About Briefly - AI-powered tech news digest for busy engineers">
+
+    <title>About - Briefly</title>
+
+    <!-- Nord Minimal Theme -->
+    <link rel="stylesheet" href="/static/css/nord-minimal.css">
+    <link rel="stylesheet" href="/static/css/keyboard-nav.css">
+
+    <!-- Keyboard Navigation (new system) -->
+    <script src="/static/js/keyboard-nav-base.js"></script>
+    <script src="/static/js/keyboard-nav-components.js"></script>
+    <script src="/static/js/keyboard-nav-about.js"></script>
+
+    <!-- PostHog Analytics -->
+    {{ if .PostHogEnabled }}
+    <script>
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+        posthog.init('{{ .PostHogAPIKey }}', {api_host: '{{ .PostHogHost }}'})
+    </script>
+    {{ end }}
+</head>
+<body>
+    <!-- Header -->
+    {{ template "partials/header.html" . }}
+
+    <!-- Main Content -->
+    <main class="container">
+        <div class="about-page">
+            <h1>About Briefly</h1>
+
+            <section class="about-section" id="problem">
+                <h2>The Problem</h2>
+                <p>
+                    As a busy engineer, staying current with the rapidly evolving GenAI landscape feels impossible.
+                    New models, tools, and breakthroughs emerge daily across dozens of sources—Hacker News, research papers,
+                    tech blogs, and social media. You want to stay informed, but who has time to read everything?
+                </p>
+                <p>
+                    The signal-to-noise ratio is low. Important developments get buried under hype.
+                    You need the key insights without spending hours scanning feeds.
+                </p>
+            </section>
+
+            <section class="about-section" id="solution">
+                <h2>The Solution</h2>
+                <p>
+                    <strong>Briefly</strong> is your AI-powered tech news digest that does the heavy lifting for you.
+                    We aggregate articles from trusted sources, use AI to summarize and group them by theme,
+                    and deliver a clean, focused digest you can read in minutes.
+                </p>
+                <p>
+                    No fluff. No clickbait. Just the signal you need to stay current.
+                </p>
+            </section>
+
+            <section class="about-section" id="how-it-works">
+                <h2>How It Works</h2>
+                <ul>
+                    <li><strong>Weekly Digests</strong> — Curated collections of the most relevant GenAI articles</li>
+                    <li><strong>AI Summaries</strong> — Each article condensed to its core insights using Gemini</li>
+                    <li><strong>Theme Grouping</strong> — Articles organized by topic (AI Applications, Development Tools, Research)</li>
+                    <li><strong>Key Moments</strong> — Highlights of the week's most important developments</li>
+                    <li><strong>Keyboard Navigation</strong> — Vim-inspired shortcuts for efficient browsing (press <kbd>?</kbd> for help)</li>
+                </ul>
+            </section>
+
+            <section class="about-section" id="open-source">
+                <h2>Open Source</h2>
+                <p>
+                    Briefly is open source and built with Go, PostgreSQL, and Gemini AI.
+                    We believe in transparency and community-driven development.
+                </p>
+                <p>
+                    <a href="https://github.com/rcliao/briefly" target="_blank" rel="noopener">View on GitHub →</a>
+                </p>
+            </section>
+
+            <section class="about-section" id="built-by">
+                <h2>Built By Engineers, For Engineers</h2>
+                <p>
+                    Created by developers who share your struggle to keep up with the AI revolution.
+                    We built the tool we wished existed—focused, efficient, and respectful of your time.
+                </p>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    {{ template "partials/footer.html" . }}
+
+    <script>
+        // Track about page view
+        if (window.posthog) {
+            posthog.capture('about_page_viewed');
+        }
+    </script>
+</body>
+</html>

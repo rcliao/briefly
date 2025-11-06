@@ -151,6 +151,7 @@ func (s *Server) setupRoutes() {
 
 	// Web routes (HTML pages)
 	s.router.Get("/", s.handleHomePage)
+	s.router.Get("/about", s.handleAboutPage)
 	s.router.Get("/digests/{id}", s.handleDigestDetailPage)
 	s.router.Get("/themes", s.handleThemesPage)
 	s.router.Get("/submit", s.handleSubmitPage)
@@ -159,8 +160,22 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/api/digests/{id}/expand", s.handleExpandDigest)
 	s.router.Get("/api/digests/{id}/collapse", s.handleCollapseDigest)
 
-	// Static files (if directory exists)
-	// TODO: Add static file serving in Phase 3
+	// Static files
+	s.setupStaticFileServing()
+}
+
+// setupStaticFileServing configures static file serving
+func (s *Server) setupStaticFileServing() {
+	// Serve static files from web/static directory
+	staticDir := "./web/static"
+
+	// Create file server for static assets
+	fileServer := http.FileServer(http.Dir(staticDir))
+
+	// Mount the file server at /static with the path prefix stripped
+	s.router.Handle("/static/*", http.StripPrefix("/static", fileServer))
+
+	s.log.Info("Static file serving configured", "directory", staticDir)
 }
 
 // Start starts the HTTP server

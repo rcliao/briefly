@@ -1,0 +1,12 @@
+<!-- Article Item -->
+<li class="article-item" data-url="{{ .URL }}">
+    <div class="article-header">
+        <a href="{{ .URL }}" target="_blank" rel="noopener noreferrer" class="article-link">
+            {{ .Title }}
+        </a>
+        <span class="article-meta">
+            <span class="article-source">{{ .Domain }}</span>
+            <time datetime="{{ .DateFetched.Format "2006-01-02" }}">{{ formatTimeAgo .DateFetched }}</time>
+        </span>
+    </div>
+</li>

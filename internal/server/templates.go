@@ -49,6 +49,7 @@ func (tr *TemplateRenderer) loadTemplates() error {
 		"truncate":         truncateString,
 		"formatDate":       formatDate,
 		"formatDateShort":  formatDateShort,
+		"formatTimeAgo":    formatTimeAgo,
 		"readTime":         calculateReadTime,
 		"themeEmoji":       getThemeEmoji,
 		"extractDomain":    extractDomain,
@@ -160,6 +161,52 @@ func formatDateShort(t time.Time) string {
 		return ""
 	}
 	return t.Format("Jan 2")
+}
+
+// formatTimeAgo formats a time.Time as "2h ago", "3d ago", etc.
+func formatTimeAgo(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+
+	duration := time.Since(t)
+
+	// Minutes
+	minutes := int(duration.Minutes())
+	if minutes < 1 {
+		return "just now"
+	}
+	if minutes < 60 {
+		return fmt.Sprintf("%dm ago", minutes)
+	}
+
+	// Hours
+	hours := int(duration.Hours())
+	if hours < 24 {
+		return fmt.Sprintf("%dh ago", hours)
+	}
+
+	// Days
+	days := hours / 24
+	if days < 7 {
+		return fmt.Sprintf("%dd ago", days)
+	}
+
+	// Weeks
+	weeks := days / 7
+	if weeks < 4 {
+		return fmt.Sprintf("%dw ago", weeks)
+	}
+
+	// Months (approximate)
+	months := days / 30
+	if months < 12 {
+		return fmt.Sprintf("%dmo ago", months)
+	}
+
+	// Years
+	years := days / 365
+	return fmt.Sprintf("%dy ago", years)
 }
 
 // calculateReadTime estimates reading time based on word count (200 words/min)
