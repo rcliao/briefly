@@ -8,11 +8,13 @@ import (
 func NewDigestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "digest",
-		Short: "Generate digests from various sources",
-		Long: `Generate digests from markdown files or database articles.
+		Short: "Manage and generate digests",
+		Long: `Generate and manage digests from various sources.
 
 Subcommands:
   generate  - Generate digest from classified articles in database
+  list      - List recent digests from database
+  show      - Display a specific digest
   [file]    - Generate digest from markdown file with URLs (default)
 
 Examples:
@@ -20,11 +22,19 @@ Examples:
   briefly digest generate --since 7
 
   # Generate from markdown file
-  briefly digest input/links.md`,
+  briefly digest input/links.md
+
+  # List recent digests
+  briefly digest list --limit 20
+
+  # Show a specific digest
+  briefly digest show abc123`,
 	}
 
 	// Add subcommands
-	cmd.AddCommand(NewDigestGenerateCmd())      // Database-driven digest
+	cmd.AddCommand(NewDigestGenerateCmd())      // Database-driven digest generation
+	cmd.AddCommand(NewDigestListCmd())          // List recent digests
+	cmd.AddCommand(NewDigestShowCmd())          // Show specific digest
 	cmd.AddCommand(NewDigestSimplifiedCmd())    // File-driven digest (as subcommand)
 
 	return cmd

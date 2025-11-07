@@ -169,9 +169,10 @@ func (b *Builder) Build() (*Pipeline, error) {
 		themeCategorizer := NewThemeCategorizer(b.db, b.tracedClient, b.posthog)
 		categorizer = themeCategorizer
 	} else {
-		// Fall back to legacy categorization
+		// Fall back to legacy categorization (uses old interface)
 		fmt.Println("📁 Using legacy categorization (no database or theme system disabled)")
-		categorizerCore := categorization.NewCategorizer(llmClientAdapter, categorization.DefaultCategories())
+		legacyAdapter := NewLegacyLLMClientAdapter(b.llmClient)
+		categorizerCore := categorization.NewCategorizer(legacyAdapter, categorization.DefaultCategories())
 		categorizer = NewCategorizerAdapter(categorizerCore)
 	}
 
@@ -196,6 +197,7 @@ func (b *Builder) Build() (*Pipeline, error) {
 		cache,
 		banner,
 		citationTracker,
+		nil, // digestRepo: Optional, will be wired up when needed (v2.0)
 		b.config,
 	)
 

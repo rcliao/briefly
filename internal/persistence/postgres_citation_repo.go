@@ -180,6 +180,32 @@ func (r *postgresCitationRepo) DeleteByArticleID(ctx context.Context, articleID 
 	return err
 }
 
+// CreateBatch inserts multiple citations efficiently (v2.0)
+func (r *postgresCitationRepo) CreateBatch(ctx context.Context, citations []core.Citation) error {
+	// TODO: Implement efficient batch citation insertion
+	// For now, insert one by one
+	for _, citation := range citations {
+		if err := r.Create(ctx, &citation); err != nil {
+			return fmt.Errorf("failed to create citation %s: %w", citation.ID, err)
+		}
+	}
+	return nil
+}
+
+// GetByDigestID retrieves all inline citations for a specific digest (v2.0)
+func (r *postgresCitationRepo) GetByDigestID(ctx context.Context, digestID string) ([]core.Citation, error) {
+	// TODO: Implement v2.0 digest citation retrieval
+	// For now, return empty list (digest citations not yet stored)
+	return []core.Citation{}, nil
+}
+
+// DeleteByDigestID removes all citations for a specific digest (v2.0)
+func (r *postgresCitationRepo) DeleteByDigestID(ctx context.Context, digestID string) error {
+	// TODO: Implement v2.0 digest citation deletion
+	// For now, no-op (digest citations not yet stored)
+	return nil
+}
+
 func (r *postgresCitationRepo) scanCitation(row *sql.Row) (*core.Citation, error) {
 	var citation core.Citation
 	var metadataJSON []byte

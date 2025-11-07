@@ -101,6 +101,35 @@ func (m *MockCitationRepo) DeleteByArticleID(ctx context.Context, articleID stri
 	return nil
 }
 
+// v2.0 methods
+func (m *MockCitationRepo) CreateBatch(ctx context.Context, citations []core.Citation) error {
+	for i := range citations {
+		if err := m.Create(ctx, &citations[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *MockCitationRepo) GetByDigestID(ctx context.Context, digestID string) ([]core.Citation, error) {
+	result := make([]core.Citation, 0)
+	for _, citation := range m.citations {
+		if citation.DigestID != nil && *citation.DigestID == digestID {
+			result = append(result, *citation)
+		}
+	}
+	return result, nil
+}
+
+func (m *MockCitationRepo) DeleteByDigestID(ctx context.Context, digestID string) error {
+	for id, citation := range m.citations {
+		if citation.DigestID != nil && *citation.DigestID == digestID {
+			delete(m.citations, id)
+		}
+	}
+	return nil
+}
+
 // MockDatabase implements persistence.Database for testing
 type MockDatabase struct {
 	citationRepo *MockCitationRepo

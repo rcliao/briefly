@@ -128,28 +128,74 @@ func (k *KMeansClusterer) Cluster(articles []core.Article, numClusters int) ([]c
 	return clusters, nil
 }
 
-// initializeCentroids randomly initializes cluster centroids
+// initializeCentroids uses K-means++ initialization for better cluster quality
+// K-means++ selects initial centroids that are far apart from each other,
+// leading to better convergence and cluster quality compared to random initialization
 func (k *KMeansClusterer) initializeCentroids(articles []core.Article, numClusters, embeddingDim int) [][]float64 {
 	centroids := make([][]float64, numClusters)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	// Use random articles as initial centroids
-	for i := 0; i < numClusters; i++ {
-		randomIndex := rng.Intn(len(articles))
+	// Step 1: Choose first centroid randomly
+	firstIndex := rng.Intn(len(articles))
+	centroids[0] = make([]float64, embeddingDim)
+	copy(centroids[0], articles[firstIndex].Embedding)
+
+	// Step 2: Choose remaining centroids using K-means++ algorithm
+	// Each subsequent centroid is chosen with probability proportional to
+	// its squared distance from the nearest existing centroid
+	for i := 1; i < numClusters; i++ {
+		distances := make([]float64, len(articles))
+		totalDistance := 0.0
+
+		// Calculate distance from each point to its nearest centroid
+		for j, article := range articles {
+			minDist := math.Inf(1)
+			for c := 0; c < i; c++ {
+				dist := cosineDistanceKMeans(article.Embedding, centroids[c])
+				if dist < minDist {
+					minDist = dist
+				}
+			}
+			distances[j] = minDist * minDist // Square the distance
+			totalDistance += distances[j]
+		}
+
+		// Choose next centroid with probability proportional to squared distance
+		if totalDistance == 0 {
+			// Fallback to random if all distances are zero
+			randomIndex := rng.Intn(len(articles))
+			centroids[i] = make([]float64, embeddingDim)
+			copy(centroids[i], articles[randomIndex].Embedding)
+			continue
+		}
+
+		target := rng.Float64() * totalDistance
+		cumulative := 0.0
+		selectedIndex := 0
+
+		for j, dist := range distances {
+			cumulative += dist
+			if cumulative >= target {
+				selectedIndex = j
+				break
+			}
+		}
+
 		centroids[i] = make([]float64, embeddingDim)
-		copy(centroids[i], articles[randomIndex].Embedding)
+		copy(centroids[i], articles[selectedIndex].Embedding)
 	}
 
 	return centroids
 }
 
 // findNearestCentroid finds the index of the nearest centroid to the given embedding
+// Uses cosine distance for high-dimensional embeddings (better than Euclidean)
 func (k *KMeansClusterer) findNearestCentroid(embedding []float64, centroids [][]float64) int {
 	minDistance := math.Inf(1)
 	nearestIndex := 0
 
 	for i, centroid := range centroids {
-		distance := euclideanDistance(embedding, centroid)
+		distance := cosineDistanceKMeans(embedding, centroid)
 		if distance < minDistance {
 			minDistance = distance
 			nearestIndex = i
@@ -279,7 +325,44 @@ func (k *KMeansClusterer) extractKeywords(articles []core.Article, assignments [
 	return keywords
 }
 
+// cosineDistanceKMeans computes cosine distance between two vectors
+// For high-dimensional embeddings (768 dims), cosine distance works much better than Euclidean
+// Cosine distance = 1 - cosine similarity
+func cosineDistanceKMeans(x1, x2 []float64) float64 {
+	if len(x1) != len(x2) {
+		return 1.0 // Maximum distance for mismatched dimensions
+	}
+
+	// Calculate dot product and magnitudes
+	var dotProduct, mag1, mag2 float64
+	for i := range x1 {
+		dotProduct += x1[i] * x2[i]
+		mag1 += x1[i] * x1[i]
+		mag2 += x2[i] * x2[i]
+	}
+
+	// Handle zero vectors
+	if mag1 == 0 || mag2 == 0 {
+		return 1.0
+	}
+
+	// Cosine similarity = dot / (||A|| * ||B||)
+	similarity := dotProduct / (math.Sqrt(mag1) * math.Sqrt(mag2))
+
+	// Clamp to [-1, 1] to handle floating point errors
+	if similarity > 1.0 {
+		similarity = 1.0
+	} else if similarity < -1.0 {
+		similarity = -1.0
+	}
+
+	// Convert similarity to distance: distance = 1 - similarity
+	// Range: [0, 2] where 0 = identical, 1 = orthogonal, 2 = opposite
+	return 1.0 - similarity
+}
+
 // euclideanDistance calculates the Euclidean distance between two vectors
+// DEPRECATED: Use cosineDistanceKMeans for high-dimensional embeddings
 func euclideanDistance(a, b []float64) float64 {
 	if len(a) != len(b) {
 		return math.Inf(1)

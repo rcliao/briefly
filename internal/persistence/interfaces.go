@@ -114,11 +114,40 @@ type DigestRepository interface {
 	// Create inserts a new digest
 	Create(ctx context.Context, digest *core.Digest) error
 
+	// StoreWithRelationships stores a digest with article and theme relationships (v2.0)
+	// This method handles:
+	// - Inserting the digest
+	// - Creating digest_articles relationships with citation order
+	// - Creating digest_themes relationships
+	// - Extracting and storing citations from summary markdown
+	// All operations are performed in a transaction for atomicity
+	StoreWithRelationships(ctx context.Context, digest *core.Digest, articleIDs []string, themeIDs []string) error
+
 	// Get retrieves a digest by ID
 	Get(ctx context.Context, id string) (*core.Digest, error)
 
-	// GetByDate retrieves a digest for a specific date
+	// GetWithArticles retrieves a digest with all associated articles loaded (v2.0)
+	GetWithArticles(ctx context.Context, id string) (*core.Digest, error)
+
+	// GetWithThemes retrieves a digest with all associated themes loaded (v2.0)
+	GetWithThemes(ctx context.Context, id string) (*core.Digest, error)
+
+	// GetFull retrieves a digest with articles, themes, and citations loaded (v2.0)
+	GetFull(ctx context.Context, id string) (*core.Digest, error)
+
+	// GetByDate retrieves a digest for a specific date (legacy, v1.0 behavior)
 	GetByDate(ctx context.Context, date time.Time) (*core.Digest, error)
+
+	// ListRecent retrieves digests processed since a given date (v2.0)
+	// Used for homepage digest list with time window filtering
+	ListRecent(ctx context.Context, since time.Time, limit int) ([]core.Digest, error)
+
+	// ListByTheme retrieves digests associated with a specific theme (v2.0)
+	// Used for theme-based filtering on homepage
+	ListByTheme(ctx context.Context, themeID string, since time.Time, limit int) ([]core.Digest, error)
+
+	// ListByCluster retrieves digests for a specific HDBSCAN cluster (v2.0)
+	ListByCluster(ctx context.Context, clusterID int, limit int) ([]core.Digest, error)
 
 	// List retrieves digests with pagination
 	List(ctx context.Context, opts ListOptions) ([]core.Digest, error)
@@ -126,7 +155,7 @@ type DigestRepository interface {
 	// Update updates an existing digest
 	Update(ctx context.Context, digest *core.Digest) error
 
-	// Delete removes a digest by ID
+	// Delete removes a digest by ID (also removes relationships via CASCADE)
 	Delete(ctx context.Context, id string) error
 
 	// GetLatest retrieves the most recent digests
@@ -194,18 +223,27 @@ type ManualURLRepository interface {
 }
 
 // CitationRepository handles citation persistence operations (Phase 1)
+// Updated in v2.0 to support both article metadata citations AND digest inline citations
 type CitationRepository interface {
 	// Create inserts a new citation
 	Create(ctx context.Context, citation *core.Citation) error
 
+	// CreateBatch inserts multiple citations efficiently (v2.0)
+	// Used when storing digest citations extracted from summary markdown
+	CreateBatch(ctx context.Context, citations []core.Citation) error
+
 	// Get retrieves a citation by ID
 	Get(ctx context.Context, id string) (*core.Citation, error)
 
-	// GetByArticleID retrieves citation for a specific article
+	// GetByArticleID retrieves citation for a specific article (article metadata)
 	GetByArticleID(ctx context.Context, articleID string) (*core.Citation, error)
 
 	// GetByArticleIDs retrieves citations for multiple articles (batch lookup)
 	GetByArticleIDs(ctx context.Context, articleIDs []string) (map[string]*core.Citation, error)
+
+	// GetByDigestID retrieves all inline citations for a specific digest (v2.0)
+	// Returns citations ordered by citation_number ([1], [2], [3], etc.)
+	GetByDigestID(ctx context.Context, digestID string) ([]core.Citation, error)
 
 	// List retrieves citations with pagination
 	List(ctx context.Context, opts ListOptions) ([]core.Citation, error)
@@ -218,6 +256,9 @@ type CitationRepository interface {
 
 	// DeleteByArticleID removes citation for a specific article
 	DeleteByArticleID(ctx context.Context, articleID string) error
+
+	// DeleteByDigestID removes all citations for a specific digest (v2.0)
+	DeleteByDigestID(ctx context.Context, digestID string) error
 }
 
 // ListOptions provides common filtering and pagination options

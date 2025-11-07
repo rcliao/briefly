@@ -1,5 +1,26 @@
 package handlers
 
+// ============================================================================
+// ⚠️  DEPRECATED: This is the v1.0 file-based digest pipeline
+// ============================================================================
+//
+// This file implements the legacy file-based digest generation workflow:
+// - Input: Markdown file with URLs
+// - Processing: Direct pipeline execution (parse → fetch → cluster → digest)
+// - Output: Single consolidated digest markdown file
+//
+// STATUS: Deprecated, intended for removal in future version
+//
+// MIGRATION PATH:
+// Use the v2.0 database-driven workflow instead:
+//   1. briefly aggregate --since 24          (fetch from RSS + manual URLs)
+//   2. briefly digest generate --since 7     (generate from classified articles)
+//
+// DO NOT MODIFY THIS FILE - It will be removed once v2.0 is fully validated.
+// All new features should go into digest_generate.go (v2.0 database pipeline).
+//
+// ============================================================================
+
 import (
 	"briefly/internal/llm"
 	"briefly/internal/logger"
@@ -13,11 +34,15 @@ import (
 )
 
 // NewDigestSimplifiedCmd creates the new simplified digest command
+// DEPRECATED: Use `briefly digest generate` instead (v2.0 database-driven)
 func NewDigestSimplifiedCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "digest [input-file.md]",
-		Short: "Generate a weekly digest from URLs in a markdown file",
-		Long: `Generate a LinkedIn-ready digest from a list of URLs.
+		Short: "[DEPRECATED] Generate a weekly digest from URLs in a markdown file",
+		Long: `[DEPRECATED] Generate a LinkedIn-ready digest from a list of URLs.
+
+⚠️  This command is deprecated in favor of the v2.0 database-driven pipeline.
+   Prefer using: briefly aggregate + briefly digest generate
 
 This command orchestrates the full digest pipeline:
 1. Parse URLs from markdown file
@@ -120,9 +145,15 @@ func digestSimplifiedRun(cmd *cobra.Command, args []string) {
 
 	fmt.Printf("\n📖 Processing digest from: %s\n\n", inputFile)
 
-	result, err := pipe.GenerateDigest(ctx, opts)
+	// v2.0: Generate multiple digests (one per cluster)
+	results, err := pipe.GenerateDigests(ctx, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\n❌ Digest generation failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(results) == 0 {
+		fmt.Fprintf(os.Stderr, "\n❌ No digests were generated\n")
 		os.Exit(1)
 	}
 
@@ -130,41 +161,51 @@ func digestSimplifiedRun(cmd *cobra.Command, args []string) {
 	elapsed := time.Since(startTime)
 
 	fmt.Println("\n" + "═══════════════════════════════════════")
-	fmt.Println("✅ Digest Generated Successfully!")
+	fmt.Printf("✅ Generated %d Digests Successfully!\n", len(results))
 	fmt.Println("═══════════════════════════════════════")
-	fmt.Printf("📄 Output: %s\n", result.MarkdownPath)
 
-	if result.BannerPath != "" {
-		fmt.Printf("🖼️  Banner: %s\n", result.BannerPath)
+	// Show each digest that was generated
+	for i, result := range results {
+		fmt.Printf("\n📄 Digest %d/%d: %s\n", i+1, len(results), result.Digest.Title)
+		fmt.Printf("   • File: %s\n", result.MarkdownPath)
+		fmt.Printf("   • Articles: %d\n", result.Digest.ArticleCount)
+		if result.BannerPath != "" {
+			fmt.Printf("   • Banner: %s\n", result.BannerPath)
+		}
 	}
 
-	fmt.Println("\n📊 Statistics:")
-	fmt.Printf("   • Total URLs: %d\n", result.Stats.TotalURLs)
-	fmt.Printf("   • Successful: %d\n", result.Stats.SuccessfulArticles)
-	fmt.Printf("   • Failed: %d\n", result.Stats.FailedArticles)
-	fmt.Printf("   • Cache Hits: %d\n", result.Stats.CacheHits)
-	fmt.Printf("   • Cache Misses: %d\n", result.Stats.CacheMisses)
-	fmt.Printf("   • Clusters: %d\n", result.Stats.ClustersGenerated)
-	fmt.Printf("   • Processing Time: %v\n", elapsed.Round(time.Second))
+	// Aggregate statistics from first result (they all share the same stats)
+	if len(results) > 0 {
+		stats := results[0].Stats
+		fmt.Println("\n📊 Statistics:")
+		fmt.Printf("   • Total URLs: %d\n", stats.TotalURLs)
+		fmt.Printf("   • Successful: %d\n", stats.SuccessfulArticles)
+		fmt.Printf("   • Failed: %d\n", stats.FailedArticles)
+		fmt.Printf("   • Cache Hits: %d\n", stats.CacheHits)
+		fmt.Printf("   • Cache Misses: %d\n", stats.CacheMisses)
+		fmt.Printf("   • Topic Clusters: %d\n", len(results))
+		fmt.Printf("   • Processing Time: %v\n", elapsed.Round(time.Second))
 
-	if result.Stats.CacheHits > 0 {
-		cachePercent := float64(result.Stats.CacheHits) / float64(result.Stats.TotalURLs) * 100
-		fmt.Printf("   • Cache Hit Rate: %.1f%%\n", cachePercent)
+		if stats.CacheHits > 0 {
+			cachePercent := float64(stats.CacheHits) / float64(stats.TotalURLs) * 100
+			fmt.Printf("   • Cache Hit Rate: %.1f%%\n", cachePercent)
+		}
 	}
 
 	fmt.Println("\n💡 Next steps:")
-	fmt.Printf("   1. Review digest: cat %s\n", result.MarkdownPath)
-	fmt.Println("   2. Copy content to LinkedIn")
+	fmt.Printf("   1. Review digests in: %s/\n", outputDir)
+	fmt.Println("   2. Each digest focuses on a specific topic cluster")
 	if !withBanner {
-		fmt.Println("   3. Optional: Re-run with --with-banner to generate social image")
+		fmt.Println("   3. Optional: Re-run with --with-banner to generate social images")
 	}
 
 	fmt.Println("\n" + "═══════════════════════════════════════")
 
 	// Log completion
 	logger.Info("Digest generation completed",
-		"output", result.MarkdownPath,
-		"articles", result.Stats.SuccessfulArticles,
+		"output_dir", outputDir,
+		"digests_generated", len(results),
+		"articles", results[0].Stats.SuccessfulArticles,
 		"duration", elapsed)
 }
 

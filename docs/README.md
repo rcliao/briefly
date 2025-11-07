@@ -11,6 +11,9 @@ docs/
 ├── PRODUCT.md                          # 📋 Product vision, goals, metrics
 ├── ARCHITECTURE.md                     # 🏗️ System architecture & technical design
 │
+├── digest-pipeline-v2.md               # ⭐ Current pipeline design (many-digests architecture)
+├── migration-plan.md                   # 📋 Migration guide (single → many digests)
+│
 ├── inspirations/                       # 💡 Product research & analysis
 │   ├── README.md                       # Index of inspiration sources
 │   └── KAGI_NEWS.md                    # Kagi News analysis
@@ -19,7 +22,8 @@ docs/
 │   ├── README.md                       # Execution tracking guide
 │   └── 2025-10-31.md                   # Current implementation plan
 │
-└── [archive]/                          # 📦 Historical design documents
+└── archive/                            # 📦 Historical design documents
+    ├── digest-pipeline-design-v1-archived.md   # OLD: Python-focused design (deprecated)
     ├── DESIGN_NEWS_DIGEST_WEBSITE_V2.1.md
     ├── DESIGN_NEWS_DIGEST_WEBSITE_V2.md
     └── ...
@@ -85,6 +89,68 @@ docs/
 - When architecture patterns change
 - Adding new integrations
 - Significant refactoring
+
+---
+
+### [digest-pipeline-v2.md](digest-pipeline-v2.md) ⭐
+**Purpose:** Detailed pipeline design for "many digests per run" architecture
+**Status:** Current design (2025-11-06)
+**Update frequency:** As pipeline evolves
+
+**Contains:**
+- Problem statement (GenAI news overload, credibility, brevity)
+- Design principles (many digests, two-dimensional organization, citations)
+- 8-step pipeline implementation with Go code examples
+- PostgreSQL data model (articles, digests, themes, relationships)
+- Query patterns (daily/weekly digest generation)
+- Frontend display strategy (Kagi News-style digest list)
+- Current implementation issues and fixes
+- Technology stack (Go/PostgreSQL/Gemini/K-means)
+- Implementation roadmap (5 phases)
+
+**When to read:**
+- Understanding digest generation pipeline
+- Implementing new pipeline features
+- Debugging clustering or summarization
+- Designing database queries
+- Planning frontend pages
+
+**When to update:**
+- Pipeline architecture changes
+- New pipeline steps added
+- Data model modifications
+- Query pattern updates
+
+---
+
+### [migration-plan.md](migration-plan.md)
+**Purpose:** Step-by-step migration from single-digest to many-digests architecture
+**Status:** Ready to execute (2025-11-06)
+**Timeline:** 7-10 days
+
+**Contains:**
+- Pre-migration checklist
+- 6 phases with detailed tasks
+  - Phase 1: Database schema migration (2 days)
+  - Phase 2: Repository layer updates (1 day)
+  - Phase 3: Pipeline refactor (2 days)
+  - Phase 4: Handler consolidation (1 day)
+  - Phase 5: Frontend implementation (2 days)
+  - Phase 6: Testing & validation (2 days)
+- Full code examples for each migration step
+- Testing checklist
+- Rollback procedures
+
+**When to read:**
+- Before starting migration implementation
+- Understanding breaking changes
+- Planning migration timeline
+- Troubleshooting migration issues
+
+**When to update:**
+- After completing migration (mark phases done)
+- If migration approach changes
+- When new issues discovered during migration
 
 ---
 
@@ -221,11 +287,14 @@ See [executions/README.md](executions/README.md) for lifecycle and template.
 
 - **What Briefly does** → Read [PRODUCT.md](PRODUCT.md)
 - **How Briefly works** → Read [ARCHITECTURE.md](ARCHITECTURE.md)
+- **How digest pipeline works** → Read [digest-pipeline-v2.md](digest-pipeline-v2.md)
+- **How to migrate to many-digests** → Read [migration-plan.md](migration-plan.md)
 - **Why we chose X feature** → Check [inspirations/](inspirations/)
 - **What we're building next** → See latest [executions/](executions/)
 - **How a component is implemented** → Search [ARCHITECTURE.md](ARCHITECTURE.md)
 - **Success metrics** → See "Success Metrics" in [PRODUCT.md](PRODUCT.md)
 - **What changed in v2.0** → Check "Version History" in each doc
+- **Why the old design was replaced** → See [archive/digest-pipeline-design-v1-archived.md](archive/digest-pipeline-design-v1-archived.md)
 
 ---
 
@@ -265,6 +334,16 @@ See [executions/README.md](executions/README.md) for lifecycle and template.
 
 ## 📦 Archive
 
+### Pipeline Design Archives
+
+**[archive/digest-pipeline-design-v1-archived.md](archive/digest-pipeline-design-v1-archived.md)**
+- **Status:** DEPRECATED (2025-11-06)
+- **Reason:** Python-focused, weekly living digests, single digest per run, HDBSCAN + pgvector
+- **Replaced by:** [digest-pipeline-v2.md](digest-pipeline-v2.md)
+- **Preserved for:** Historical reference
+
+### Old Unified Design Documents
+
 Old unified design documents are kept in the root `docs/` folder for reference:
 
 - `DESIGN_NEWS_DIGEST_WEBSITE_V2.1.md` - Complete v2.1 unified doc (before split)
@@ -286,5 +365,5 @@ These are historical artifacts and should not be updated. Refer to the organized
 
 ---
 
-**Last Updated:** 2025-10-31
-**Documentation Version:** 2.1
+**Last Updated:** 2025-11-06
+**Documentation Version:** 2.2 (added digest-pipeline-v2.md and migration-plan.md)

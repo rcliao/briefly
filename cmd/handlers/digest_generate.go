@@ -1,20 +1,22 @@
 package handlers
 
 import (
+	"briefly/internal/clustering"
 	"briefly/internal/config"
 	"briefly/internal/core"
 	"briefly/internal/llm"
 	"briefly/internal/logger"
+	"briefly/internal/markdown"
 	"briefly/internal/narrative"
 	"briefly/internal/persistence"
 	"briefly/internal/summarize"
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/google/generative-ai-go/genai"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
@@ -34,9 +36,14 @@ type narrativeLLMAdapter struct {
 	client *llm.Client
 }
 
-// GenerateText implements narrative.LLMClient interface
-func (a *narrativeLLMAdapter) GenerateText(ctx context.Context, prompt string) (string, error) {
-	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
+// GenerateText implements narrative.LLMClient interface (v2.0 with options)
+func (a *narrativeLLMAdapter) GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error) {
+	return a.client.GenerateText(ctx, prompt, options)
+}
+
+// GetGenaiModel implements narrative.LLMClient interface
+func (a *narrativeLLMAdapter) GetGenaiModel() *genai.GenerativeModel {
+	return a.client.GetGenaiModel()
 }
 
 // NewDigestGenerateCmd creates the digest generate command for database-driven digests
@@ -182,36 +189,74 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 	}
 	defer llmClient.Close()
 
-	// Generate digest with LLM summaries
-	fmt.Println("\n🤖 Generating summaries and digest...")
-	digest, err := generateDigestWithSummaries(ctx, db, llmClient, articles, themeGroups, since, themeFilter)
+	// Generate digests with clustering (v2.0 architecture)
+	fmt.Println("\n🤖 Generating summaries and clustering articles...")
+	digests, err := generateDigestsWithClustering(ctx, db, llmClient, articles, since, themeFilter)
 	if err != nil {
-		return fmt.Errorf("failed to generate digest: %w", err)
+		return fmt.Errorf("failed to generate digests: %w", err)
 	}
 
-	// Save digest to database
-	if err := db.Digests().Create(ctx, digest); err != nil {
-		log.Warn("Failed to save digest to database", "error", err)
-		// Continue - still save markdown file
-	} else {
-		log.Info("Digest saved to database", "digest_id", digest.ID)
+	if len(digests) == 0 {
+		fmt.Println("⚠️  No digests generated (clustering found no valid clusters)")
+		return nil
 	}
 
-	// Save digest to markdown file for LinkedIn
-	outputPath, err := saveDigestMarkdown(digest, outputDir)
-	if err != nil {
-		return fmt.Errorf("failed to save markdown file: %w", err)
+	// Save each digest to database
+	fmt.Printf("\n💾 Saving %d digests to database...\n", len(digests))
+	savedCount := 0
+	var outputPaths []string
+
+	for i, digest := range digests {
+		fmt.Printf("   [%d/%d] Saving: %s\n", i+1, len(digests), digest.Title)
+
+		// Build article IDs and theme IDs for this digest
+		articleIDs := make([]string, 0, len(digest.Articles))
+		themeIDSet := make(map[string]bool)
+
+		for _, article := range digest.Articles {
+			articleIDs = append(articleIDs, article.ID)
+			if article.ThemeID != nil {
+				themeIDSet[*article.ThemeID] = true
+			}
+		}
+
+		themeIDs := make([]string, 0, len(themeIDSet))
+		for themeID := range themeIDSet {
+			themeIDs = append(themeIDs, themeID)
+		}
+
+		// Store with relationships (includes citation extraction)
+		if err := db.Digests().StoreWithRelationships(ctx, digest, articleIDs, themeIDs); err != nil {
+			log.Warn("Failed to save digest", "digest_id", digest.ID, "error", err)
+			continue
+		}
+
+		// Save markdown file
+		outputPath, err := saveDigestMarkdown(digest, outputDir)
+		if err != nil {
+			log.Warn("Failed to save markdown file", "digest_id", digest.ID, "error", err)
+		} else {
+			outputPaths = append(outputPaths, outputPath)
+		}
+
+		savedCount++
+		log.Info("Digest saved", "digest_id", digest.ID, "cluster_id", digest.ClusterID, "articles", len(articleIDs))
 	}
 
 	duration := time.Since(startTime)
 
-	fmt.Printf("\n✅ Successfully generated digest\n")
-	fmt.Printf("   Digest ID: %s\n", digest.ID)
-	fmt.Printf("   Articles: %d\n", len(articles))
-	fmt.Printf("   Themes: %d\n", len(themeGroups))
+	fmt.Printf("\n✅ Successfully generated %d digests\n", savedCount)
+	fmt.Printf("   Total articles: %d\n", len(articles))
+	fmt.Printf("   Clusters found: %d\n", len(digests))
 	fmt.Printf("   Database: Saved ✓\n")
-	fmt.Printf("   Markdown: %s\n", outputPath)
+	fmt.Printf("   Markdown files: %d\n", len(outputPaths))
 	fmt.Printf("   Duration: %s\n", duration.Round(time.Millisecond))
+
+	// Show digest breakdown
+	fmt.Println("\n📊 Digest Breakdown:")
+	for i, digest := range digests {
+		fmt.Printf("   %d. %s (%d articles)\n", i+1, digest.Title, digest.ArticleCount)
+	}
 
 	return nil
 }
@@ -313,8 +358,9 @@ func groupArticlesByTheme(ctx context.Context, db *persistence.PostgresDB, artic
 	return groups, nil
 }
 
-// generateDigestWithSummaries creates a complete digest with LLM-generated summaries
-func generateDigestWithSummaries(ctx context.Context, db *persistence.PostgresDB, llmClient *llm.Client, articles []core.Article, themeGroups map[string][]core.Article, since time.Time, themeFilter string) (*core.Digest, error) {
+// generateDigestsWithClustering creates multiple digests using clustering (v2.0)
+// Returns one digest per topic cluster
+func generateDigestsWithClustering(ctx context.Context, db *persistence.PostgresDB, llmClient *llm.Client, articles []core.Article, since time.Time, themeFilter string) ([]*core.Digest, error) {
 	log := logger.Get()
 
 	// Create summarizer with adapter
@@ -360,111 +406,214 @@ func generateDigestWithSummaries(ctx context.Context, db *persistence.PostgresDB
 		summaryList = append(summaryList, *summary)
 	}
 
-	// Build article groups by theme
-	articleGroups := []core.ArticleGroup{}
-	themeNames := make([]string, 0, len(themeGroups))
-	for themeName := range themeGroups {
-		themeNames = append(themeNames, themeName)
-	}
-	sort.Strings(themeNames) // Sort for consistent output
+	// Step 2: Generate embeddings for clustering
+	fmt.Println("   🧠 Generating embeddings for clustering...")
+	embeddingsMap := make(map[string][]float64)
 
-	for _, themeName := range themeNames {
-		themeArticles := themeGroups[themeName]
-
-		// Generate theme-level summary
-		themeSummary := generateThemeSummary(themeArticles, articleSummaries)
-
-		articleGroup := core.ArticleGroup{
-			Theme:    themeName,
-			Articles: themeArticles,
-			Summary:  themeSummary,
-			Priority: len(themeArticles), // Higher count = higher priority
+	for i, article := range articles {
+		// Use summary text for embedding (more concise than full article)
+		summary, hasSummary := articleSummaries[article.ID]
+		textForEmbedding := article.CleanedText
+		if hasSummary {
+			textForEmbedding = summary.SummaryText
 		}
-		articleGroups = append(articleGroups, articleGroup)
+
+		// Truncate if too long (embeddings have token limits)
+		if len(textForEmbedding) > 2000 {
+			textForEmbedding = textForEmbedding[:2000]
+		}
+
+		fmt.Printf("   [%d/%d] Embedding: %s\n", i+1, len(articles), article.Title)
+
+		embedding, err := llmClient.GenerateEmbedding(textForEmbedding)
+		if err != nil {
+			log.Warn("Failed to generate embedding", "article_id", article.ID, "error", err)
+			continue
+		}
+
+		embeddingsMap[article.ID] = embedding
+
+		// Update article with embedding
+		articles[i].Embedding = embedding
 	}
 
-	// Sort by priority (most articles first)
-	sort.Slice(articleGroups, func(i, j int) bool {
-		return articleGroups[i].Priority > articleGroups[j].Priority
-	})
+	// Persist embeddings back to database
+	fmt.Println("   💾 Saving embeddings to database...")
+	articlesRepo := db.Articles()
+	for i := range articles {
+		if len(articles[i].Embedding) > 0 {
+			if err := articlesRepo.Update(ctx, &articles[i]); err != nil {
+				log.Warn("Failed to save embedding to database", "article_id", articles[i].ID, "error", err)
+			}
+		}
+	}
+	fmt.Println("   ✓ Embeddings saved")
 
-	// Generate Title, TL;DR, Key Moments, and Executive Summary using narrative generator
-	fmt.Println("   ✨ Generating title, TL;DR, key moments, and executive summary...")
+	// Step 3: Cluster articles using K-means++ with cosine distance
+	// Automatically determine K based on article count (aim for 5-6 articles per cluster for better focus)
+	// This creates more granular, topic-specific digests
+	numClusters := (len(articles) + 4) / 5 // ~5 articles per cluster
+	if numClusters < 3 {
+		numClusters = 3
+	}
+	if numClusters > 15 {
+		numClusters = 15 // Cap at 15 to avoid too many small clusters
+	}
 
-	// Create narrative generator with adapter
-	narrativeAdapter := &narrativeLLMAdapter{client: llmClient}
-	narrativeGen := narrative.NewGenerator(narrativeAdapter)
+	fmt.Printf("   🔍 Clustering %d articles into ~%d topics (K-means++ with cosine distance)...\n", len(articles), numClusters)
 
-	// Convert articleGroups to TopicClusters and build maps
-	clusters := make([]core.TopicCluster, 0, len(articleGroups))
+	clusterer := clustering.NewKMeansClusterer()
+	clusters, err := clusterer.Cluster(articles, numClusters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to cluster articles: %w", err)
+	}
+
+	if len(clusters) == 0 {
+		return nil, fmt.Errorf("no clusters found")
+	}
+
+	fmt.Printf("   ✓ Found %d topic clusters\n", len(clusters))
+
+	// Step 4: Generate one digest per cluster
+	fmt.Println("   ✨ Generating digest for each cluster...")
+
+	digests := make([]*core.Digest, 0, len(clusters))
+
+	// Create article and summary maps
 	articleMap := make(map[string]core.Article)
 	summaryMap := make(map[string]core.Summary)
-
-	for _, group := range articleGroups {
-		// Create cluster from article group
-		articleIDs := make([]string, 0, len(group.Articles))
-		for _, article := range group.Articles {
-			articleIDs = append(articleIDs, article.ID)
-			articleMap[article.ID] = article
-		}
-
-		cluster := core.TopicCluster{
-			Label:      group.Theme,
-			ArticleIDs: articleIDs,
-		}
-		clusters = append(clusters, cluster)
+	for i, article := range articles {
+		articleMap[article.ID] = articles[i]
 	}
-
-	// Build summary map
 	for _, summary := range summaryList {
 		for _, articleID := range summary.ArticleIDs {
 			summaryMap[articleID] = summary
 		}
 	}
 
-	// Generate content (Title, TL;DR, Summary)
-	digestContent, err := narrativeGen.GenerateDigestContent(ctx, clusters, articleMap, summaryMap)
-	if err != nil {
-		log.Warn("Failed to generate digest content with narrative generator", "error", err)
-		// Fallback to simple generation
-		digestDate := time.Now()
-		if themeFilter != "" {
-			digestDate = since
-		}
-		digestContent = &narrative.DigestContent{
-			Title:            fmt.Sprintf("Weekly Tech Digest - %s", digestDate.Format("Jan 2, 2006")),
-			TLDRSummary:      fmt.Sprintf("This week's digest covers %d articles across %d themes.", len(articles), len(themeGroups)),
-			KeyMoments:       []string{},
-			ExecutiveSummary: generateFallbackExecutiveSummary(articleGroups),
-		}
-	}
+	// Create narrative generator
+	narrativeAdapter := &narrativeLLMAdapter{client: llmClient}
+	narrativeGen := narrative.NewGenerator(narrativeAdapter)
 
-	// Log generated content
-	fmt.Printf("   ✓ Title: %s\n", digestContent.Title)
-	fmt.Printf("   ✓ TL;DR: %s\n", digestContent.TLDRSummary)
-	fmt.Printf("   ✓ Key Moments: %d\n", len(digestContent.KeyMoments))
-	fmt.Printf("   ✓ Summary: %d words\n", len(digestContent.ExecutiveSummary)/5)
+	for clusterIdx, cluster := range clusters {
+		if len(cluster.ArticleIDs) == 0 {
+			continue
+		}
 
-	// Build digest structure with generated content
-	digest := &core.Digest{
-		ID:            uuid.NewString(),
-		ArticleGroups: articleGroups,
-		Summaries:     summaryList,
-		DigestSummary: digestContent.ExecutiveSummary,
-		Title:         digestContent.Title,
-		Metadata: core.DigestMetadata{
+		fmt.Printf("   [%d/%d] Cluster: %s (%d articles)\n", clusterIdx+1, len(clusters), cluster.Label, len(cluster.ArticleIDs))
+
+		// Generate digest content for this cluster
+		digestContent, err := narrativeGen.GenerateDigestContent(ctx, []core.TopicCluster{cluster}, articleMap, summaryMap)
+		if err != nil {
+			log.Warn("Failed to generate digest content for cluster", "cluster", cluster.Label, "error", err)
+			// Use fallback
+			digestContent = &narrative.DigestContent{
+				Title:            cluster.Label,
+				TLDRSummary:      fmt.Sprintf("Digest covering %d articles about %s", len(cluster.ArticleIDs), cluster.Label),
+				KeyMoments:       []core.KeyMoment{},
+				Perspectives:     []core.Perspective{},
+				ExecutiveSummary: fmt.Sprintf("This digest covers developments in %s.", cluster.Label),
+			}
+		}
+
+		// Build article list for this cluster
+		clusterArticles := make([]core.Article, 0, len(cluster.ArticleIDs))
+		for _, articleID := range cluster.ArticleIDs {
+			if article, found := articleMap[articleID]; found {
+				clusterArticles = append(clusterArticles, article)
+			}
+		}
+
+		// Extract actual themes from articles by looking up their ThemeIDs
+		// Need to fetch theme names from database
+		themeIDSet := make(map[string]bool)
+		for _, article := range clusterArticles {
+			if article.ThemeID != nil {
+				themeIDSet[*article.ThemeID] = true
+			}
+		}
+
+		// Look up theme names from IDs
+		themeNames := make([]string, 0)
+		themesRepo := db.Themes()
+		for themeID := range themeIDSet {
+			theme, err := themesRepo.Get(ctx, themeID)
+			if err == nil {
+				themeNames = append(themeNames, theme.Name)
+			}
+		}
+
+		// Use cluster label as fallback if no themes found
+		themeName := cluster.Label
+		if len(themeNames) > 0 {
+			// Use first theme as primary
+			themeName = themeNames[0]
+		}
+
+		// Create ArticleGroups with all themes from this cluster
+		articleGroups := make([]core.ArticleGroup, 0)
+		if len(themeNames) > 0 {
+			for _, theme := range themeNames {
+				articleGroups = append(articleGroups, core.ArticleGroup{
+					Theme:    theme,
+					Articles: clusterArticles,
+					Summary:  digestContent.TLDRSummary,
+					Category: theme,
+				})
+			}
+		} else {
+			// Fallback to cluster label if no themes
+			articleGroups = append(articleGroups, core.ArticleGroup{
+				Theme:    themeName,
+				Articles: clusterArticles,
+				Summary:  digestContent.TLDRSummary,
+				Category: themeName,
+			})
+		}
+
+		// Inject citations into summary
+		summaryWithCitations := markdown.InjectCitationURLs(digestContent.ExecutiveSummary, clusterArticles)
+
+		// Get current time
+		now := time.Now()
+
+		// Create digest for this cluster with ALL required fields
+		digest := &core.Digest{
+			ID:            uuid.NewString(),
+
+			// v2.0 fields
 			Title:         digestContent.Title,
+			Summary:       summaryWithCitations,
 			TLDRSummary:   digestContent.TLDRSummary,
-			KeyMoments:    digestContent.KeyMoments,
-			ArticleCount:  len(articles),
-			DateGenerated: time.Now(),
-		},
+			KeyMoments:    digestContent.KeyMoments,    // FIXED: Now assigned
+			Perspectives:  digestContent.Perspectives,  // FIXED: Now assigned
+			Articles:      clusterArticles,
+			ClusterID:     &clusterIdx,
+			ProcessedDate: now,
+			ArticleCount:  len(clusterArticles),
+
+			// Legacy fields for backward compatibility
+			ArticleGroups: articleGroups,  // FIXED: Now populated for homepage theme display
+			DigestSummary: digestContent.ExecutiveSummary,
+			Metadata: core.DigestMetadata{  // FIXED: Now populated for proper display
+				Title:         digestContent.Title,
+				ArticleCount:  len(clusterArticles),
+				DateGenerated: now,
+				TLDRSummary:   digestContent.TLDRSummary,
+			},
+		}
+
+		digests = append(digests, digest)
 	}
 
-	return digest, nil
+	fmt.Printf("   ✓ Generated %d digests\n", len(digests))
+
+	return digests, nil
 }
 
 // generateThemeSummary creates a summary for a theme group
+//
+//nolint:unused
 func generateThemeSummary(articles []core.Article, summaries map[string]*core.Summary) string {
 	if len(articles) == 0 {
 		return ""
@@ -482,6 +631,8 @@ func generateThemeSummary(articles []core.Article, summaries map[string]*core.Su
 // generateExecutiveSummaryFromThemes creates an executive summary from theme groups
 
 // generateFallbackExecutiveSummary creates a simple fallback if LLM fails
+//
+//nolint:unused
 func generateFallbackExecutiveSummary(articleGroups []core.ArticleGroup) string {
 	var summary strings.Builder
 	summary.WriteString("This week's digest covers ")

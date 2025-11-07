@@ -141,3 +141,11 @@ type CitationTracker interface {
 	// GetCitation retrieves a citation by article ID
 	GetCitation(ctx context.Context, articleID string) (*core.Citation, error)
 }
+
+// DigestRepository handles digest persistence (v2.0)
+// This interface provides a subset of persistence.DigestRepository needed by the pipeline
+type DigestRepository interface {
+	// StoreWithRelationships stores a digest with article and theme relationships
+	// Performs all operations in a transaction for atomicity
+	StoreWithRelationships(ctx context.Context, digest *core.Digest, articleIDs []string, themeIDs []string) error
+}

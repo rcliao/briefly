@@ -24,6 +24,7 @@ type Pipeline struct {
 	cache         CacheManager
 	banner        BannerGenerator   // Optional
 	citationTracker CitationTracker // Phase 1: Track citations for articles
+	digestRepo    DigestRepository  // Optional: For storing digests in database (v2.0)
 
 	// Configuration
 	config *Config
@@ -84,6 +85,7 @@ func NewPipeline(
 	cache CacheManager,
 	banner BannerGenerator,
 	citationTracker CitationTracker,
+	digestRepo DigestRepository,  // v2.0: Optional digest repository for database storage
 	config *Config,
 ) *Pipeline {
 	if config == nil {
@@ -103,6 +105,7 @@ func NewPipeline(
 		cache:           cache,
 		banner:          banner,
 		citationTracker: citationTracker,
+		digestRepo:      digestRepo,
 		config:          config,
 	}
 }
@@ -137,7 +140,167 @@ type ProcessingStats struct {
 	EndTime            time.Time
 }
 
-// GenerateDigest executes the full digest generation pipeline
+// GenerateDigests executes the full digest generation pipeline (v2.0)
+// Returns multiple digests - one per topic cluster (Kagi News style)
+func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]DigestResult, error) {
+	startTime := time.Now()
+	stats := ProcessingStats{
+		StartTime: startTime,
+	}
+
+	// Step 1: Parse URLs from markdown file
+	fmt.Printf("📄 Step 1/9: Parsing URLs from %s...\n", opts.InputFile)
+	links, err := p.parser.ParseMarkdownFile(opts.InputFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URLs: %w", err)
+	}
+
+	stats.TotalURLs = len(links)
+	if stats.TotalURLs == 0 {
+		return nil, fmt.Errorf("no valid URLs found in input file")
+	}
+	fmt.Printf("   ✓ Found %d URLs\n\n", stats.TotalURLs)
+
+	// Step 2: Fetch and summarize articles (with caching)
+	fmt.Printf("🔍 Step 2/9: Fetching and summarizing articles...\n")
+	articles, summaries, err := p.processArticles(ctx, links, &stats)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process articles: %w", err)
+	}
+
+	if len(articles) == 0 {
+		return nil, fmt.Errorf("no articles were successfully processed")
+	}
+
+	stats.SuccessfulArticles = len(articles)
+	stats.FailedArticles = stats.TotalURLs - stats.SuccessfulArticles
+	fmt.Printf("   ✓ Successfully processed %d/%d articles\n", stats.SuccessfulArticles, stats.TotalURLs)
+	fmt.Printf("   • Cache hits: %d, Cache misses: %d\n\n", stats.CacheHits, stats.CacheMisses)
+
+	// Step 3: Generate embeddings for clustering
+	fmt.Printf("🧠 Step 3/9: Generating embeddings for clustering...\n")
+	embeddings, err := p.generateEmbeddings(ctx, summaries)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate embeddings: %w", err)
+	}
+	fmt.Printf("   ✓ Generated %d embeddings\n\n", len(embeddings))
+
+	// Step 4: Cluster articles by topic
+	fmt.Printf("🔗 Step 4/9: Clustering articles by topic...\n")
+	clusters, err := p.clusterer.ClusterArticles(ctx, articles, summaries, embeddings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to cluster articles: %w", err)
+	}
+
+	stats.ClustersGenerated = len(clusters)
+	fmt.Printf("   ✓ Created %d topic clusters\n\n", stats.ClustersGenerated)
+
+	// Step 5-9: Generate one digest per cluster (v2.0 architecture)
+	fmt.Printf("📝 Step 5/9: Generating %d digests (one per cluster)...\n", len(clusters))
+
+	results := make([]DigestResult, 0, len(clusters))
+	articleMap := articlesToMap(articles)
+	summaryMap := summariesToMap(summaries)
+
+	for i, cluster := range clusters {
+		fmt.Printf("\n   [Cluster %d/%d] Label: %s (%d articles)\n", i+1, len(clusters), cluster.Label, len(cluster.ArticleIDs))
+
+		// Build digest for this cluster
+		clusterArticles := make([]core.Article, 0, len(cluster.ArticleIDs))
+		clusterSummaries := make([]core.Summary, 0, len(cluster.ArticleIDs))
+
+		for _, articleID := range cluster.ArticleIDs {
+			if article, found := articleMap[articleID]; found {
+				clusterArticles = append(clusterArticles, article)
+			}
+			if summary, found := summaryMap[articleID]; found {
+				clusterSummaries = append(clusterSummaries, summary)
+			}
+		}
+
+		// Generate digest content for this cluster
+		digest := p.buildDigestForCluster(cluster, clusterArticles, clusterSummaries)
+
+		// Generate title, TLDR, and summary for this specific cluster
+		digestContent, err := p.generateDigestContentFromDigest(ctx, digest)
+		if err != nil {
+			fmt.Printf("   ⚠️  Digest content generation failed: %v\n", err)
+			digestContent.Title = fmt.Sprintf("%s - %s", cluster.Label, time.Now().Format("Jan 2"))
+			digestContent.TLDRSummary = ""
+			digestContent.KeyMoments = []core.KeyMoment{}
+		} else {
+			fmt.Printf("   ✓ Generated: %s\n", digestContent.Title)
+		}
+
+		// Update digest with generated content
+		digest.Title = digestContent.Title
+		digest.TLDRSummary = digestContent.TLDRSummary
+		digest.KeyMoments = digestContent.KeyMoments // v2.0 structured format
+		digest.Perspectives = digestContent.Perspectives // v2.0 structured format
+		digest.Metadata.Title = digestContent.Title
+		digest.Metadata.TLDRSummary = digestContent.TLDRSummary
+		// Note: Metadata.KeyMoments is deprecated (legacy []string format)
+
+		// Store digest in database with relationships (v2.0)
+		if p.digestRepo != nil {
+			// Extract article IDs
+			articleIDs := make([]string, len(clusterArticles))
+			for idx, article := range clusterArticles {
+				articleIDs[idx] = article.ID
+			}
+
+			// Extract theme IDs from articles
+			themeIDMap := make(map[string]bool)
+			for _, article := range clusterArticles {
+				if article.ThemeID != nil && *article.ThemeID != "" {
+					themeIDMap[*article.ThemeID] = true
+				}
+			}
+			themeIDs := make([]string, 0, len(themeIDMap))
+			for themeID := range themeIDMap {
+				themeIDs = append(themeIDs, themeID)
+			}
+
+			// Store with relationships
+			if err := p.digestRepo.StoreWithRelationships(ctx, digest, articleIDs, themeIDs); err != nil {
+				// Non-fatal: log warning and continue
+				fmt.Printf("   ⚠️  Database storage failed: %v\n", err)
+				fmt.Printf("   • Continuing with markdown generation\n")
+			} else {
+				fmt.Printf("   ✓ Stored in database\n")
+			}
+		}
+
+		// Render markdown for this digest
+		markdownPath := ""
+		if opts.OutputPath != "" {
+			markdownPath, err = p.renderer.RenderDigest(ctx, digest, opts.OutputPath)
+			if err != nil {
+				fmt.Printf("   ⚠️  Rendering failed: %v\n", err)
+			} else {
+				fmt.Printf("   ✓ Saved to %s\n", markdownPath)
+			}
+		}
+
+		results = append(results, DigestResult{
+			Digest:       digest,
+			MarkdownPath: markdownPath,
+			BannerPath:   "",
+			Stats:        stats,
+		})
+	}
+
+	stats.EndTime = time.Now()
+	stats.ProcessingTime = stats.EndTime.Sub(startTime)
+
+	fmt.Printf("\n✅ Generated %d digests successfully\n", len(results))
+	fmt.Printf("⏱️  Total processing time: %v\n\n", stats.ProcessingTime)
+
+	return results, nil
+}
+
+// GenerateDigest executes the full digest generation pipeline (LEGACY - v1.0)
+// DEPRECATED: Use GenerateDigests() for v2.0 many-digests architecture
 func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*DigestResult, error) {
 	startTime := time.Now()
 	stats := ProcessingStats{
@@ -225,7 +388,7 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 		fmt.Printf("   • Continuing with fallback title and empty TL;DR\n\n")
 		digestContent.Title = fmt.Sprintf("Weekly Digest - %s", time.Now().Format("Jan 2, 2006"))
 		digestContent.TLDRSummary = ""
-		digestContent.KeyMoments = []string{}
+		digestContent.KeyMoments = []core.KeyMoment{}
 		digestContent.ExecutiveSummary = ""
 	} else {
 		fmt.Printf("   ✓ Generated title: %s\n", digestContent.Title)
@@ -234,11 +397,15 @@ func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*Dig
 		fmt.Printf("   ✓ Generated summary (%d words)\n\n", len(digestContent.ExecutiveSummary)/5)
 	}
 
-	// Update digest with generated content
+	// Update digest with generated content (v2.0 structured format)
+	digest.Title = digestContent.Title
+	digest.TLDRSummary = digestContent.TLDRSummary
+	digest.KeyMoments = digestContent.KeyMoments  // v2.0 structured
+	digest.Perspectives = digestContent.Perspectives  // v2.0 structured
+	digest.DigestSummary = digestContent.ExecutiveSummary
 	digest.Metadata.Title = digestContent.Title
 	digest.Metadata.TLDRSummary = digestContent.TLDRSummary
-	digest.Metadata.KeyMoments = digestContent.KeyMoments
-	digest.DigestSummary = digestContent.ExecutiveSummary
+	// Note: Metadata.KeyMoments is deprecated (legacy []string format)
 
 	// Step 8: Render markdown output
 	fmt.Printf("✍️  Step 9/10: Rendering markdown output...\n")
@@ -549,6 +716,47 @@ func (p *Pipeline) buildDigest(clusters []core.TopicCluster, articles []core.Art
 		TLDRSummary:   "", // Will be generated by narrative generator
 		DateGenerated: time.Now(),
 		ArticleCount:  len(articles),
+	}
+
+	return digest
+}
+
+// buildDigestForCluster builds a digest for a single cluster (v2.0)
+// This method creates one focused digest per topic cluster
+func (p *Pipeline) buildDigestForCluster(cluster core.TopicCluster, articles []core.Article, summaries []core.Summary) *core.Digest {
+	digest := &core.Digest{
+		ID:            generateID(),
+		Title:         cluster.Label, // Will be enhanced by narrative generator
+		ProcessedDate: time.Now(),
+		ArticleCount:  len(articles),
+		ClusterID:     nil, // TODO: Set when HDBSCAN is implemented (K-means has string IDs)
+		Articles:      articles,
+		Summaries:     summaries,
+	}
+
+	// Extract article URLs
+	articleURLs := make([]string, 0, len(articles))
+	for _, article := range articles {
+		articleURLs = append(articleURLs, article.URL)
+	}
+	digest.ArticleURLs = articleURLs
+
+	// Set metadata
+	digest.Metadata = core.DigestMetadata{
+		Title:         cluster.Label,
+		DateGenerated: time.Now(),
+		ArticleCount:  len(articles),
+	}
+
+	// Create a single ArticleGroup for this cluster (for backward compatibility)
+	digest.ArticleGroups = []core.ArticleGroup{
+		{
+			Category: cluster.Label,
+			Theme:    cluster.Label,
+			Articles: articles,
+			Summary:  "", // Will be generated
+			Priority: 1,
+		},
 	}
 
 	return digest

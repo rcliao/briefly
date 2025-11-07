@@ -1,11 +1,16 @@
 <!-- Article Item -->
-<li class="article-item" data-url="{{ .URL }}">
+<li class="article-item" data-url="{{ .URL }}" {{ if .CitationNumber }}id="article-{{ .CitationNumber }}"{{ end }}>
     <div class="article-header">
+        {{ if .CitationNumber }}<span class="citation-badge">[{{ .CitationNumber }}]</span>{{ end }}
         <a href="{{ .URL }}" target="_blank" rel="noopener noreferrer" class="article-link">
             {{ .Title }}
         </a>
         <span class="article-meta">
-            <span class="article-source">{{ .Domain }}</span>
+            {{ if .Publisher }}
+                <span class="article-source">{{ .Publisher }}</span>
+            {{ else }}
+                <span class="article-source">{{ .Domain }}</span>
+            {{ end }}
             <time datetime="{{ .DateFetched.Format "2006-01-02" }}">{{ formatTimeAgo .DateFetched }}</time>
         </span>
     </div>

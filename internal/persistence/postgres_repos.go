@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"briefly/internal/core"
+	"briefly/internal/markdown"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -556,41 +557,253 @@ func (r *postgresDigestRepo) query() interface {
 }
 
 func (r *postgresDigestRepo) Create(ctx context.Context, digest *core.Digest) error {
+	// Marshal entire digest for legacy content column
 	digestJSON, err := json.Marshal(digest)
 	if err != nil {
 		return fmt.Errorf("failed to marshal digest: %w", err)
 	}
 
+	// Marshal JSON fields
+	keyMomentsJSON, err := json.Marshal(digest.KeyMoments)
+	if err != nil {
+		return fmt.Errorf("failed to marshal key_moments: %w", err)
+	}
+
+	perspectivesJSON, err := json.Marshal(digest.Perspectives)
+	if err != nil {
+		return fmt.Errorf("failed to marshal perspectives: %w", err)
+	}
+
+	// v2.0: Insert into proper columns
 	query := `
-		INSERT INTO digests (id, date, content, created_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO digests (
+			id, date, content, created_at,
+			title, summary, tldr_summary, key_moments, perspectives,
+			cluster_id, processed_date, article_count
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (date)
 		DO UPDATE SET
 			id = EXCLUDED.id,
 			content = EXCLUDED.content,
+			title = EXCLUDED.title,
+			summary = EXCLUDED.summary,
+			tldr_summary = EXCLUDED.tldr_summary,
+			key_moments = EXCLUDED.key_moments,
+			perspectives = EXCLUDED.perspectives,
+			cluster_id = EXCLUDED.cluster_id,
+			processed_date = EXCLUDED.processed_date,
+			article_count = EXCLUDED.article_count,
 			created_at = EXCLUDED.created_at
 	`
 	_, err = r.query().ExecContext(ctx, query,
-		digest.ID, digest.Metadata.DateGenerated, digestJSON, time.Now().UTC(),
+		digest.ID,
+		digest.ProcessedDate,
+		digestJSON,
+		time.Now().UTC(),
+		digest.Title,
+		digest.Summary,
+		digest.TLDRSummary,
+		keyMomentsJSON,
+		perspectivesJSON,
+		digest.ClusterID,
+		digest.ProcessedDate,
+		digest.ArticleCount,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to insert digest: %w", err)
+	}
+
+	// Insert article relationships into digest_articles
+	for i, article := range digest.Articles {
+		insertArticleQuery := `
+			INSERT INTO digest_articles (digest_id, article_id, citation_order)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (digest_id, article_id) DO NOTHING
+		`
+		_, err = r.query().ExecContext(ctx, insertArticleQuery,
+			digest.ID, article.ID, i+1,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert digest_article: %w", err)
+		}
+	}
+
+	// Extract themes from ArticleGroups and insert into digest_themes
+	// Need to look up theme IDs from theme names
+	themeSet := make(map[string]bool)
+	for _, group := range digest.ArticleGroups {
+		if group.Theme != "" {
+			themeSet[group.Theme] = true
+		}
+	}
+
+	for themeName := range themeSet {
+		// Look up theme ID by name
+		var themeID string
+		lookupQuery := `SELECT id FROM themes WHERE name = $1 LIMIT 1`
+		err = r.query().QueryRowContext(ctx, lookupQuery, themeName).Scan(&themeID)
+		if err != nil {
+			// Theme not found in database, skip it (or could create it)
+			// For now, just log and continue
+			continue
+		}
+
+		// Insert into digest_themes using theme_id
+		insertThemeQuery := `
+			INSERT INTO digest_themes (digest_id, theme_id)
+			VALUES ($1, $2)
+			ON CONFLICT (digest_id, theme_id) DO NOTHING
+		`
+		_, err = r.query().ExecContext(ctx, insertThemeQuery,
+			digest.ID, themeID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert digest_theme: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (r *postgresDigestRepo) Get(ctx context.Context, id string) (*core.Digest, error) {
-	query := `SELECT content FROM digests WHERE id = $1`
+	// v2.0: Select from proper columns, not just legacy content JSONB
+	query := `
+		SELECT
+			id, content, title, summary, tldr_summary, key_moments, perspectives,
+			cluster_id, processed_date, article_count, created_at, date
+		FROM digests
+		WHERE id = $1
+	`
 	row := r.query().QueryRowContext(ctx, query, id)
 
-	var digestJSON []byte
-	if err := row.Scan(&digestJSON); err != nil {
+	var digest core.Digest
+	var contentJSON []byte
+	var keyMomentsJSON, perspectivesJSON []byte
+	var clusterID sql.NullInt64
+	var processedDate, createdAt, legacyDate sql.NullTime
+
+	if err := row.Scan(
+		&digest.ID,
+		&contentJSON,
+		&digest.Title,
+		&digest.Summary,
+		&digest.TLDRSummary,
+		&keyMomentsJSON,
+		&perspectivesJSON,
+		&clusterID,
+		&processedDate,
+		&digest.ArticleCount,
+		&createdAt,
+		&legacyDate,
+	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("digest not found")
 		}
 		return nil, err
 	}
 
-	var digest core.Digest
-	if err := json.Unmarshal(digestJSON, &digest); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal digest: %w", err)
+	// Unmarshal key_moments
+	if len(keyMomentsJSON) > 0 && string(keyMomentsJSON) != "null" {
+		if err := json.Unmarshal(keyMomentsJSON, &digest.KeyMoments); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal key_moments: %w", err)
+		}
+	}
+
+	// Unmarshal perspectives
+	if len(perspectivesJSON) > 0 && string(perspectivesJSON) != "null" {
+		if err := json.Unmarshal(perspectivesJSON, &digest.Perspectives); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal perspectives: %w", err)
+		}
+	}
+
+	// Handle nullable cluster_id
+	if clusterID.Valid {
+		clusterIDInt := int(clusterID.Int64)
+		digest.ClusterID = &clusterIDInt
+	}
+
+	// Set dates
+	if processedDate.Valid {
+		digest.ProcessedDate = processedDate.Time
+	}
+
+	// Unmarshal legacy content JSONB for ArticleGroups and Metadata
+	if len(contentJSON) > 0 {
+		var legacyData struct {
+			ArticleGroups []core.ArticleGroup `json:"article_groups"`
+			Metadata      core.DigestMetadata `json:"metadata"`
+			DigestSummary string              `json:"summary"`
+		}
+		if err := json.Unmarshal(contentJSON, &legacyData); err == nil {
+			digest.ArticleGroups = legacyData.ArticleGroups
+			digest.Metadata = legacyData.Metadata
+			// Use legacy summary if v2.0 summary is empty
+			if digest.DigestSummary == "" {
+				digest.DigestSummary = legacyData.DigestSummary
+			}
+		}
+	}
+
+	// Load associated articles from digest_articles relationship
+	articlesQuery := `
+		SELECT a.id, a.url, a.title, a.content_type, a.publisher, a.cleaned_text,
+		       a.date_fetched, da.citation_order
+		FROM articles a
+		INNER JOIN digest_articles da ON a.id = da.article_id
+		WHERE da.digest_id = $1
+		ORDER BY da.citation_order ASC
+	`
+	articleRows, err := r.query().QueryContext(ctx, articlesQuery, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load digest articles: %w", err)
+	}
+	defer articleRows.Close()
+
+	var articles []core.Article
+	for articleRows.Next() {
+		var article core.Article
+		var citationOrder int
+		var publisher sql.NullString // Handle nullable publisher field
+
+		if err := articleRows.Scan(
+			&article.ID,
+			&article.URL,
+			&article.Title,
+			&article.ContentType,
+			&publisher,
+			&article.CleanedText,
+			&article.DateFetched,
+			&citationOrder,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan article: %w", err)
+		}
+
+		// Set publisher if not null
+		if publisher.Valid {
+			article.Publisher = publisher.String
+		}
+
+		articles = append(articles, article)
+	}
+
+	// Set articles on digest
+	digest.Articles = articles
+
+	// Also populate ArticleGroups if empty (for backward compatibility)
+	if len(digest.ArticleGroups) == 0 && len(articles) > 0 {
+		digest.ArticleGroups = []core.ArticleGroup{
+			{
+				Theme:    digest.Title,
+				Articles: articles,
+				Summary:  digest.TLDRSummary,
+			},
+		}
+	} else if len(digest.ArticleGroups) > 0 {
+		// Update existing article groups with loaded articles
+		for i := range digest.ArticleGroups {
+			digest.ArticleGroups[i].Articles = articles
+		}
 	}
 
 	return &digest, nil
@@ -621,7 +834,23 @@ func (r *postgresDigestRepo) List(ctx context.Context, opts ListOptions) ([]core
 	if limit == 0 {
 		limit = 50
 	}
-	query := `SELECT content FROM digests ORDER BY date DESC LIMIT $1 OFFSET $2`
+
+	// v2.0: Select from proper columns and join with digest_themes and themes tables
+	query := `
+		SELECT
+			d.id, d.content, d.title, d.summary, d.tldr_summary, d.key_moments, d.perspectives,
+			d.cluster_id, d.processed_date, d.article_count, d.created_at, d.date,
+			COALESCE(
+				(SELECT json_agg(t.name)
+				 FROM digest_themes dt
+				 JOIN themes t ON dt.theme_id = t.id
+				 WHERE dt.digest_id = d.id),
+				'[]'::json
+			) as themes
+		FROM digests d
+		ORDER BY d.processed_date DESC, d.date DESC
+		LIMIT $1 OFFSET $2
+	`
 	rows, err := r.query().QueryContext(ctx, query, limit, opts.Offset)
 	if err != nil {
 		return nil, err
@@ -630,15 +859,91 @@ func (r *postgresDigestRepo) List(ctx context.Context, opts ListOptions) ([]core
 
 	var digests []core.Digest
 	for rows.Next() {
-		var digestJSON []byte
-		if err := rows.Scan(&digestJSON); err != nil {
+		var digest core.Digest
+		var contentJSON []byte
+		var keyMomentsJSON, perspectivesJSON []byte
+		var themesJSON []byte
+		var clusterID sql.NullInt64
+		var processedDate, createdAt, legacyDate sql.NullTime
+
+		if err := rows.Scan(
+			&digest.ID,
+			&contentJSON,
+			&digest.Title,
+			&digest.Summary,
+			&digest.TLDRSummary,
+			&keyMomentsJSON,
+			&perspectivesJSON,
+			&clusterID,
+			&processedDate,
+			&digest.ArticleCount,
+			&createdAt,
+			&legacyDate,
+			&themesJSON,
+		); err != nil {
 			return nil, err
 		}
 
-		var digest core.Digest
-		if err := json.Unmarshal(digestJSON, &digest); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal digest: %w", err)
+		// Unmarshal key_moments
+		if len(keyMomentsJSON) > 0 && string(keyMomentsJSON) != "null" {
+			if err := json.Unmarshal(keyMomentsJSON, &digest.KeyMoments); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal key_moments: %w", err)
+			}
 		}
+
+		// Unmarshal perspectives
+		if len(perspectivesJSON) > 0 && string(perspectivesJSON) != "null" {
+			if err := json.Unmarshal(perspectivesJSON, &digest.Perspectives); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal perspectives: %w", err)
+			}
+		}
+
+		// Handle nullable cluster_id
+		if clusterID.Valid {
+			clusterIDInt := int(clusterID.Int64)
+			digest.ClusterID = &clusterIDInt
+		}
+
+		// Set dates
+		if processedDate.Valid {
+			digest.ProcessedDate = processedDate.Time
+		}
+
+		// Unmarshal themes from digest_themes table
+		var themes []string
+		if len(themesJSON) > 0 && string(themesJSON) != "null" && string(themesJSON) != "[]" {
+			if err := json.Unmarshal(themesJSON, &themes); err == nil && len(themes) > 0 {
+				// Build ArticleGroups from themes for backward compatibility
+				digest.ArticleGroups = make([]core.ArticleGroup, len(themes))
+				for i, theme := range themes {
+					digest.ArticleGroups[i] = core.ArticleGroup{
+						Theme:    theme,
+						Category: theme,
+					}
+				}
+			}
+		}
+
+		// Unmarshal legacy content JSONB for Metadata and fallback ArticleGroups
+		if len(contentJSON) > 0 {
+			var legacyData struct {
+				ArticleGroups []core.ArticleGroup  `json:"article_groups"`
+				Metadata      core.DigestMetadata  `json:"metadata"`
+				DigestSummary string              `json:"summary"`
+			}
+			if err := json.Unmarshal(contentJSON, &legacyData); err == nil {
+				// Use legacy ArticleGroups only if we didn't get themes from digest_themes
+				if len(digest.ArticleGroups) == 0 && len(legacyData.ArticleGroups) > 0 {
+					digest.ArticleGroups = legacyData.ArticleGroups
+				}
+				digest.Metadata = legacyData.Metadata
+				// Use legacy summary if v2.0 summary is empty
+				if digest.DigestSummary == "" {
+					digest.DigestSummary = legacyData.DigestSummary
+				}
+			}
+		}
+
 		digests = append(digests, digest)
 	}
 	return digests, rows.Err()
@@ -663,6 +968,283 @@ func (r *postgresDigestRepo) Delete(ctx context.Context, id string) error {
 
 func (r *postgresDigestRepo) GetLatest(ctx context.Context, limit int) ([]core.Digest, error) {
 	return r.List(ctx, ListOptions{Limit: limit})
+}
+
+// StoreWithRelationships stores a digest with article and theme relationships (v2.0)
+// This method performs all operations in a transaction for atomicity:
+// 1. Insert digest
+// 2. Create digest_articles relationships with citation order
+// 3. Create digest_themes relationships
+// 4. Extract and store citations from summary markdown
+func (r *postgresDigestRepo) StoreWithRelationships(ctx context.Context, digest *core.Digest, articleIDs []string, themeIDs []string) error {
+	// Start transaction
+	var tx *sql.Tx
+	var err error
+
+	if r.tx != nil {
+		// Already in a transaction, use it
+		tx = r.tx
+	} else {
+		// Start new transaction
+		tx, err = r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction: %w", err)
+		}
+		defer func() {
+			if err != nil {
+				_ = tx.Rollback()
+			}
+		}()
+	}
+
+	// 1. Insert digest (using v2.0 schema)
+	keyMomentsJSON, err := json.Marshal(digest.KeyMoments)
+	if err != nil {
+		return fmt.Errorf("failed to marshal key_moments: %w", err)
+	}
+
+	perspectivesJSON, err := json.Marshal(digest.Perspectives)
+	if err != nil {
+		return fmt.Errorf("failed to marshal perspectives: %w", err)
+	}
+
+	// Build legacy content JSONB for backward compatibility
+	contentJSON := map[string]interface{}{
+		"summary":  digest.Summary,
+		"title":    digest.Title,
+		"my_take":  "",
+		"metadata": map[string]interface{}{
+			"title":          digest.Title,
+			"tldr_summary":   digest.TLDRSummary,
+			"article_count":  digest.ArticleCount,
+			"date_generated": time.Now().UTC(),
+		},
+	}
+	contentJSONBytes, err := json.Marshal(contentJSON)
+	if err != nil {
+		return fmt.Errorf("failed to marshal content JSON: %w", err)
+	}
+
+	query := `
+		INSERT INTO digests (
+			id, date, content, title, summary, tldr_summary, key_moments, perspectives,
+			cluster_id, processed_date, article_count, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`
+	// Use processed_date for both date and processed_date (backward compatibility)
+	dateValue := digest.ProcessedDate
+	if dateValue.IsZero() {
+		dateValue = time.Now()
+	}
+
+	_, err = tx.ExecContext(ctx, query,
+		digest.ID,
+		dateValue,               // Legacy date column
+		contentJSONBytes,        // Legacy content JSONB column
+		digest.Title,            // Legacy title column
+		digest.Summary,          // v2.0 summary field
+		digest.TLDRSummary,      // v2.0 tldr
+		keyMomentsJSON,          // v2.0
+		perspectivesJSON,        // v2.0
+		digest.ClusterID,        // v2.0
+		digest.ProcessedDate,    // v2.0
+		digest.ArticleCount,     // v2.0
+		time.Now().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert digest: %w", err)
+	}
+
+	// 2. Create digest_articles relationships with citation order
+	for i, articleID := range articleIDs {
+		citationOrder := i + 1
+		query := `
+			INSERT INTO digest_articles (digest_id, article_id, citation_order, added_at)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (digest_id, article_id) DO NOTHING
+		`
+		_, err = tx.ExecContext(ctx, query, digest.ID, articleID, citationOrder, time.Now().UTC())
+		if err != nil {
+			return fmt.Errorf("failed to insert digest_article relationship: %w", err)
+		}
+	}
+
+	// 3. Create digest_themes relationships
+	for _, themeID := range themeIDs {
+		query := `
+			INSERT INTO digest_themes (digest_id, theme_id, added_at)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (digest_id, theme_id) DO NOTHING
+		`
+		_, err = tx.ExecContext(ctx, query, digest.ID, themeID, time.Now().UTC())
+		if err != nil {
+			return fmt.Errorf("failed to insert digest_theme relationship: %w", err)
+		}
+	}
+
+	// 4. Extract and store citations from summary markdown
+	if digest.Summary != "" {
+		// Extract citations from the markdown summary
+		citationRefs := markdown.ExtractCitations(digest.Summary)
+
+		if len(citationRefs) > 0 {
+			// Build article map for citation lookup (URL -> Article)
+			articleMap := make(map[string]*core.Article)
+			for i := range digest.Articles {
+				articleMap[digest.Articles[i].URL] = &digest.Articles[i]
+			}
+
+			// Build citation records
+			citationRecords := markdown.BuildCitationRecords(digest.ID, citationRefs, articleMap)
+
+			// Insert citations into database
+			for _, citation := range citationRecords {
+				query := `
+					INSERT INTO citations (
+						id, article_id, url, title, publisher, published_date,
+						accessed_date, created_at, digest_id, citation_number, context
+					) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+					ON CONFLICT (id) DO NOTHING
+				`
+				_, err = tx.ExecContext(ctx, query,
+					citation.ID,
+					citation.ArticleID,
+					citation.URL,
+					citation.Title,
+					citation.Publisher,
+					citation.PublishedDate,
+					citation.AccessedDate,
+					citation.CreatedAt,
+					citation.DigestID,
+					citation.CitationNumber,
+					citation.Context,
+				)
+				if err != nil {
+					return fmt.Errorf("failed to insert citation: %w", err)
+				}
+			}
+		}
+	}
+
+	// Commit transaction if we started it
+	if r.tx == nil {
+		if err = tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// GetWithArticles retrieves a digest with all associated articles loaded (v2.0)
+func (r *postgresDigestRepo) GetWithArticles(ctx context.Context, id string) (*core.Digest, error) {
+	// TODO: Implement v2.0 digest retrieval with article relationships
+	// For now, fall back to basic Get
+	return r.Get(ctx, id)
+}
+
+// GetWithThemes retrieves a digest with all associated themes loaded (v2.0)
+func (r *postgresDigestRepo) GetWithThemes(ctx context.Context, id string) (*core.Digest, error) {
+	// TODO: Implement v2.0 digest retrieval with theme relationships
+	// For now, fall back to basic Get
+	return r.Get(ctx, id)
+}
+
+// GetFull retrieves a digest with articles, themes, and citations loaded (v2.0)
+func (r *postgresDigestRepo) GetFull(ctx context.Context, id string) (*core.Digest, error) {
+	// TODO: Implement v2.0 full digest retrieval with all relationships
+	// For now, fall back to basic Get
+	return r.Get(ctx, id)
+}
+
+// ListRecent retrieves digests processed since a given date (v2.0)
+// Used for homepage digest list with time window filtering
+func (r *postgresDigestRepo) ListRecent(ctx context.Context, since time.Time, limit int) ([]core.Digest, error) {
+	if limit == 0 {
+		limit = 50
+	}
+
+	query := `
+		SELECT
+			d.id, d.summary, d.tldr_summary, d.key_moments, d.perspectives,
+			d.cluster_id, d.processed_date, d.article_count, d.created_at,
+			COALESCE(
+				json_agg(
+					DISTINCT jsonb_build_object(
+						'id', t.id,
+						'name', t.name,
+						'description', t.description
+					)
+				) FILTER (WHERE t.id IS NOT NULL),
+				'[]'
+			) as themes
+		FROM digests d
+		LEFT JOIN digest_themes dt ON d.id = dt.digest_id
+		LEFT JOIN themes t ON dt.theme_id = t.id
+		WHERE d.processed_date >= $1
+		GROUP BY d.id, d.summary, d.tldr_summary, d.key_moments, d.perspectives,
+				 d.cluster_id, d.processed_date, d.article_count, d.created_at
+		ORDER BY d.processed_date DESC, d.created_at DESC
+		LIMIT $2
+	`
+
+	rows, err := r.query().QueryContext(ctx, query, since, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent digests: %w", err)
+	}
+	defer rows.Close()
+
+	var digests []core.Digest
+	for rows.Next() {
+		var d core.Digest
+		var keyMomentsJSON, perspectivesJSON, themesJSON []byte
+
+		err := rows.Scan(
+			&d.ID, &d.Summary, &d.TLDRSummary, &keyMomentsJSON, &perspectivesJSON,
+			&d.ClusterID, &d.ProcessedDate, &d.ArticleCount, &d.DateGenerated,
+			&themesJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan digest row: %w", err)
+		}
+
+		// Unmarshal JSONB fields
+		if len(keyMomentsJSON) > 0 && string(keyMomentsJSON) != "null" {
+			if err := json.Unmarshal(keyMomentsJSON, &d.KeyMoments); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal key_moments: %w", err)
+			}
+		}
+
+		if len(perspectivesJSON) > 0 && string(perspectivesJSON) != "null" {
+			if err := json.Unmarshal(perspectivesJSON, &d.Perspectives); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal perspectives: %w", err)
+			}
+		}
+
+		if len(themesJSON) > 0 && string(themesJSON) != "[]" {
+			if err := json.Unmarshal(themesJSON, &d.Themes); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal themes: %w", err)
+			}
+		}
+
+		digests = append(digests, d)
+	}
+
+	return digests, rows.Err()
+}
+
+// ListByTheme retrieves digests associated with a specific theme (v2.0)
+func (r *postgresDigestRepo) ListByTheme(ctx context.Context, themeID string, since time.Time, limit int) ([]core.Digest, error) {
+	// TODO: Implement v2.0 theme-based digest filtering
+	// For now, return empty list
+	return []core.Digest{}, nil
+}
+
+// ListByCluster retrieves digests for a specific HDBSCAN cluster (v2.0)
+func (r *postgresDigestRepo) ListByCluster(ctx context.Context, clusterID int, limit int) ([]core.Digest, error) {
+	// TODO: Implement v2.0 cluster-based digest filtering
+	// For now, return empty list
+	return []core.Digest{}, nil
 }
 
 // postgresThemeRepo implements ThemeRepository for PostgreSQL (Phase 0)

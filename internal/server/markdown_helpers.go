@@ -2,6 +2,7 @@ package server
 
 import (
 	"html/template"
+	"regexp"
 
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/html"
@@ -29,4 +30,21 @@ func renderMarkdown(text string) template.HTML {
 	htmlBytes := markdown.ToHTML([]byte(text), mdParser, renderer)
 
 	return template.HTML(htmlBytes)
+}
+
+// convertCitationLinksToAnchors converts citation links like [[N]](url) to anchor links [[N]](#article-N)
+// This makes citations clickable and jump to the article in the same page
+func convertCitationLinksToAnchors(text string) string {
+	// Pattern: [[N]](url) -> [[N]](#article-N)
+	// Matches: [[1]](https://example.com) or [[2]](http://...)
+	pattern := regexp.MustCompile(`\[\[(\d+)\]\]\([^)]+\)`)
+	return pattern.ReplaceAllString(text, `[[$1]](#article-$1)`)
+}
+
+// renderMarkdownWithCitations renders markdown and converts citation links to anchors
+func renderMarkdownWithCitations(text string) template.HTML {
+	// First convert citation URLs to anchors
+	textWithAnchors := convertCitationLinksToAnchors(text)
+	// Then render as normal markdown
+	return renderMarkdown(textWithAnchors)
 }

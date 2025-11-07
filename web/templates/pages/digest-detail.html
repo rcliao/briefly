@@ -82,9 +82,34 @@
                 <h2>Key Moments</h2>
                 <ol class="key-moments">
                     {{ range .KeyMoments }}
-                    <li>{{ . }}</li>
+                    <li>
+                        <blockquote>{{ .Quote }}</blockquote>
+                        <cite>— <a href="#article-{{ .CitationNumber }}" class="citation-link">Article [{{ .CitationNumber }}]</a></cite>
+                    </li>
                     {{ end }}
                 </ol>
+            </section>
+            {{ end }}
+
+            <!-- Perspectives Section -->
+            {{ if .Perspectives }}
+            <section id="perspectives" class="digest-section navigable-section perspectives-section" data-section="perspectives" tabindex="0">
+                <h2>Different Perspectives</h2>
+                <div class="perspectives-grid">
+                    {{ range .Perspectives }}
+                    <div class="perspective-card {{ .Type }}">
+                        <h3 class="perspective-type">{{ if eq .Type "supporting" }}Supporting View{{ else }}Opposing View{{ end }}</h3>
+                        <p class="perspective-summary">{{ .Summary }}</p>
+                        <div class="perspective-citations">
+                            Sources:
+                            {{ range $i, $num := .CitationNumbers }}
+                                {{ if $i }}, {{ end }}
+                                <a href="#article-{{ $num }}" class="citation-link">[{{ $num }}]</a>
+                            {{ end }}
+                        </div>
+                    </div>
+                    {{ end }}
+                </div>
             </section>
             {{ end }}
 

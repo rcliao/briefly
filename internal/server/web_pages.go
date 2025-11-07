@@ -454,23 +454,47 @@ func (s *Server) handleDigestDetailPage(w http.ResponseWriter, r *http.Request) 
 
 // prepareDigestDetailData prepares view model for digest detail page
 func (s *Server) prepareDigestDetailData(ctx context.Context, digest *core.Digest) (*DigestDetailPageData, error) {
-	// Render markdown server-side
-	summaryHTML := renderMarkdown(digest.DigestSummary)
-
-	// Use key moments from metadata and render markdown (e.g., **bold** formatting)
-	keyMomentsHTML := make([]template.HTML, 0, len(digest.Metadata.KeyMoments))
-	for _, moment := range digest.Metadata.KeyMoments {
-		keyMomentsHTML = append(keyMomentsHTML, renderMarkdown(moment))
+	// v2.0: Render markdown with citation links converted to anchors
+	var summaryHTML template.HTML
+	if digest.Summary != "" {
+		// v2.0 field
+		summaryHTML = renderMarkdownWithCitations(digest.Summary)
+	} else if digest.DigestSummary != "" {
+		// v1.0 fallback
+		summaryHTML = renderMarkdown(digest.DigestSummary)
 	}
 
-	// Map article groups to perspectives
-	perspectives := make([]PerspectiveView, 0, len(digest.ArticleGroups))
-	for _, group := range digest.ArticleGroups {
-		perspectives = append(perspectives, PerspectiveView{
-			Title:       group.Theme,
-			ContentHTML: renderMarkdown(group.Summary),
-			Category:    group.Category,
+	// v2.0: Use KeyMoments structs (Quote + CitationNumber)
+	keyMomentsData := make([]KeyMomentView, 0, len(digest.KeyMoments))
+	for _, moment := range digest.KeyMoments {
+		keyMomentsData = append(keyMomentsData, KeyMomentView{
+			Quote:          moment.Quote,
+			CitationNumber: moment.CitationNumber,
+			ArticleID:      moment.ArticleID,
 		})
+	}
+
+	// v2.0: Use Perspectives structs (Type + Summary + CitationNumbers)
+	perspectivesData := make([]PerspectiveDetailView, 0, len(digest.Perspectives))
+	for _, persp := range digest.Perspectives {
+		perspectivesData = append(perspectivesData, PerspectiveDetailView{
+			Type:            persp.Type,
+			Summary:         persp.Summary,
+			CitationNumbers: persp.CitationNumbers,
+			ArticleIDs:      persp.ArticleIDs,
+		})
+	}
+
+	// v1.0 Fallback: Map article groups to perspectives if v2.0 perspectives don't exist
+	if len(perspectivesData) == 0 && len(digest.ArticleGroups) > 0 {
+		for _, group := range digest.ArticleGroups {
+			perspectivesData = append(perspectivesData, PerspectiveDetailView{
+				Type:            group.Category, // Use category as type
+				Summary:         group.Summary,
+				CitationNumbers: []int{},
+				ArticleIDs:      []string{},
+			})
+		}
 	}
 
 	// Collect all articles from all groups
@@ -516,16 +540,28 @@ func (s *Server) prepareDigestDetailData(ctx context.Context, digest *core.Diges
 	postHogHost := "https://app.posthog.com"
 	// TODO: Load from config
 
+	// Get title from v2.0 or v1.0
+	title := digest.Title
+	if title == "" {
+		title = digest.Metadata.Title
+	}
+
+	// Get article count from v2.0 or v1.0
+	articleCount := digest.ArticleCount
+	if articleCount == 0 {
+		articleCount = digest.Metadata.ArticleCount
+	}
+
 	return &DigestDetailPageData{
 		ID:             digest.ID,
-		Title:          digest.Metadata.Title,
-		ArticleCount:   digest.Metadata.ArticleCount,
+		Title:          title,
+		ArticleCount:   articleCount,
 		ThemeCount:     len(digest.ArticleGroups),
 		DateGenerated:  digest.Metadata.DateGenerated,
 		QualityScore:   digest.Metadata.QualityScore,
 		SummaryHTML:    summaryHTML,
-		KeyMoments:     keyMomentsHTML,
-		Perspectives:   perspectives,
+		KeyMoments:     keyMomentsData,
+		Perspectives:   perspectivesData,
 		Articles:       articles,
 		Themes:         []ThemeWithCount{}, // Empty for digest detail page (theme filter not shown)
 		RecentDigests:  recentDigestItems,
@@ -546,8 +582,8 @@ type DigestDetailPageData struct {
 	DateGenerated  time.Time
 	QualityScore   float64
 	SummaryHTML    template.HTML
-	KeyMoments     []template.HTML
-	Perspectives   []PerspectiveView
+	KeyMoments     []KeyMomentView          // v2.0: Structured key moments
+	Perspectives   []PerspectiveDetailView  // v2.0: Structured perspectives
 	Articles       []ArticleView
 	Themes         []ThemeWithCount    // Themes for this digest
 	RecentDigests  []DigestListItem    // Recent digests list for sidebar
@@ -578,11 +614,28 @@ type PerspectiveView struct {
 
 // ArticleView represents an article for the view layer
 type ArticleView struct {
-	ID          string
-	URL         string
-	Title       string
-	Domain      string
-	ContentType string
-	DateFetched time.Time
+	ID             string
+	URL            string
+	Title          string
+	Domain         string
+	Publisher      string // v2.0: Publisher name
+	ContentType    string
+	DateFetched    time.Time
+	CitationNumber int // v2.0: Citation number if used in digest
+}
+
+// KeyMomentView represents a key moment for v2.0 rendering
+type KeyMomentView struct {
+	Quote          string
+	CitationNumber int
+	ArticleID      string
+}
+
+// PerspectiveDetailView represents a perspective for v2.0 rendering
+type PerspectiveDetailView struct {
+	Type            string   // "supporting" or "opposing"
+	Summary         string
+	CitationNumbers []int
+	ArticleIDs      []string
 }
 

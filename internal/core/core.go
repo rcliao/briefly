@@ -26,11 +26,12 @@ type Article struct {
 	URL             string      `json:"url"`              // Direct URL (no LinkID indirection)
 	Title           string      `json:"title"`
 	ContentType     ContentType `json:"content_type"`     // html, pdf, youtube
-	
+	Publisher       string      `json:"publisher"`        // Publisher domain (e.g., "anthropic.com", "openai.com") - v2.0
+
 	// Content
 	CleanedText     string    `json:"cleaned_text"`
 	RawContent      string    `json:"raw_content,omitempty"` // For non-HTML
-	
+
 	// Processing metadata
 	DateFetched     time.Time `json:"date_fetched"`
 	ProcessingMode  string    `json:"processing_mode"` // local, cloud, hybrid
@@ -106,18 +107,29 @@ type StructuredSummaryContent struct {
 type Digest struct {
 	ID               string         `json:"id"`
 
-	// v3.0 new structure
+	// v2.0 many-digests architecture fields
+	Summary          string          `json:"summary"`                      // Markdown summary with [[N]](url) citations (2-3 paragraphs)
+	TLDRSummary      string          `json:"tldr_summary"`                 // One-sentence summary (50-70 chars ideal) - from v2.0
+	KeyMoments       []KeyMoment     `json:"key_moments,omitempty"`        // Important quotes with citation numbers - v2.0
+	Perspectives     []Perspective   `json:"perspectives,omitempty"`       // Supporting/opposing viewpoints - v2.0
+	ClusterID        *int            `json:"cluster_id,omitempty"`         // HDBSCAN cluster ID (-1 = noise, NULL = weekly aggregate) - v2.0
+	ProcessedDate    time.Time       `json:"processed_date"`               // Date when generated (for daily/weekly queries) - v2.0
+	ArticleCount     int             `json:"article_count"`                // Number of articles in digest - v2.0
+	Themes           []Theme         `json:"themes,omitempty"`             // Associated themes (many-to-many) - v2.0
+	Articles         []Article       `json:"articles,omitempty"`           // Associated articles (for API responses) - v2.0
+
+	// v3.0 new structure (legacy, being phased out)
 	Signal           Signal         `json:"signal,omitempty"`            // Primary insight
 	ArticleGroups    []ArticleGroup `json:"article_groups,omitempty"`    // Clustered articles
 	Summaries        []Summary      `json:"summaries,omitempty"`         // Article summaries
 	Metadata         DigestMetadata `json:"metadata,omitempty"`
-	
+
 	// User interaction
 	UserFeedback     *UserFeedback  `json:"user_feedback,omitempty"`
 	ExplorationPaths []string       `json:"exploration_paths,omitempty"` // What user clicked
-	
+
 	// Legacy fields (maintained for backward compatibility)
-	Title         string    `json:"title,omitempty"`          // Legacy title
+	Title         string    `json:"title,omitempty"`          // Legacy title (or v2.0 digest title)
 	Content       string    `json:"content,omitempty"`        // Legacy full digest content
 	DigestSummary string    `json:"digest_summary,omitempty"` // Legacy executive summary
 	MyTake        string    `json:"my_take,omitempty"`        // Legacy user take
@@ -125,12 +137,27 @@ type Digest struct {
 	ModelUsed     string    `json:"model_used,omitempty"`     // Legacy model info
 	Format        string    `json:"format,omitempty"`         // Legacy format
 	DateGenerated time.Time `json:"date_generated,omitempty"` // Legacy timestamp
-	
-	// Legacy insights fields  
+
+	// Legacy insights fields
 	OverallSentiment    string   `json:"overall_sentiment,omitempty"`    // Legacy sentiment
 	AlertsSummary       string   `json:"alerts_summary,omitempty"`       // Legacy alerts
 	TrendsSummary       string   `json:"trends_summary,omitempty"`       // Legacy trends
 	ResearchSuggestions []string `json:"research_suggestions,omitempty"` // Legacy research
+}
+
+// KeyMoment represents an important quote from an article in the digest (v2.0)
+type KeyMoment struct {
+	Quote          string `json:"quote"`            // The key quote text
+	CitationNumber int    `json:"citation_number"`  // Reference to article citation [1][2][3]
+	ArticleID      string `json:"article_id,omitempty"` // Optional: Direct article reference
+}
+
+// Perspective represents supporting or opposing viewpoints in a digest (v2.0)
+type Perspective struct {
+	Type             string   `json:"type"`              // "supporting" or "opposing"
+	Summary          string   `json:"summary"`           // Summary of this perspective
+	CitationNumbers  []int    `json:"citation_numbers"`  // Articles supporting this perspective [1,2,3]
+	ArticleIDs       []string `json:"article_ids,omitempty"` // Optional: Direct article references
 }
 
 // Prompt represents a generic prompt that can be used for various LLM interactions.
@@ -397,6 +424,7 @@ const (
 )
 
 // Citation represents source attribution metadata for an article (Phase 1)
+// Updated in v2.0 to support both article metadata citations AND digest inline citations
 type Citation struct {
 	ID            string                 `json:"id"`                      // Unique identifier
 	ArticleID     string                 `json:"article_id"`              // Reference to source article
@@ -408,4 +436,9 @@ type Citation struct {
 	AccessedDate  time.Time              `json:"accessed_date"`           // When we fetched this article
 	Metadata      map[string]interface{} `json:"metadata,omitempty"`      // Additional metadata (DOI, ISBN, etc.)
 	CreatedAt     time.Time              `json:"created_at"`              // Citation record creation
+
+	// v2.0 digest citation fields (for inline citations in digest summaries)
+	DigestID       *string `json:"digest_id,omitempty"`       // Reference to digest (NULL = article metadata, NOT NULL = digest citation)
+	CitationNumber *int    `json:"citation_number,omitempty"` // Citation number in digest ([1], [2], [3], etc.)
+	Context        string  `json:"context,omitempty"`         // Surrounding text where citation appears in digest
 }

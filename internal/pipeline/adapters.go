@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/generative-ai-go/genai"
 )
 
 // ParserAdapter wraps internal/parser to implement URLParser
@@ -191,8 +193,12 @@ func (a *NarrativeAdapter) GenerateDigestContent(ctx context.Context, clusters [
 	return a.generator.GenerateDigestContent(ctx, clusters, articles, summaries)
 }
 
-func (a *NarrativeAdapter) GenerateText(ctx context.Context, prompt string) (string, error) {
-	return a.llmClient.GenerateText(ctx, prompt)
+func (a *NarrativeAdapter) GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error) {
+	return a.llmClient.GenerateText(ctx, prompt, options)
+}
+
+func (a *NarrativeAdapter) GetGenaiModel() *genai.GenerativeModel {
+	return a.llmClient.GetGenaiModel()
 }
 
 func (a *NarrativeAdapter) IdentifyClusterTheme(ctx context.Context, cluster core.TopicCluster, articles []core.Article) (string, error) {
@@ -476,7 +482,28 @@ func NewLLMClientAdapter(client *llm.Client) *LLMClientAdapter {
 	}
 }
 
-func (a *LLMClientAdapter) GenerateText(ctx context.Context, prompt string) (string, error) {
+func (a *LLMClientAdapter) GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error) {
+	return a.client.GenerateText(ctx, prompt, options)
+}
+
+func (a *LLMClientAdapter) GetGenaiModel() *genai.GenerativeModel {
+	return a.client.GetGenaiModel()
+}
+
+// LegacyLLMClientAdapter adapts the new LLM client interface to old interfaces that don't support options
+// This is for backward compatibility with packages that haven't been updated yet
+type LegacyLLMClientAdapter struct {
+	client *llm.Client
+}
+
+func NewLegacyLLMClientAdapter(client *llm.Client) *LegacyLLMClientAdapter {
+	return &LegacyLLMClientAdapter{
+		client: client,
+	}
+}
+
+// GenerateText implements the old interface without options parameter
+func (a *LegacyLLMClientAdapter) GenerateText(ctx context.Context, prompt string) (string, error) {
 	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
 }
 

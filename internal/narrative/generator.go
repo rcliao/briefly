@@ -2,16 +2,23 @@ package narrative
 
 import (
 	"briefly/internal/core"
+	"briefly/internal/llm"
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/google/generative-ai-go/genai"
 )
 
 // LLMClient defines the interface for LLM operations needed by the narrative generator
 type LLMClient interface {
-	// GenerateText generates text from a prompt
-	GenerateText(ctx context.Context, prompt string) (string, error)
+	// GenerateText generates text from a prompt with optional structured output
+	GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error)
+
+	// GetGenaiModel returns the underlying genai model for schema definition
+	GetGenaiModel() *genai.GenerativeModel
 }
 
 // Generator creates executive summaries from clustered articles
@@ -26,12 +33,13 @@ func NewGenerator(llmClient LLMClient) *Generator {
 	}
 }
 
-// DigestContent contains all generated content for a digest
+// DigestContent contains all generated content for a digest (v2.0 structured format)
 type DigestContent struct {
-	Title            string   // Generated title (e.g., "GPU Economics and Kernel Security")
-	TLDRSummary      string   // One-line summary for homepage preview
-	KeyMoments       []string // 3-5 key developments/highlights
-	ExecutiveSummary string   // Full narrative summary
+	Title            string               // Generated title (25-45 chars ideal, 50 max)
+	TLDRSummary      string               // One-sentence summary (40-80 chars ideal, 100 max)
+	KeyMoments       []core.KeyMoment     // 3-5 key developments with structured quotes and citations
+	Perspectives     []core.Perspective   // Supporting/opposing viewpoints (optional)
+	ExecutiveSummary string               // Full narrative summary with [N] citation placeholders
 }
 
 // GenerateDigestContent creates title, TL;DR, and executive summary from clustered articles
@@ -57,18 +65,30 @@ func (g *Generator) GenerateDigestContent(ctx context.Context, clusters []core.T
 		return nil, fmt.Errorf("no valid cluster insights generated")
 	}
 
-	// Generate content using LLM
-	prompt := g.buildNarrativePrompt(clusterInsights)
-	response, err := g.llmClient.GenerateText(ctx, prompt)
+	// Generate content using LLM with structured output (v2.0)
+	prompt := g.buildStructuredNarrativePrompt(clusterInsights)
+	schema := g.buildDigestContentSchema()
+
+	response, err := g.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
+		ResponseSchema: schema,
+		Temperature:    0.7,
+		MaxTokens:      2000,
+	})
 	if err != nil {
 		// Fallback to simple generation if LLM fails
 		content := g.generateFallbackContent(clusterInsights)
 		return &content, nil
 	}
 
-	// Parse structured response
-	content := g.parseDigestContent(response, clusterInsights)
-	return &content, nil
+	// Parse JSON response to DigestContent
+	content, err := g.parseStructuredDigestContent(response)
+	if err != nil {
+		// Fallback if parsing fails
+		fallback := g.generateFallbackContent(clusterInsights)
+		return &fallback, nil
+	}
+
+	return content, nil
 }
 
 // GenerateExecutiveSummary creates a story-driven narrative from clustered articles
@@ -179,6 +199,8 @@ func (g *Generator) extractKeyPoints(summary core.Summary) []string {
 
 // buildNarrativePrompt constructs the prompt for digest content generation
 // Generates Title, TL;DR, and Executive Summary
+//
+//nolint:unused
 func (g *Generator) buildNarrativePrompt(insights []ClusterInsight) string {
 	var prompt strings.Builder
 
@@ -314,7 +336,7 @@ func (g *Generator) IdentifyClusterTheme(ctx context.Context, cluster core.Topic
 
 	prompt.WriteString("\nTheme:")
 
-	theme, err := g.llmClient.GenerateText(ctx, prompt.String())
+	theme, err := g.llmClient.GenerateText(ctx, prompt.String(), llm.TextGenerationOptions{})
 	if err != nil {
 		// Fallback to generic theme
 		return fmt.Sprintf("Topic Cluster %d", 1), nil
@@ -415,6 +437,8 @@ func joinWithAnd(items []string) string {
 }
 
 // parseDigestContent extracts title, TL;DR, and summary from LLM response
+//
+//nolint:unused
 func (g *Generator) parseDigestContent(response string, insights []ClusterInsight) DigestContent {
 	content := DigestContent{}
 
@@ -440,7 +464,9 @@ func (g *Generator) parseDigestContent(response string, insights []ClusterInsigh
 		case "TLDR":
 			content.TLDRSummary = sectionContent
 		case "KEY_MOMENTS":
-			content.KeyMoments = g.parseKeyMoments(sectionContent)
+			// Convert old string format to structured format
+			oldMoments := g.parseKeyMoments(sectionContent)
+			content.KeyMoments = g.convertOldMomentsToStructured(oldMoments)
 		case "SUMMARY":
 			content.ExecutiveSummary = sectionContent
 		}
@@ -465,7 +491,9 @@ func (g *Generator) parseDigestContent(response string, insights []ClusterInsigh
 	return content
 }
 
-// parseKeyMoments extracts key moments from numbered list format
+// parseKeyMoments extracts key moments from numbered list format (DEPRECATED: use structured output)
+//
+//nolint:unused
 func (g *Generator) parseKeyMoments(content string) []string {
 	lines := strings.Split(content, "\n")
 	moments := make([]string, 0)
@@ -487,6 +515,217 @@ func (g *Generator) parseKeyMoments(content string) []string {
 	}
 
 	return moments
+}
+
+// convertOldMomentsToStructured converts old []string key moments to structured format
+//
+//nolint:unused
+func (g *Generator) convertOldMomentsToStructured(oldMoments []string) []core.KeyMoment {
+	structured := make([]core.KeyMoment, 0, len(oldMoments))
+
+	for i, moment := range oldMoments {
+		// Try to extract citation number from moment text like "[See #1]"
+		citationNum := i + 1 // Default to sequential numbering
+
+		// Extract quote text (remove citation references if present)
+		quote := moment
+		if idx := strings.Index(moment, "[See #"); idx > 0 {
+			quote = strings.TrimSpace(moment[:idx])
+		}
+
+		structured = append(structured, core.KeyMoment{
+			Quote:          quote,
+			CitationNumber: citationNum,
+		})
+	}
+
+	return structured
+}
+
+// ============================================================================
+// v2.0 Structured Output Functions
+// ============================================================================
+
+// buildStructuredNarrativePrompt creates a prompt for generating structured digest content with JSON schema
+func (g *Generator) buildStructuredNarrativePrompt(insights []ClusterInsight) string {
+	var prompt strings.Builder
+
+	prompt.WriteString("Generate structured content for a technical digest following v2.0 architecture.\n\n")
+
+	// Build article reference list with citation numbers
+	prompt.WriteString("**Articles for reference:**\n")
+	articleNum := 1
+	for _, insight := range insights {
+		for _, article := range insight.TopArticles {
+			prompt.WriteString(fmt.Sprintf("[%d] %s\n", articleNum, article.Title))
+			prompt.WriteString(fmt.Sprintf("    URL: %s\n", article.URL))
+			prompt.WriteString(fmt.Sprintf("    Summary: %s\n\n", truncateText(article.Summary, 200)))
+			articleNum++
+		}
+	}
+
+	prompt.WriteString("\n**REQUIREMENTS:**\n\n")
+
+	prompt.WriteString("**Title (20-40 characters STRICT MAXIMUM - COUNT CAREFULLY!):**\n")
+	prompt.WriteString("- Catchy and specific headline\n")
+	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 40 characters (database hard limit: 50 chars, you MUST stay under 40)\n")
+	prompt.WriteString("- EXCEEDING 50 CHARS WILL CAUSE COMPLETE FAILURE - Count every character including spaces!\n")
+	prompt.WriteString("- Examples: \"GPT-5 Launch and API Updates\" (30 chars) ✓\n")
+	prompt.WriteString("            \"AI Agents Gain Autonomy\" (25 chars) ✓\n")
+	prompt.WriteString("            \"Voice AI Hits 1-Second Latency\" (32 chars) ✓\n\n")
+
+	prompt.WriteString("**TLDR Summary (40-75 characters STRICT MAXIMUM - COUNT CAREFULLY!):**\n")
+	prompt.WriteString("- One complete sentence capturing the key insight\n")
+	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 75 characters (database hard limit: 100 chars, you MUST stay under 75)\n")
+	prompt.WriteString("- EXCEEDING 100 CHARS WILL CAUSE COMPLETE FAILURE - Count every character including spaces!\n")
+	prompt.WriteString("- Examples: \"OpenAI releases GPT-5 with faster inference\" (48 chars) ✓\n")
+	prompt.WriteString("            \"AI agents gain new autonomy features\" (40 chars) ✓\n\n")
+
+	prompt.WriteString("**Executive Summary (2-3 paragraphs):**\n")
+	prompt.WriteString("- Tell the story of this week's developments\n")
+	prompt.WriteString("- Include citations using [1], [2], [3] format (CRITICAL: use numbers only)\n")
+	prompt.WriteString("- Focus on 'why it matters' not just 'what happened'\n")
+	prompt.WriteString("- Write for developers, PMs, and technical leaders\n")
+	prompt.WriteString("- 150-200 words total\n\n")
+
+	prompt.WriteString("**Key Moments (3-5 structured quotes):**\n")
+	prompt.WriteString("- Each must have:\n")
+	prompt.WriteString("  - quote: Exact quote from article (1-2 sentences)\n")
+	prompt.WriteString("  - citation_number: Reference to article [1-N]\n")
+	prompt.WriteString("- Select the most impactful quotes\n")
+	prompt.WriteString("- Examples:\n")
+	prompt.WriteString("  - {\"quote\": \"GPT-5 achieves 95% on MMLU benchmarks\", \"citation_number\": 1}\n")
+	prompt.WriteString("  - {\"quote\": \"Early testing shows 40% cost reduction\", \"citation_number\": 3}\n\n")
+
+	prompt.WriteString("**Perspectives (optional, 0-3 viewpoints):**\n")
+	prompt.WriteString("- Identify supporting or opposing viewpoints if present\n")
+	prompt.WriteString("- Each must have:\n")
+	prompt.WriteString("  - type: \"supporting\" or \"opposing\"\n")
+	prompt.WriteString("  - summary: Summary of this perspective (1-2 sentences)\n")
+	prompt.WriteString("  - citation_numbers: Array of article numbers [1,2,3]\n")
+	prompt.WriteString("- Only include if there are clear different perspectives\n\n")
+
+	prompt.WriteString("Generate the digest content in JSON format matching the schema.\n")
+
+	return prompt.String()
+}
+
+// buildDigestContentSchema defines the Gemini JSON schema for digest content
+func (g *Generator) buildDigestContentSchema() *genai.Schema {
+	return &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"title": {
+				Type:        genai.TypeString,
+				Description: "Catchy headline (25-45 chars MAXIMUM - hard limit 50)",
+			},
+			"tldr_summary": {
+				Type:        genai.TypeString,
+				Description: "One-sentence summary (40-80 chars MAXIMUM - hard limit 100)",
+			},
+			"executive_summary": {
+				Type:        genai.TypeString,
+				Description: "2-3 paragraph story with [1][2][3] citations (150-200 words)",
+			},
+			"key_moments": {
+				Type:        genai.TypeArray,
+				Description: "3-5 important quotes with citations",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"quote": {
+							Type:        genai.TypeString,
+							Description: "Exact quote from article (1-2 sentences)",
+						},
+						"citation_number": {
+							Type:        genai.TypeInteger,
+							Description: "Reference to article [1-N]",
+						},
+					},
+					Required: []string{"quote", "citation_number"},
+				},
+			},
+			"perspectives": {
+				Type:        genai.TypeArray,
+				Description: "Supporting/opposing viewpoints (optional)",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"type": {
+							Type:        genai.TypeString,
+							Description: "supporting or opposing",
+						},
+						"summary": {
+							Type:        genai.TypeString,
+							Description: "Summary of this perspective (1-2 sentences)",
+						},
+						"citation_numbers": {
+							Type:        genai.TypeArray,
+							Description: "Array of article numbers",
+							Items: &genai.Schema{
+								Type: genai.TypeInteger,
+							},
+						},
+					},
+					Required: []string{"type", "summary", "citation_numbers"},
+				},
+			},
+		},
+		Required: []string{"title", "tldr_summary", "executive_summary", "key_moments"},
+	}
+}
+
+// parseStructuredDigestContent parses JSON response from LLM into DigestContent
+func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestContent, error) {
+	// Define a temporary struct matching the JSON schema
+	var response struct {
+		Title            string `json:"title"`
+		TLDRSummary      string `json:"tldr_summary"`
+		ExecutiveSummary string `json:"executive_summary"`
+		KeyMoments       []struct {
+			Quote          string `json:"quote"`
+			CitationNumber int    `json:"citation_number"`
+		} `json:"key_moments"`
+		Perspectives []struct {
+			Type             string `json:"type"`
+			Summary          string `json:"summary"`
+			CitationNumbers  []int  `json:"citation_numbers"`
+		} `json:"perspectives"`
+	}
+
+	// Parse JSON
+	err := json.Unmarshal([]byte(jsonResponse), &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
+	}
+
+	// Convert to DigestContent
+	content := &DigestContent{
+		Title:            response.Title,
+		TLDRSummary:      response.TLDRSummary,
+		ExecutiveSummary: response.ExecutiveSummary,
+		KeyMoments:       make([]core.KeyMoment, 0, len(response.KeyMoments)),
+		Perspectives:     make([]core.Perspective, 0, len(response.Perspectives)),
+	}
+
+	// Convert key moments
+	for _, km := range response.KeyMoments {
+		content.KeyMoments = append(content.KeyMoments, core.KeyMoment{
+			Quote:          km.Quote,
+			CitationNumber: km.CitationNumber,
+		})
+	}
+
+	// Convert perspectives
+	for _, p := range response.Perspectives {
+		content.Perspectives = append(content.Perspectives, core.Perspective{
+			Type:            p.Type,
+			Summary:         p.Summary,
+			CitationNumbers: p.CitationNumbers,
+		})
+	}
+
+	return content, nil
 }
 
 // generateFallbackContent creates simple content when LLM fails
@@ -532,25 +771,38 @@ func (g *Generator) generateFallbackTLDR(insights []ClusterInsight) string {
 		joinWithAnd(themes), len(insights))
 }
 
-// generateFallbackKeyMoments creates simple key moments from cluster insights
-func (g *Generator) generateFallbackKeyMoments(insights []ClusterInsight) []string {
-	moments := make([]string, 0)
+// generateFallbackKeyMoments creates simple structured key moments from cluster insights (v2.0)
+func (g *Generator) generateFallbackKeyMoments(insights []ClusterInsight) []core.KeyMoment {
+	moments := make([]core.KeyMoment, 0)
 
 	// Take top article from each cluster (up to 5 moments)
+	citationNum := 1
 	for i, insight := range insights {
 		if i >= 5 {
 			break
 		}
 		if len(insight.TopArticles) > 0 {
 			article := insight.TopArticles[0]
-			moment := fmt.Sprintf("**%s** %s", insight.Theme, article.Title)
-			moments = append(moments, moment)
+			// Extract first sentence from summary as quote
+			quote := extractFirstSentence(article.Summary)
+			if quote == "" {
+				quote = article.Title
+			}
+
+			moments = append(moments, core.KeyMoment{
+				Quote:          quote,
+				CitationNumber: citationNum,
+			})
+			citationNum++
 		}
 	}
 
 	// If no moments generated, provide generic fallback
 	if len(moments) == 0 {
-		moments = append(moments, "Multiple tech developments this week")
+		moments = append(moments, core.KeyMoment{
+			Quote:          "Multiple tech developments this week",
+			CitationNumber: 1,
+		})
 	}
 
 	return moments
