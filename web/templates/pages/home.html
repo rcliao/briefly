@@ -36,9 +36,12 @@
         <!-- Theme Filter -->
         {{ template "partials/theme-filter.html" . }}
 
-        <!-- Digest List -->
-        <div id="digest-list" class="digest-list-container">
+        <!-- Digest List with Pagination -->
+        <div id="digest-list-container" class="digest-list-container">
             {{ template "partials/digest-list.html" .Digests }}
+
+            <!-- Pagination -->
+            {{ template "partials/pagination.html" . }}
         </div>
     </main>
 

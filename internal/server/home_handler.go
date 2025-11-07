@@ -4,6 +4,7 @@ import (
 	"briefly/internal/core"
 	"briefly/internal/persistence"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -20,8 +21,16 @@ type HomePageData struct {
 	TotalArticles    int
 	TotalThemes      int
 	LatestDigestDate time.Time
+
+	// Pagination
 	HasMore          bool
-	NextOffset       int
+	HasPrevious      bool
+	CurrentPage      int
+	TotalPages       int
+	NextPage         int
+	PreviousPage     int
+	PageSize         int
+
 	CurrentYear      int
 
 	// PostHog integration
@@ -68,14 +77,22 @@ func (s *Server) handleHomePage(w http.ResponseWriter, r *http.Request) {
 		themeID = ""
 	}
 
+	// Get page parameter (default to 1)
+	page := 1
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := parsePageNumber(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
 	// Check if this is an HTMX request for partial update
 	if isHTMXRequest(r) {
-		s.handleHomePagePartial(w, r, ctx, themeID)
+		s.handleHomePagePartial(w, r, ctx, themeID, page)
 		return
 	}
 
 	// Full page render
-	data, err := s.getHomePageData(ctx, themeID)
+	data, err := s.getHomePageData(ctx, themeID, page)
 	if err != nil {
 		slog.Error("Failed to get homepage data", "error", err)
 		http.Error(w, "Failed to load homepage", http.StatusInternalServerError)
@@ -99,27 +116,29 @@ func (s *Server) handleHomePage(w http.ResponseWriter, r *http.Request) {
 	// }
 }
 
-// handleHomePagePartial renders just the digest list for HTMX requests
-func (s *Server) handleHomePagePartial(w http.ResponseWriter, r *http.Request, ctx context.Context, themeID string) {
-	// Get digests for the theme
-	digests, err := s.getDigestsForTheme(ctx, themeID)
+// handleHomePagePartial renders just the digest list and pagination for HTMX requests
+func (s *Server) handleHomePagePartial(w http.ResponseWriter, r *http.Request, ctx context.Context, themeID string, page int) {
+	// Get full page data with pagination
+	data, err := s.getHomePageData(ctx, themeID, page)
 	if err != nil {
-		slog.Error("Failed to get digests", "error", err, "theme", themeID)
+		slog.Error("Failed to get homepage data", "error", err, "theme", themeID, "page", page)
 		http.Error(w, "Failed to load digests", http.StatusInternalServerError)
 		return
 	}
 
-	// Render only the digest-list partial
+	// Render digest list and pagination together
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.renderer.Render(w, "partials/digest-list.html", digests); err != nil {
+	if err := s.renderer.Render(w, "partials/digest-list-with-pagination.html", data); err != nil {
 		slog.Error("Failed to render digest list", "error", err)
 		http.Error(w, "Failed to render content", http.StatusInternalServerError)
 		return
 	}
 }
 
+const digestsPerPage = 10
+
 // getHomePageData retrieves all data needed for the homepage
-func (s *Server) getHomePageData(ctx context.Context, activeThemeID string) (*HomePageData, error) {
+func (s *Server) getHomePageData(ctx context.Context, activeThemeID string, page int) (*HomePageData, error) {
 	// Get all enabled themes
 	themes, err := s.db.Themes().ListEnabled(ctx)
 	if err != nil {
@@ -143,16 +162,58 @@ func (s *Server) getHomePageData(ctx context.Context, activeThemeID string) (*Ho
 		}
 	}
 
-	// Get digests (filtered by theme if specified)
-	digests, err := s.getDigestsForTheme(ctx, activeThemeID)
+	// Get total count of digests for pagination calculation
+	var totalDigests int
+	if activeThemeID == "" {
+		// Count all digests
+		allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 10000, Offset: 0})
+		if err != nil {
+			slog.Warn("Failed to get digest count", "error", err)
+		}
+		totalDigests = len(allDigests)
+	} else {
+		// Count digests for specific theme (TODO: optimize with dedicated count query)
+		allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 10000, Offset: 0})
+		if err != nil {
+			slog.Warn("Failed to get digest count", "error", err)
+		}
+		theme, err := s.db.Themes().Get(ctx, activeThemeID)
+		if err != nil {
+			slog.Warn("Failed to lookup theme", "theme_id", activeThemeID, "error", err)
+			theme = &core.Theme{Name: activeThemeID}
+		}
+		themeName := theme.Name
+
+		// Count digests containing this theme
+		for _, d := range allDigests {
+			for _, group := range d.ArticleGroups {
+				if group.Theme == themeName {
+					totalDigests++
+					break
+				}
+			}
+		}
+	}
+
+	// Calculate pagination
+	totalPages := (totalDigests + digestsPerPage - 1) / digestsPerPage
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+
+	// Get digests for current page (filtered by theme if specified)
+	digests, err := s.getDigestsForTheme(ctx, activeThemeID, page)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get stats
+	// Get stats for overview
 	allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 1000, Offset: 0})
 	if err != nil {
-		slog.Warn("Failed to get digest count", "error", err)
+		slog.Warn("Failed to get digest stats", "error", err)
 	}
 
 	var latestDate time.Time
@@ -176,12 +237,20 @@ func (s *Server) getHomePageData(ctx context.Context, activeThemeID string) (*Ho
 		Digests:          digests,
 		ActiveTheme:      activeThemeID,
 		AllCount:         len(allDigests),
-		TotalDigests:     len(allDigests),
+		TotalDigests:     totalDigests,
 		TotalArticles:    totalArticles,
 		TotalThemes:      len(themesWithCount),
 		LatestDigestDate: latestDate,
-		HasMore:          false, // TODO: implement pagination
-		NextOffset:       0,
+
+		// Pagination
+		HasMore:          page < totalPages,
+		HasPrevious:      page > 1,
+		CurrentPage:      page,
+		TotalPages:       totalPages,
+		NextPage:         page + 1,
+		PreviousPage:     page - 1,
+		PageSize:         digestsPerPage,
+
 		CurrentYear:      time.Now().Year(),
 		PostHogEnabled:   postHogEnabled,
 		PostHogAPIKey:    postHogAPIKey,
@@ -189,14 +258,20 @@ func (s *Server) getHomePageData(ctx context.Context, activeThemeID string) (*Ho
 	}, nil
 }
 
-// getDigestsForTheme retrieves digests, optionally filtered by theme
-func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]DigestSummaryView, error) {
+// getDigestsForTheme retrieves digests, optionally filtered by theme, with pagination
+func (s *Server) getDigestsForTheme(ctx context.Context, themeID string, page int) ([]DigestSummaryView, error) {
 	var digests []core.Digest
 	var err error
 
+	// Calculate offset from page number
+	offset := (page - 1) * digestsPerPage
+
 	if themeID == "" {
-		// Get top 5 most recent digests
-		digests, err = s.db.Digests().List(ctx, persistence.ListOptions{Limit: 5, Offset: 0})
+		// Get paginated digests (all themes)
+		digests, err = s.db.Digests().List(ctx, persistence.ListOptions{
+			Limit:  digestsPerPage,
+			Offset: offset,
+		})
 	} else {
 		// Look up the theme name from the ID
 		// ArticleGroups store theme names, not IDs
@@ -210,13 +285,14 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]Dige
 		themeName := theme.Name
 
 		// Get digests for specific theme
-		// For now, get all and filter in memory
-		allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 100, Offset: 0})
+		// For now, get all and filter in memory (TODO: optimize with database query)
+		allDigests, err := s.db.Digests().List(ctx, persistence.ListOptions{Limit: 10000, Offset: 0})
 		if err != nil {
 			return nil, err
 		}
 
 		// Filter digests that contain articles with this theme
+		var filteredDigests []core.Digest
 		for _, d := range allDigests {
 			hasTheme := false
 			for _, group := range d.ArticleGroups {
@@ -226,9 +302,20 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]Dige
 				}
 			}
 			if hasTheme {
-				digests = append(digests, d)
+				filteredDigests = append(filteredDigests, d)
 			}
 		}
+
+		// Apply pagination to filtered results
+		start := offset
+		end := offset + digestsPerPage
+		if start > len(filteredDigests) {
+			start = len(filteredDigests)
+		}
+		if end > len(filteredDigests) {
+			end = len(filteredDigests)
+		}
+		digests = filteredDigests[start:end]
 	}
 
 	if err != nil {
@@ -266,4 +353,11 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string) ([]Dige
 	}
 
 	return result, nil
+}
+
+// parsePageNumber parses a page number from a string
+func parsePageNumber(s string) (int, error) {
+	var page int
+	_, err := fmt.Sscanf(s, "%d", &page)
+	return page, err
 }

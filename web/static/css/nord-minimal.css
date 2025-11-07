@@ -1034,6 +1034,113 @@ kbd {
 }
 
 /* ========================================
+   Pagination
+   ======================================== */
+.pagination {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--nord2);
+}
+
+.pagination-info {
+    text-align: center;
+    color: var(--nord4);
+    font-size: 0.9rem;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.pagination-button {
+    padding: 0.5rem 1rem;
+    background: var(--nord1);
+    color: var(--nord6);
+    text-decoration: none;
+    border-radius: 4px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border: 1px solid var(--nord3);
+}
+
+.pagination-button:hover {
+    background: var(--nord2);
+    color: var(--nord8);
+    border-color: var(--nord8);
+}
+
+.pagination-button.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.pagination-numbers {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pagination-number {
+    min-width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.5rem;
+    background: var(--nord1);
+    color: var(--nord6);
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    border: 1px solid var(--nord3);
+}
+
+.pagination-number:hover {
+    background: var(--nord2);
+    color: var(--nord8);
+    border-color: var(--nord8);
+}
+
+.pagination-number.active {
+    background: var(--nord8);
+    color: var(--nord0);
+    border-color: var(--nord8);
+    font-weight: bold;
+}
+
+.pagination-ellipsis {
+    color: var(--nord4);
+    padding: 0 0.25rem;
+}
+
+/* Mobile pagination adjustments */
+@media (max-width: 600px) {
+    .pagination-controls {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .pagination-button {
+        width: 100%;
+        text-align: center;
+    }
+
+    .pagination-numbers {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* ========================================
    Utility Classes
    ======================================== */
 .sr-only {

@@ -1,0 +1,89 @@
+<!-- Pagination Controls -->
+{{ if gt .TotalPages 1 }}
+<nav class="pagination" aria-label="Digest pagination">
+    <div class="pagination-info">
+        <span>Page {{ .CurrentPage }} of {{ .TotalPages }}</span>
+    </div>
+
+    <div class="pagination-controls">
+        <!-- Previous Button -->
+        {{ if .HasPrevious }}
+        <a href="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .PreviousPage }}"
+           class="pagination-button"
+           hx-get="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .PreviousPage }}"
+           hx-target="#digest-list-container"
+           hx-swap="innerHTML"
+           hx-push-url="true"
+           aria-label="Previous page">
+            ← Previous
+        </a>
+        {{ else }}
+        <span class="pagination-button disabled" aria-disabled="true">← Previous</span>
+        {{ end }}
+
+        <!-- Page Numbers (show first, current-1, current, current+1, last) -->
+        <div class="pagination-numbers">
+            {{ if gt .CurrentPage 2 }}
+            <a href="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page=1"
+               class="pagination-number"
+               hx-get="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page=1"
+               hx-target="#digest-list-container"
+               hx-swap="innerHTML"
+               hx-push-url="true">1</a>
+            {{ if gt .CurrentPage 3 }}
+            <span class="pagination-ellipsis">...</span>
+            {{ end }}
+            {{ end }}
+
+            {{ if .HasPrevious }}
+            <a href="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .PreviousPage }}"
+               class="pagination-number"
+               hx-get="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .PreviousPage }}"
+               hx-target="#digest-list-container"
+               hx-swap="innerHTML"
+               hx-push-url="true">{{ .PreviousPage }}</a>
+            {{ end }}
+
+            <span class="pagination-number active" aria-current="page">{{ .CurrentPage }}</span>
+
+            {{ if .HasMore }}
+            <a href="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .NextPage }}"
+               class="pagination-number"
+               hx-get="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .NextPage }}"
+               hx-target="#digest-list-container"
+               hx-swap="innerHTML"
+               hx-push-url="true">{{ .NextPage }}</a>
+            {{ end }}
+
+            {{ $minusOne := sub .TotalPages 1 }}
+            {{ $minusTwo := sub .TotalPages 2 }}
+            {{ if lt .CurrentPage $minusOne }}
+            {{ if lt .CurrentPage $minusTwo }}
+            <span class="pagination-ellipsis">...</span>
+            {{ end }}
+            <a href="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .TotalPages }}"
+               class="pagination-number"
+               hx-get="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .TotalPages }}"
+               hx-target="#digest-list-container"
+               hx-swap="innerHTML"
+               hx-push-url="true">{{ .TotalPages }}</a>
+            {{ end }}
+        </div>
+
+        <!-- Next Button -->
+        {{ if .HasMore }}
+        <a href="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .NextPage }}"
+           class="pagination-button"
+           hx-get="?{{ if .ActiveTheme }}theme={{ .ActiveTheme }}&{{ end }}page={{ .NextPage }}"
+           hx-target="#digest-list-container"
+           hx-swap="innerHTML"
+           hx-push-url="true"
+           aria-label="Next page">
+            Next →
+        </a>
+        {{ else }}
+        <span class="pagination-button disabled" aria-disabled="true">Next →</span>
+        {{ end }}
+    </div>
+</nav>
+{{ end }}
