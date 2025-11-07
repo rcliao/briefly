@@ -29,3 +29,6 @@ go.work.sum
 .briefly-cache/
 digests/
 research/
+
+# Compiled binary
+briefly
