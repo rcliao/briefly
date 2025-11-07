@@ -742,6 +742,11 @@ func bindEnvironmentVariables() {
 		"VISUAL",
 	})
 
+	// Server port (Railway and other PaaS platforms)
+	bindEnvKeys("server.port", []string{
+		"PORT",
+	})
+
 	// LangFuse observability
 	bindEnvKeys("observability.langfuse.public_key", []string{
 		"LANGFUSE_PUBLIC_KEY",
