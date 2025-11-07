@@ -148,10 +148,14 @@ class BasePageNav {
       }
 
       link.addEventListener('click', updateState)
-      link.addEventListener('touchend', (e) => {
-        e.preventDefault()
-        updateState()
-      })
+
+      // Use smart tap handler for mobile - only triggers on taps, not scrolls
+      if (typeof addTapHandler !== 'undefined') {
+        addTapHandler(link, (e) => {
+          e.preventDefault()
+          updateState()
+        })
+      }
     })
   }
 

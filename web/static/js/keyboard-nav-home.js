@@ -77,11 +77,14 @@ class HomePageNav extends BasePageNav {
         updateState()
       })
 
-      card.addEventListener('touchend', (e) => {
-        if (e.target.closest('a')) return
-        e.preventDefault()
-        updateState()
-      })
+      // Use smart tap handler for mobile - only triggers on taps, not scrolls
+      if (typeof addTapHandler !== 'undefined') {
+        addTapHandler(card, (e) => {
+          if (e.target.closest('a')) return
+          e.preventDefault()
+          updateState()
+        })
+      }
     })
   }
 
@@ -214,10 +217,14 @@ class HomePageNav extends BasePageNav {
       }
 
       tab.addEventListener('click', updateState)
-      tab.addEventListener('touchend', (e) => {
-        e.preventDefault()
-        updateState()
-      })
+
+      // Use smart tap handler for mobile - only triggers on taps, not scrolls
+      if (typeof addTapHandler !== 'undefined') {
+        addTapHandler(tab, (e) => {
+          e.preventDefault()
+          updateState()
+        })
+      }
     })
   }
 

@@ -98,11 +98,14 @@ class DigestDetailPageNav extends BasePageNav {
         updateState()
       })
 
-      item.addEventListener('touchend', (e) => {
-        if (e.target.closest('a')) return
-        e.preventDefault()
-        updateState()
-      })
+      // Use smart tap handler for mobile - only triggers on taps, not scrolls
+      if (typeof addTapHandler !== 'undefined') {
+        addTapHandler(item, (e) => {
+          if (e.target.closest('a')) return
+          e.preventDefault()
+          updateState()
+        })
+      }
     })
   }
 
@@ -220,11 +223,14 @@ class DigestDetailPageNav extends BasePageNav {
         updateState()
       })
 
-      section.addEventListener('touchend', (e) => {
-        if (e.target.closest('a') || e.target.closest('.article-item')) return
-        e.preventDefault()
-        updateState()
-      })
+      // Use smart tap handler for mobile - only triggers on taps, not scrolls
+      if (typeof addTapHandler !== 'undefined') {
+        addTapHandler(section, (e) => {
+          if (e.target.closest('a') || e.target.closest('.article-item')) return
+          e.preventDefault()
+          updateState()
+        })
+      }
     })
   }
 
@@ -359,11 +365,14 @@ class DigestDetailPageNav extends BasePageNav {
         updateState()
       })
 
-      article.addEventListener('touchend', (e) => {
-        if (e.target.closest('a')) return
-        e.preventDefault()
-        updateState()
-      })
+      // Use smart tap handler for mobile - only triggers on taps, not scrolls
+      if (typeof addTapHandler !== 'undefined') {
+        addTapHandler(article, (e) => {
+          if (e.target.closest('a')) return
+          e.preventDefault()
+          updateState()
+        })
+      }
     })
   }
 

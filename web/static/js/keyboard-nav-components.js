@@ -27,6 +27,40 @@ function smoothScrollTo(element, offset = 80) {
 }
 
 /**
+ * Add smart touch handlers that differentiate between taps and scrolls
+ * Only triggers callback on actual taps, not during scroll gestures
+ */
+function addTapHandler(element, callback, options = {}) {
+  const threshold = options.threshold || 10 // pixels of movement allowed
+  let touchStartX = 0
+  let touchStartY = 0
+  let touchMoved = false
+
+  element.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX
+    touchStartY = e.touches[0].clientY
+    touchMoved = false
+  }, { passive: true })
+
+  element.addEventListener('touchmove', (e) => {
+    const deltaX = Math.abs(e.touches[0].clientX - touchStartX)
+    const deltaY = Math.abs(e.touches[0].clientY - touchStartY)
+
+    // If user moved more than threshold, it's a scroll gesture
+    if (deltaX > threshold || deltaY > threshold) {
+      touchMoved = true
+    }
+  }, { passive: true })
+
+  element.addEventListener('touchend', (e) => {
+    // Only trigger callback if this was a tap, not a scroll
+    if (!touchMoved) {
+      callback(e)
+    }
+  })
+}
+
+/**
  * Copy text to clipboard
  */
 async function copyToClipboard(text) {
@@ -213,6 +247,7 @@ class ContextMenu {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     smoothScrollTo,
+    addTapHandler,
     copyToClipboard,
     showNotification,
     SwipeGestureHandler,
