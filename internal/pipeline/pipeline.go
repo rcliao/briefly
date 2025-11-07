@@ -195,8 +195,26 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 	stats.ClustersGenerated = len(clusters)
 	fmt.Printf("   ✓ Created %d topic clusters\n\n", stats.ClustersGenerated)
 
-	// Step 5-9: Generate one digest per cluster (v2.0 architecture)
-	fmt.Printf("📝 Step 5/9: Generating %d digests (one per cluster)...\n", len(clusters))
+	// Step 5: Generate cluster narratives (hierarchical summarization)
+	fmt.Printf("📖 Step 5/9: Generating cluster narratives from ALL articles...\n")
+	clusters, err = p.generateClusterNarratives(ctx, clusters, articles, summaries)
+	if err != nil {
+		// Non-fatal: log warning and continue without cluster narratives
+		fmt.Printf("   ⚠️  Cluster narrative generation failed: %v\n", err)
+		fmt.Printf("   • Continuing with legacy top-3 article summarization\n\n")
+	} else {
+		narrativeCount := 0
+		for _, cluster := range clusters {
+			if cluster.Narrative != nil {
+				narrativeCount++
+			}
+		}
+		fmt.Printf("   ✓ Generated %d cluster narratives\n", narrativeCount)
+		fmt.Printf("   ✓ Each narrative synthesizes ALL articles in its cluster\n\n")
+	}
+
+	// Step 6-9: Generate one digest per cluster (v2.0 architecture)
+	fmt.Printf("📝 Step 6/9: Generating %d digests (one per cluster)...\n", len(clusters))
 
 	results := make([]DigestResult, 0, len(clusters))
 	articleMap := articlesToMap(articles)
@@ -218,16 +236,21 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 			}
 		}
 
-		// Generate digest content for this cluster
+		// Generate digest content for this cluster using hierarchical summarization
 		digest := p.buildDigestForCluster(cluster, clusterArticles, clusterSummaries)
 
-		// Generate title, TLDR, and summary for this specific cluster
-		digestContent, err := p.generateDigestContentFromDigest(ctx, digest)
+		// Generate title, TLDR, and summary using cluster narrative (hierarchical approach)
+		// Pass this single cluster to the narrative generator
+		singleClusterSlice := []core.TopicCluster{cluster}
+		digestContent, err := p.generateDigestContentWithNarratives(ctx, singleClusterSlice, clusterArticles, clusterSummaries)
 		if err != nil {
 			fmt.Printf("   ⚠️  Digest content generation failed: %v\n", err)
-			digestContent.Title = fmt.Sprintf("%s - %s", cluster.Label, time.Now().Format("Jan 2"))
-			digestContent.TLDRSummary = ""
-			digestContent.KeyMoments = []core.KeyMoment{}
+			digestContent = &narrative.DigestContent{
+				Title:            fmt.Sprintf("%s - %s", cluster.Label, time.Now().Format("Jan 2")),
+				TLDRSummary:      "",
+				KeyMoments:       []core.KeyMoment{},
+				ExecutiveSummary: "",
+			}
 		} else {
 			fmt.Printf("   ✓ Generated: %s\n", digestContent.Title)
 		}
@@ -297,149 +320,6 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 	fmt.Printf("⏱️  Total processing time: %v\n\n", stats.ProcessingTime)
 
 	return results, nil
-}
-
-// GenerateDigest executes the full digest generation pipeline (LEGACY - v1.0)
-// DEPRECATED: Use GenerateDigests() for v2.0 many-digests architecture
-func (p *Pipeline) GenerateDigest(ctx context.Context, opts DigestOptions) (*DigestResult, error) {
-	startTime := time.Now()
-	stats := ProcessingStats{
-		StartTime: startTime,
-	}
-
-	// Step 1: Parse URLs from markdown file
-	fmt.Printf("📄 Step 1/9: Parsing URLs from %s...\n", opts.InputFile)
-	links, err := p.parser.ParseMarkdownFile(opts.InputFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URLs: %w", err)
-	}
-
-	stats.TotalURLs = len(links)
-	if stats.TotalURLs == 0 {
-		return nil, fmt.Errorf("no valid URLs found in input file")
-	}
-	fmt.Printf("   ✓ Found %d URLs\n\n", stats.TotalURLs)
-
-	// Step 2: Fetch and summarize articles (with caching)
-	fmt.Printf("🔍 Step 2/9: Fetching and summarizing articles...\n")
-	articles, summaries, err := p.processArticles(ctx, links, &stats)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process articles: %w", err)
-	}
-
-	if len(articles) == 0 {
-		return nil, fmt.Errorf("no articles were successfully processed")
-	}
-
-	stats.SuccessfulArticles = len(articles)
-	stats.FailedArticles = stats.TotalURLs - stats.SuccessfulArticles
-	fmt.Printf("   ✓ Successfully processed %d/%d articles\n", stats.SuccessfulArticles, stats.TotalURLs)
-	fmt.Printf("   • Cache hits: %d, Cache misses: %d\n\n", stats.CacheHits, stats.CacheMisses)
-
-	// Step 2.5: Categorize articles (NEW)
-	fmt.Printf("📁 Step 3/10: Categorizing articles...\n")
-	articles, err = p.categorizeArticles(ctx, articles, summaries)
-	if err != nil {
-		// Non-fatal: log warning and continue with default category
-		fmt.Printf("   ⚠️  Categorization failed: %v\n", err)
-		fmt.Printf("   • Continuing with uncategorized articles\n\n")
-	} else {
-		fmt.Printf("   ✓ Categorized %d articles\n\n", len(articles))
-	}
-
-	// Step 3: Generate embeddings for clustering
-	fmt.Printf("🧠 Step 4/10: Generating embeddings for clustering...\n")
-	embeddings, err := p.generateEmbeddings(ctx, summaries)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate embeddings: %w", err)
-	}
-	fmt.Printf("   ✓ Generated %d embeddings\n\n", len(embeddings))
-
-	// Step 4: Cluster articles by topic
-	fmt.Printf("🔗 Step 5/10: Clustering articles by topic...\n")
-	clusters, err := p.clusterer.ClusterArticles(ctx, articles, summaries, embeddings)
-	if err != nil {
-		return nil, fmt.Errorf("failed to cluster articles: %w", err)
-	}
-
-	stats.ClustersGenerated = len(clusters)
-	fmt.Printf("   ✓ Created %d topic clusters\n\n", stats.ClustersGenerated)
-
-	// Step 5: Order articles within clusters
-	fmt.Printf("📊 Step 6/10: Ordering articles within clusters...\n")
-	orderedClusters, err := p.orderer.OrderClusters(ctx, clusters, articles)
-	if err != nil {
-		return nil, fmt.Errorf("failed to order articles: %w", err)
-	}
-	fmt.Printf("   ✓ Ordered %d clusters\n\n", len(orderedClusters))
-
-	// Step 6: Build digest structure (before executive summary so we have correct article ordering)
-	fmt.Printf("🔨 Step 7/10: Building digest structure...\n")
-	digest := p.buildDigest(orderedClusters, articles, summaries, "")
-	fmt.Printf("   ✓ Digest structure complete\n")
-	fmt.Printf("   • Articles: %d, Summaries: %d\n\n", len(articles), len(summaries))
-
-	// Step 7: Generate digest content (title, TL;DR, executive summary)
-	fmt.Printf("📝 Step 8/10: Generating digest content (title, TL;DR, summary)...\n")
-	digestContent, err := p.generateDigestContentFromDigest(ctx, digest)
-	if err != nil {
-		// Non-fatal: log and continue without generated content
-		fmt.Printf("   ⚠️  Digest content generation failed: %v\n", err)
-		fmt.Printf("   • Continuing with fallback title and empty TL;DR\n\n")
-		digestContent.Title = fmt.Sprintf("Weekly Digest - %s", time.Now().Format("Jan 2, 2006"))
-		digestContent.TLDRSummary = ""
-		digestContent.KeyMoments = []core.KeyMoment{}
-		digestContent.ExecutiveSummary = ""
-	} else {
-		fmt.Printf("   ✓ Generated title: %s\n", digestContent.Title)
-		fmt.Printf("   ✓ Generated TL;DR: %s\n", digestContent.TLDRSummary)
-		fmt.Printf("   ✓ Generated %d key moments\n", len(digestContent.KeyMoments))
-		fmt.Printf("   ✓ Generated summary (%d words)\n\n", len(digestContent.ExecutiveSummary)/5)
-	}
-
-	// Update digest with generated content (v2.0 structured format)
-	digest.Title = digestContent.Title
-	digest.TLDRSummary = digestContent.TLDRSummary
-	digest.KeyMoments = digestContent.KeyMoments  // v2.0 structured
-	digest.Perspectives = digestContent.Perspectives  // v2.0 structured
-	digest.DigestSummary = digestContent.ExecutiveSummary
-	digest.Metadata.Title = digestContent.Title
-	digest.Metadata.TLDRSummary = digestContent.TLDRSummary
-	// Note: Metadata.KeyMoments is deprecated (legacy []string format)
-
-	// Step 8: Render markdown output
-	fmt.Printf("✍️  Step 9/10: Rendering markdown output...\n")
-	markdownPath, err := p.renderer.RenderDigest(ctx, digest, opts.OutputPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to render digest: %w", err)
-	}
-	fmt.Printf("   ✓ Saved to %s\n\n", markdownPath)
-
-	// Step 9: Optional banner generation
-	var bannerPath string
-	if opts.GenerateBanner && p.banner != nil {
-		fmt.Printf("🎨 Step 10/10: Generating banner image...\n")
-		bannerPath, err = p.banner.GenerateBanner(ctx, digest, opts.BannerStyle)
-		if err != nil {
-			// Non-fatal: log warning and continue without banner
-			fmt.Printf("   ⚠️  Banner generation failed, continuing without it\n\n")
-			bannerPath = ""
-		} else {
-			fmt.Printf("   ✓ Banner saved to %s\n\n", bannerPath)
-		}
-	} else {
-		fmt.Printf("⏭️  Step 10/10: Skipping banner generation\n\n")
-	}
-
-	stats.EndTime = time.Now()
-	stats.ProcessingTime = stats.EndTime.Sub(startTime)
-
-	return &DigestResult{
-		Digest:       digest,
-		MarkdownPath: markdownPath,
-		BannerPath:   bannerPath,
-		Stats:        stats,
-	}, nil
 }
 
 // QuickReadOptions configures quick read operation
@@ -607,6 +487,60 @@ func (p *Pipeline) generateEmbeddings(ctx context.Context, summaries []core.Summ
 	}
 
 	return embeddings, nil
+}
+
+// generateClusterNarratives generates comprehensive narratives for each cluster using ALL articles
+// This implements hierarchical summarization: cluster summary → executive summary
+func (p *Pipeline) generateClusterNarratives(ctx context.Context, clusters []core.TopicCluster, articles []core.Article, summaries []core.Summary) ([]core.TopicCluster, error) {
+	// Build maps for fast lookup
+	articleMap := articlesToMap(articles)
+	summaryMap := summariesToMap(summaries)
+
+	// Define the interface we need from narrative generator
+	type ClusterSummarizer interface {
+		GenerateClusterSummary(ctx context.Context, cluster core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (*core.ClusterNarrative, error)
+	}
+
+	summarizer, ok := p.narrative.(ClusterSummarizer)
+	if !ok {
+		return nil, fmt.Errorf("narrative generator does not support cluster summarization")
+	}
+
+	// Generate narrative for each cluster
+	updatedClusters := make([]core.TopicCluster, 0, len(clusters))
+	var failedCount int
+
+	for i, cluster := range clusters {
+		fmt.Printf("   [%d/%d] Generating narrative for cluster: %s (%d articles)\n",
+			i+1, len(clusters), cluster.Label, len(cluster.ArticleIDs))
+
+		narrative, err := summarizer.GenerateClusterSummary(ctx, cluster, articleMap, summaryMap)
+		if err != nil {
+			fmt.Printf("           ✗ Narrative generation failed: %v\n", err)
+			failedCount++
+			// Keep cluster without narrative
+			updatedClusters = append(updatedClusters, cluster)
+			continue
+		}
+
+		// Update cluster with generated narrative
+		cluster.Narrative = narrative
+		updatedClusters = append(updatedClusters, cluster)
+
+		fmt.Printf("           ✓ Generated narrative: %s\n", narrative.Title)
+		fmt.Printf("           ✓ Synthesized %d articles into %d words\n",
+			len(narrative.ArticleRefs), len(narrative.Summary)/5)
+	}
+
+	if len(updatedClusters) == 0 {
+		return nil, fmt.Errorf("failed to process any clusters")
+	}
+
+	if failedCount > 0 {
+		fmt.Printf("   ⚠️  Warning: %d/%d cluster narratives failed to generate\n", failedCount, len(clusters))
+	}
+
+	return updatedClusters, nil
 }
 
 // categorizeArticles assigns categories to all articles using LLM categorization
@@ -783,37 +717,18 @@ func (p *Pipeline) getCategoryPriority(category string) int {
 
 // generateExecutiveSummaryFromDigest generates executive summary using category-grouped articles
 // This ensures article numbering in the prompt matches the final output
-// generateDigestContentFromDigest generates title, TL;DR, and executive summary
-func (p *Pipeline) generateDigestContentFromDigest(ctx context.Context, digest *core.Digest) (*narrative.DigestContent, error) {
-	if len(digest.ArticleGroups) == 0 {
-		return nil, fmt.Errorf("no article groups in digest")
+// generateDigestContentWithNarratives generates digest content using cluster narratives (hierarchical summarization)
+// This is the NEW approach that uses cluster-level summaries instead of individual articles
+func (p *Pipeline) generateDigestContentWithNarratives(ctx context.Context, clusters []core.TopicCluster, articles []core.Article, summaries []core.Summary) (*narrative.DigestContent, error) {
+	if len(clusters) == 0 {
+		return nil, fmt.Errorf("no clusters provided")
 	}
 
-	// Convert ArticleGroups to TopicClusters for narrative generator
-	clusters := make([]core.TopicCluster, 0, len(digest.ArticleGroups))
-	for _, group := range digest.ArticleGroups {
-		articleIDs := make([]string, 0, len(group.Articles))
-		for _, article := range group.Articles {
-			articleIDs = append(articleIDs, article.ID)
-		}
-		clusters = append(clusters, core.TopicCluster{
-			Label:      group.Theme,
-			Keywords:   []string{group.Category},
-			ArticleIDs: articleIDs,
-		})
-	}
+	// Build maps for narrative generator
+	articleMap := articlesToMap(articles)
+	summaryMap := summariesToMap(summaries)
 
-	// Build article and summary maps
-	articleMap := make(map[string]core.Article)
-	for _, group := range digest.ArticleGroups {
-		for _, article := range group.Articles {
-			articleMap[article.ID] = article
-		}
-	}
-
-	summaryMap := summariesToMap(digest.Summaries)
-
-	// Generate content using narrative generator
+	// Check if we have a narrative generator that supports cluster narratives
 	type ContentGenerator interface {
 		GenerateDigestContent(ctx context.Context, clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (*narrative.DigestContent, error)
 	}
@@ -823,6 +738,8 @@ func (p *Pipeline) generateDigestContentFromDigest(ctx context.Context, digest *
 		return nil, fmt.Errorf("narrative generator does not support digest content generation")
 	}
 
+	// Pass clusters with narratives directly to the generator
+	// The generator will check if narratives exist and use them, otherwise fall back to legacy approach
 	return gen.GenerateDigestContent(ctx, clusters, articleMap, summaryMap)
 }
 

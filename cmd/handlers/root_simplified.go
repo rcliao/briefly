@@ -20,12 +20,12 @@ func NewSimplifiedRootCmd() *cobra.Command {
 
 A focused tool for:
   • Automated news aggregation from RSS/Atom feeds
-  • Quality weekly digests from curated URLs
+  • Quality weekly digests from classified articles
   • Quick summaries of individual articles
 
 Core workflows:
   • News Aggregation: Fetch and store articles from feeds
-  • Weekly Digest: Process markdown file with URLs → LinkedIn-ready digest
+  • Weekly Digest: Generate LinkedIn-ready digest from classified articles
   • Quick Read: Single URL → Fast summary with key points
   • Feed Management: Add/remove/manage RSS feed sources
 
@@ -33,6 +33,7 @@ Features:
   • RSS/Atom feed support with conditional GET
   • Smart caching (avoid redundant API calls)
   • Topic clustering (automatic article grouping)
+  • Hierarchical summarization (ALL articles included)
   • Executive summaries (story-driven narratives)
   • LinkedIn-optimized output
   • PostgreSQL persistence for scalable storage
@@ -44,18 +45,15 @@ Examples:
   # Aggregate news (run daily)
   briefly aggregate --since 24
 
-  # Generate weekly digest from feeds
-  briefly digest --from-feeds
-
-  # Generate digest from markdown file
-  briefly digest input/weekly-links.md
+  # Generate weekly digest from database
+  briefly digest generate --since 7
 
   # Quick read a single article
   briefly read https://example.com/article
 
   # Check cache statistics
   briefly cache stats`,
-		Version: "3.1.0-news-aggregator",
+		Version: "3.1.0-hierarchical-summarization",
 	}
 
 	// Global flags

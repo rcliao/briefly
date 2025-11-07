@@ -1,16 +1,22 @@
-# Briefly: AI-Powered Smart Digest Generator
+# Briefly: AI-Powered News Aggregator & Digest Generator
 
-Briefly is a modern command-line application written in Go that transforms lengthy article collections into intelligent, bite-sized digests. With v2.0 Smart Concise Digests, it now generates 200-500 word summaries that busy tech professionals can consume in 2-3 minutes, featuring intelligent content filtering, relevance scoring, and actionable recommendations.
+Briefly is a modern command-line application written in Go that transforms RSS feeds and curated articles into intelligent, LinkedIn-ready digests. With **v3.1 Hierarchical Summarization**, it generates comprehensive digests that synthesize ALL articles while maintaining conciseness, featuring database-driven workflows, theme-based classification, and executive summaries grounded in complete content coverage.
 
 ## Features
 
-### 🎯 Phase 1: Digest Generation & Web Viewer (New - 85% Complete)
+### 🎯 Phase 1: Digest Generation & Web Viewer (New - Complete)
 
+- **Hierarchical Summarization (v3.1)**: Revolutionary two-stage digest generation
+  - **Stage 1**: Generate comprehensive cluster narratives from **ALL articles** in each topic cluster (not just top 3)
+  - **Stage 2**: Synthesize cluster narratives into concise executive summary
+  - **Result**: Short digests that are grounded in complete content coverage
+  - **No information loss**: Every article contributes to the final digest
+  - **Better credibility**: Summaries accurately reflect all underlying content
 - **Database-Driven Digest Generation**: Generate digests from classified articles stored in PostgreSQL
   - Command: `briefly digest generate --since N` for date-based digest creation
   - LLM-powered article summarization with intelligent caching
-  - Executive summary generation from top articles in each cluster
-  - Theme-based grouping with relevance scores
+  - K-means clustering for automatic topic grouping
+  - Theme-based classification with relevance scores
   - ON CONFLICT upsert for digest regeneration
   - LinkedIn-ready markdown output
 - **Web Digest Viewer**: Beautiful, responsive digest viewing experience
@@ -288,51 +294,77 @@ Configuration is loaded in the following order (later sources override earlier o
 
 ## Usage
 
-Briefly uses a modern CLI interface with subcommands. Here are the main commands:
+Briefly uses a modern CLI interface with subcommands. Here's the recommended workflow:
+
+### Complete Workflow (Database-Driven)
+
+```bash
+# 1. Add RSS/Atom feeds
+briefly feed add https://hnrss.org/newest
+briefly feed add https://blog.golang.org/feed.atom
+
+# 2. Aggregate news (run daily via cron)
+briefly aggregate --since 24  # Fetches articles from last 24 hours
+
+# 3. Generate weekly digest with hierarchical summarization
+briefly digest generate --since 7  # Last 7 days
+```
 
 ### Generate a Digest
 
+**Using Database (Recommended - with Hierarchical Summarization):**
+
 ```bash
-# Basic usage (generates 400-word digest with relevance filtering)
-briefly digest input/my-links.md
+# Basic usage - generates digest from classified articles in database
+briefly digest generate --since 7
 
-# v2.0 Smart filtering with custom relevance threshold
-briefly digest --min-relevance 0.7 input/my-links.md
+# Specify custom output directory
+briefly digest generate --since 7 --output ./my-digests
 
-# Generate concise 300-word digest
-briefly digest --max-words 300 input/my-links.md
+# Filter by specific theme
+briefly digest generate --theme "AI & Machine Learning" --since 7
 
-# Disable filtering to include all articles
-briefly digest --enable-filtering=false input/my-links.md
+# View recent digests
+briefly digest list --limit 20
 
-# Specify output directory and format with word limits
-briefly digest --output ./my-digests --format newsletter --max-words 500 input/my-links.md
-
-# Estimate costs before processing (dry run)
-briefly digest --dry-run input/my-links.md
-
-# Use custom configuration file
-briefly --config ~/.my-config.yaml digest input/my-links.md
+# Show specific digest
+briefly digest show <digest-id>
 ```
 
-### Available Digest Formats
-
-Use the `--format` flag to specify the output style. All formats now include v2.0 word count optimization and actionable recommendations:
-
-- `brief`: Ultra-concise digest (~200 words) with key highlights only
-- `standard`: Balanced digest (~400 words) with summaries and key points (default)
-- `detailed`: Comprehensive digest (unlimited) with full summaries and analysis
-- `newsletter`: Newsletter-style digest (~500 words) optimized for sharing, includes "Prompt Corner" and "⚡ Try This Week" sections
-- `email`: HTML email format with responsive design and rich formatting
+### Feed Management
 
 ```bash
-# List all available formats
-briefly formats
+# Add RSS/Atom feeds
+briefly feed add https://example.com/feed.xml
+
+# List all feeds
+briefly feed list
+
+# Remove a feed
+briefly feed remove <feed-id>
+```
+
+### News Aggregation
+
+```bash
+# Aggregate articles from all feeds (last 24 hours)
+briefly aggregate --since 24
+
+# Aggregate with theme classification
+briefly aggregate --since 24 --themes
+```
+
+### Quick Article Summary
+
+```bash
+# Get quick summary of a single article
+briefly read https://example.com/article
+
+# Force fresh fetch (bypass cache)
+briefly read --no-cache https://example.com/article
 ```
 
 ### Cache Management
-
-Briefly includes intelligent caching to avoid re-processing articles:
 
 ```bash
 # View cache statistics
@@ -342,107 +374,44 @@ briefly cache stats
 briefly cache clear --confirm
 ```
 
-### Insights and Analytics
-
-Briefly automatically provides AI-powered insights with every digest generation. These insights include sentiment analysis, alert monitoring, trend detection, and research suggestions.
+### Web Interface
 
 ```bash
-# View alert configurations
-briefly insights alerts list
+# Start web server
+briefly serve
 
-# Add a new alert condition
-briefly insights alerts add --keyword "security breach" --priority high
-
-# View trend analysis for recent digests
-briefly insights trends --days 7
-
-# Generate deep research suggestions for a topic
-briefly research --topic "AI coding assistants" --depth 3
+# Access:
+# - http://localhost:8080/digests - View all digests
+# - http://localhost:8080/themes - Theme management
+# - http://localhost:8080/submit - Submit URLs
 ```
 
-### My Take Feature
+## How Hierarchical Summarization Works
 
-Transform any generated digest into a personalized version that reflects your voice and perspective throughout the entire content using AI-powered regeneration:
+Briefly uses a revolutionary **two-stage hierarchical approach** to generate digests that are both concise and comprehensive:
 
-```bash
-# List all digests and their my-take status
-briefly my-take list
+### Stage 1: Cluster-Level Narratives
 
-# Add your take to a digest (interactive mode)
-briefly my-take add 1234abcd
+For each topic cluster discovered by K-means clustering:
+1. **Collect ALL articles** in the cluster (not just top 3)
+2. **Generate a comprehensive narrative** (2-3 paragraphs) synthesizing all articles
+3. **Extract key themes** and maintain article citations
+4. **Result**: Each cluster has a cohesive summary covering all related articles
 
-# Add your take directly from command line
-briefly my-take add 1234abcd "This digest highlights important trends in AI development that I think will impact our industry significantly."
+### Stage 2: Executive Summary
 
-# Update an existing take
-briefly my-take add 1234abcd "Updated thoughts: The AI developments are even more significant than I initially thought."
+From the cluster narratives:
+1. **Synthesize cluster narratives** into a concise executive summary
+2. **Show connections** between different clusters
+3. **Include citations** to specific articles using `[1][2][3]` format
+4. **Result**: Short, readable digest grounded in complete content coverage
 
-# Regenerate digest with your perspective woven throughout
-briefly my-take regenerate 1234abcd
-```
+### Benefits
 
-**My Take Features:**
-- **AI-Powered Regeneration**: Uses Gemini LLM to completely rewrite digests with your personal voice integrated naturally throughout
-- **Seamless Integration**: Your perspective becomes part of the narrative flow, not just an appended section
-- **Partial ID Matching**: Use just the first few characters of a digest ID (e.g., `1234` instead of the full UUID)
-- **Multiple Input Methods**: Add takes interactively or via command-line arguments
-- **Update Support**: Easily modify existing takes and regenerate with new perspectives
-- **Timestamped Output**: Creates new files with `_with_my_take_` naming convention to preserve originals
-- **Format Preservation**: Maintains the original digest format while incorporating your voice
-
-**Example Transformation:**
-
-*Original digest excerpt:*
-```markdown
-# Daily Digest - 2025-05-30
-
-Here's what's worth knowing from today's articles:
-
-## Executive Summary
-The example domain (https://example.com) is freely available for illustrative use...
-```
-
-*Your take: "This brief format is really convenient for quick updates"*
-
-*Regenerated digest:*
-```markdown
-# Brief Digest - 2025-05-30
-
-Quick highlights from today's reading – I find this brief format really convenient for staying up-to-date without getting bogged down!
-
-## Executive Summary
-This week's highlight is a bit meta, but honestly, a real time-saver: I discovered that the domain example.com is available for illustrative purposes...
-```
-
-### Multi-Channel Output (v1.0)
-
-Transform your digests into different formats optimized for various platforms:
-
-#### HTML Email
-```bash
-# Generate responsive HTML email
-briefly digest --format email input/links.md
-
-# Creates digest_email_2025-06-04.html with:
-# - Responsive design for all email clients
-# - Inline CSS for maximum compatibility  
-# - Article cards with sentiment indicators
-# - Topic clustering and insights sections
-```
-
-#### Slack/Discord Integration
-```bash
-# Send to Slack
-briefly send-slack input/links.md --webhook https://hooks.slack.com/services/...
-briefly send-slack input/links.md --message-format highlights --include-sentiment
-
-# Send to Discord  
-briefly send-discord input/links.md --webhook https://discord.com/api/webhooks/...
-briefly send-discord input/links.md --message-format bullets
-
-# Available message formats:
-# - bullets: Short bullet points (default)
-# - summary: Brief summary with fields
+- ✅ **No Information Loss**: Every article contributes to the final digest
+- ✅ **Better Credibility**: Summaries accurately reflect all content
+- ✅ **Maintains Conciseness**: Executive summary stays short by synthesizing clusters, not all individual articles
+- ✅ **Natural Flow**: Cluster narratives create coherent story arcs
 # - highlights: Top 5 key highlights only
 ```
 

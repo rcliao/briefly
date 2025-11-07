@@ -42,33 +42,100 @@ type DigestContent struct {
 	ExecutiveSummary string               // Full narrative summary with [N] citation placeholders
 }
 
+// GenerateClusterSummary generates a comprehensive narrative for a single cluster using ALL articles
+// This implements hierarchical summarization: cluster summary → executive summary
+func (g *Generator) GenerateClusterSummary(ctx context.Context, cluster core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (*core.ClusterNarrative, error) {
+	// Collect all articles in this cluster
+	clusterArticles := make([]ArticleSummary, 0, len(cluster.ArticleIDs))
+
+	for _, articleID := range cluster.ArticleIDs {
+		article, hasArticle := articles[articleID]
+		summary, hasSummary := summaries[articleID]
+
+		if !hasArticle || !hasSummary {
+			continue
+		}
+
+		clusterArticles = append(clusterArticles, ArticleSummary{
+			Title:     article.Title,
+			URL:       article.URL,
+			Summary:   summary.SummaryText,
+			KeyPoints: g.extractKeyPoints(summary),
+		})
+	}
+
+	if len(clusterArticles) == 0 {
+		return nil, fmt.Errorf("no articles found for cluster %s", cluster.Label)
+	}
+
+	// Generate cluster narrative using LLM
+	prompt := g.buildClusterSummaryPrompt(cluster.Label, clusterArticles)
+	schema := g.buildClusterNarrativeSchema()
+
+	response, err := g.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
+		ResponseSchema: schema,
+		Temperature:    0.7,
+		MaxTokens:      1500,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate cluster summary: %w", err)
+	}
+
+	// Parse JSON response
+	narrative, err := g.parseClusterNarrative(response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse cluster narrative: %w", err)
+	}
+
+	return narrative, nil
+}
+
 // GenerateDigestContent creates title, TL;DR, and executive summary from clustered articles
 // Returns structured content with all three components
+// NEW: If clusters have narratives (hierarchical summarization), uses those instead of top-3 articles
 func (g *Generator) GenerateDigestContent(ctx context.Context, clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (*DigestContent, error) {
 	if len(clusters) == 0 {
 		return nil, fmt.Errorf("no clusters provided")
 	}
 
-	// Collect top articles from each cluster
-	clusterInsights := make([]ClusterInsight, 0, len(clusters))
-
+	// Check if we have cluster narratives (hierarchical summarization)
+	hasNarratives := false
 	for _, cluster := range clusters {
-		insight, err := g.extractClusterInsight(cluster, articles, summaries)
-		if err != nil {
-			// Log warning but continue with other clusters
-			continue
+		if cluster.Narrative != nil {
+			hasNarratives = true
+			break
 		}
-		clusterInsights = append(clusterInsights, insight)
 	}
 
-	if len(clusterInsights) == 0 {
-		return nil, fmt.Errorf("no valid cluster insights generated")
+	var prompt string
+	schema := g.buildDigestContentSchema()
+
+	if hasNarratives {
+		// NEW: Use hierarchical summarization with cluster narratives
+		prompt = g.buildNarrativePromptFromClusters(clusters, articles, summaries)
+		fmt.Println("   ✓ Using hierarchical summarization (cluster narratives)")
+	} else {
+		// LEGACY: Fall back to top-3 article approach
+		clusterInsights := make([]ClusterInsight, 0, len(clusters))
+
+		for _, cluster := range clusters {
+			insight, err := g.extractClusterInsight(cluster, articles, summaries)
+			if err != nil {
+				// Log warning but continue with other clusters
+				continue
+			}
+			clusterInsights = append(clusterInsights, insight)
+		}
+
+		if len(clusterInsights) == 0 {
+			return nil, fmt.Errorf("no valid cluster insights generated")
+		}
+
+		prompt = g.buildStructuredNarrativePrompt(clusterInsights)
+		fmt.Println("   ⚠️  Using legacy top-3 article summarization")
 	}
 
 	// Generate content using LLM with structured output (v2.0)
-	prompt := g.buildStructuredNarrativePrompt(clusterInsights)
-	schema := g.buildDigestContentSchema()
-
 	response, err := g.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
 		ResponseSchema: schema,
 		Temperature:    0.7,
@@ -76,6 +143,12 @@ func (g *Generator) GenerateDigestContent(ctx context.Context, clusters []core.T
 	})
 	if err != nil {
 		// Fallback to simple generation if LLM fails
+		// Build fallback from cluster insights (legacy)
+		clusterInsights := make([]ClusterInsight, 0, len(clusters))
+		for _, cluster := range clusters {
+			insight, _ := g.extractClusterInsight(cluster, articles, summaries)
+			clusterInsights = append(clusterInsights, insight)
+		}
 		content := g.generateFallbackContent(clusterInsights)
 		return &content, nil
 	}
@@ -84,6 +157,11 @@ func (g *Generator) GenerateDigestContent(ctx context.Context, clusters []core.T
 	content, err := g.parseStructuredDigestContent(response)
 	if err != nil {
 		// Fallback if parsing fails
+		clusterInsights := make([]ClusterInsight, 0, len(clusters))
+		for _, cluster := range clusters {
+			insight, _ := g.extractClusterInsight(cluster, articles, summaries)
+			clusterInsights = append(clusterInsights, insight)
+		}
 		fallback := g.generateFallbackContent(clusterInsights)
 		return &fallback, nil
 	}
@@ -543,8 +621,186 @@ func (g *Generator) convertOldMomentsToStructured(oldMoments []string) []core.Ke
 }
 
 // ============================================================================
+// Hierarchical Summarization Functions (Cluster-level)
+// ============================================================================
+
+// buildClusterSummaryPrompt creates a prompt for generating cluster narrative from ALL articles
+func (g *Generator) buildClusterSummaryPrompt(clusterLabel string, articles []ArticleSummary) string {
+	var prompt strings.Builder
+
+	prompt.WriteString(fmt.Sprintf("Generate a cohesive narrative for the \"%s\" topic cluster.\n\n", clusterLabel))
+
+	prompt.WriteString("**ALL Articles in this cluster:**\n")
+	for i, article := range articles {
+		prompt.WriteString(fmt.Sprintf("\n[%d] %s\n", i+1, article.Title))
+		prompt.WriteString(fmt.Sprintf("    URL: %s\n", article.URL))
+		prompt.WriteString(fmt.Sprintf("    Summary: %s\n", article.Summary))
+		if len(article.KeyPoints) > 0 {
+			prompt.WriteString("    Key Points:\n")
+			for _, point := range article.KeyPoints {
+				prompt.WriteString(fmt.Sprintf("    - %s\n", point))
+			}
+		}
+	}
+
+	prompt.WriteString("\n**TASK:**\n")
+	prompt.WriteString("Synthesize ALL articles above into a cohesive 2-3 paragraph narrative that:\n")
+	prompt.WriteString("1. Identifies the common themes and patterns across articles\n")
+	prompt.WriteString("2. Shows how the articles relate to each other (complementary, contrasting, building on each other)\n")
+	prompt.WriteString("3. Extracts the key insights that matter to technical readers\n")
+	prompt.WriteString("4. Maintains accuracy - don't invent information not in the articles\n\n")
+
+	prompt.WriteString("**OUTPUT REQUIREMENTS:**\n")
+	prompt.WriteString("- Title: Short, punchy cluster title (5-8 words)\n")
+	prompt.WriteString("- Summary: 2-3 paragraph narrative synthesizing all articles (150-250 words)\n")
+	prompt.WriteString("- Key Themes: 3-5 main themes from the cluster\n")
+	prompt.WriteString("- Article Refs: Citation numbers of all articles included (1-based array)\n")
+	prompt.WriteString("- Confidence: How coherent this cluster is (0.0-1.0)\n\n")
+
+	prompt.WriteString("Generate the cluster narrative in JSON format matching the schema.\n")
+
+	return prompt.String()
+}
+
+// buildClusterNarrativeSchema defines the Gemini JSON schema for cluster narrative
+func (g *Generator) buildClusterNarrativeSchema() *genai.Schema {
+	return &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"title": {
+				Type:        genai.TypeString,
+				Description: "Short, punchy cluster title (5-8 words)",
+			},
+			"summary": {
+				Type:        genai.TypeString,
+				Description: "2-3 paragraph narrative synthesizing all articles (150-250 words)",
+			},
+			"key_themes": {
+				Type:        genai.TypeArray,
+				Description: "3-5 main themes from the cluster",
+				Items: &genai.Schema{
+					Type: genai.TypeString,
+				},
+			},
+			"article_refs": {
+				Type:        genai.TypeArray,
+				Description: "Citation numbers of articles included (1-based)",
+				Items: &genai.Schema{
+					Type: genai.TypeInteger,
+				},
+			},
+			"confidence": {
+				Type:        genai.TypeNumber,
+				Description: "Cluster coherence confidence (0.0-1.0)",
+			},
+		},
+		Required: []string{"title", "summary", "key_themes", "article_refs", "confidence"},
+	}
+}
+
+// parseClusterNarrative parses JSON response into ClusterNarrative
+func (g *Generator) parseClusterNarrative(jsonResponse string) (*core.ClusterNarrative, error) {
+	var response struct {
+		Title       string   `json:"title"`
+		Summary     string   `json:"summary"`
+		KeyThemes   []string `json:"key_themes"`
+		ArticleRefs []int    `json:"article_refs"`
+		Confidence  float64  `json:"confidence"`
+	}
+
+	err := json.Unmarshal([]byte(jsonResponse), &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return &core.ClusterNarrative{
+		Title:       response.Title,
+		Summary:     response.Summary,
+		KeyThemes:   response.KeyThemes,
+		ArticleRefs: response.ArticleRefs,
+		Confidence:  response.Confidence,
+	}, nil
+}
+
+// ============================================================================
 // v2.0 Structured Output Functions
 // ============================================================================
+
+// buildNarrativePromptFromClusters creates prompt using cluster narratives (hierarchical summarization)
+// This is the NEW approach that synthesizes from cluster-level summaries
+func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) string {
+	var prompt strings.Builder
+
+	prompt.WriteString("Generate structured content for a technical digest using hierarchical summarization.\n\n")
+
+	// Build cluster narrative list
+	prompt.WriteString("**Cluster Narratives (synthesized from all articles in each cluster):**\n\n")
+
+	for i, cluster := range clusters {
+		if cluster.Narrative == nil {
+			continue
+		}
+
+		prompt.WriteString(fmt.Sprintf("## Cluster %d: %s\n", i+1, cluster.Narrative.Title))
+		prompt.WriteString(fmt.Sprintf("**Theme:** %s\n", cluster.Label))
+		prompt.WriteString(fmt.Sprintf("**Key Themes:** %s\n", strings.Join(cluster.Narrative.KeyThemes, ", ")))
+		prompt.WriteString(fmt.Sprintf("**Articles Covered:** %d\n\n", len(cluster.ArticleIDs)))
+		prompt.WriteString("**Cluster Summary:**\n")
+		prompt.WriteString(cluster.Narrative.Summary)
+		prompt.WriteString("\n\n---\n\n")
+	}
+
+	// Add article reference list for citations
+	prompt.WriteString("**All Articles (for citation references):**\n")
+	articleNum := 1
+	for _, cluster := range clusters {
+		for _, articleID := range cluster.ArticleIDs {
+			if article, found := articles[articleID]; found {
+				prompt.WriteString(fmt.Sprintf("[%d] %s\n", articleNum, article.Title))
+				prompt.WriteString(fmt.Sprintf("    URL: %s\n\n", article.URL))
+				articleNum++
+			}
+		}
+	}
+
+	prompt.WriteString("\n**REQUIREMENTS:**\n\n")
+
+	prompt.WriteString("**Title (20-40 characters STRICT MAXIMUM):**\n")
+	prompt.WriteString("- Catchy and specific headline\n")
+	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 40 characters\n")
+	prompt.WriteString("- Examples: \"GPT-5 Launch and API Updates\" (30 chars) ✓\n")
+	prompt.WriteString("            \"AI Agents Gain Autonomy\" (25 chars) ✓\n\n")
+
+	prompt.WriteString("**TLDR Summary (40-75 characters STRICT MAXIMUM):**\n")
+	prompt.WriteString("- One complete sentence capturing the key insight\n")
+	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 75 characters\n")
+	prompt.WriteString("- Examples: \"OpenAI releases GPT-5 with faster inference\" (48 chars) ✓\n\n")
+
+	prompt.WriteString("**Executive Summary (2-3 paragraphs):**\n")
+	prompt.WriteString("- Synthesize the cluster narratives into a cohesive story\n")
+	prompt.WriteString("- Show how the different clusters relate and connect\n")
+	prompt.WriteString("- Include citations using [1], [2], [3] format (CRITICAL: use numbers only)\n")
+	prompt.WriteString("- Focus on 'why it matters' not just 'what happened'\n")
+	prompt.WriteString("- Write for developers, PMs, and technical leaders\n")
+	prompt.WriteString("- 150-200 words total\n\n")
+
+	prompt.WriteString("**Key Moments (3-5 structured quotes):**\n")
+	prompt.WriteString("- Each must have:\n")
+	prompt.WriteString("  - quote: Important insight or development (1-2 sentences)\n")
+	prompt.WriteString("  - citation_number: Reference to article [1-N]\n")
+	prompt.WriteString("- Select the most impactful developments across all clusters\n\n")
+
+	prompt.WriteString("**Perspectives (optional, 0-3 viewpoints):**\n")
+	prompt.WriteString("- Identify supporting or opposing viewpoints if present\n")
+	prompt.WriteString("- Each must have:\n")
+	prompt.WriteString("  - type: \"supporting\" or \"opposing\"\n")
+	prompt.WriteString("  - summary: Summary of this perspective (1-2 sentences)\n")
+	prompt.WriteString("  - citation_numbers: Array of article numbers [1,2,3]\n\n")
+
+	prompt.WriteString("Generate the digest content in JSON format matching the schema.\n")
+
+	return prompt.String()
+}
 
 // buildStructuredNarrativePrompt creates a prompt for generating structured digest content with JSON schema
 func (g *Generator) buildStructuredNarrativePrompt(insights []ClusterInsight) string {

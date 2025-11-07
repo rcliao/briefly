@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Version Information
 
-**Current Version:** v3.0-simplified (simplify-architecture branch)
-**Architecture:** Clean pipeline-based design focused on weekly digest generation
+**Current Version:** v3.1.0-hierarchical-summarization
+**Architecture:** Database-driven pipeline with hierarchical summarization
 
 ## Development Commands
 
@@ -18,7 +18,7 @@ go build -o briefly ./cmd/briefly
 go install ./cmd/briefly
 
 # Run from source during development
-go run ./cmd/briefly digest input/links.md
+go run ./cmd/briefly digest generate --since 7
 
 # Run tests (standard)
 go test ./...
@@ -41,21 +41,43 @@ go vet ./...
 go mod tidy
 ```
 
-### Core Commands (v3.0 Simplified)
+### Core Commands
+
+**Feed Management:**
+```bash
+# Add RSS/Atom feeds
+briefly feed add https://hnrss.org/newest
+briefly feed add https://blog.golang.org/feed.atom
+
+# List all feeds
+briefly feed list
+
+# Remove a feed
+briefly feed remove <feed-id>
+```
+
+**News Aggregation:**
+```bash
+# Aggregate articles from feeds (run daily)
+briefly aggregate --since 24
+
+# Aggregate with specific themes
+briefly aggregate --since 24 --themes
+```
 
 **Weekly Digest Generation:**
 ```bash
-# Generate LinkedIn-ready digest from markdown file with URLs
-briefly digest input/weekly-links.md
+# Generate LinkedIn-ready digest from classified articles (database-driven)
+briefly digest generate --since 7
 
-# Specify custom output directory
-briefly digest --output digests input/weekly-links.md
+# Generate with specific output directory
+briefly digest generate --since 7 --output digests
 
-# Generate with banner image (not yet implemented)
-briefly digest --with-banner input/weekly-links.md
+# List recent digests
+briefly digest list --limit 20
 
-# Dry run (cost estimation - not yet implemented)
-briefly digest --dry-run input/weekly-links.md
+# Show specific digest
+briefly digest show <digest-id>
 ```
 
 **Quick Article Summary:**
@@ -123,18 +145,36 @@ briefly url retry --all  # Retry all failed
 briefly url clear --processed --failed
 ```
 
-## Architecture Overview (v3.0 Simplified)
+## Architecture Overview
 
 ### Design Philosophy
 
-The v3.0 architecture is a **breaking refactor** designed around the actual weekly digest workflow:
+The architecture is designed around a **database-driven news aggregation workflow** with **hierarchical summarization**:
 
-1. **Collect URLs manually** (outside app)
-2. **Run digest command** to process URLs
-3. **Cluster articles** by topic similarity
-4. **Generate executive summary** from top articles
-5. **Render LinkedIn-ready markdown**
-6. **Copy to LinkedIn** (manual)
+1. **Aggregate** - Fetch articles from RSS feeds and manual submissions
+2. **Classify** - Categorize articles by theme using LLM
+3. **Store** - Persist articles in PostgreSQL with relationships
+4. **Digest** - Generate weekly digests using hierarchical summarization
+5. **Render** - Create LinkedIn-ready markdown output
+
+### Key Innovation: Hierarchical Summarization
+
+The digest generation uses a **two-stage hierarchical approach**:
+
+**Stage 1: Cluster-Level Narratives**
+- For each topic cluster, generate a comprehensive narrative from **ALL articles** in that cluster
+- Each cluster narrative is 2-3 paragraphs synthesizing all related articles
+- No articles are excluded (no "top 3" limitation)
+
+**Stage 2: Executive Summary**
+- Synthesize cluster narratives into a cohesive executive summary
+- References articles by citation number `[1][2][3]`
+- Short, concise, but grounded in ALL articles
+
+**Benefits:**
+- ✅ **No information loss** - Every article contributes to the digest
+- ✅ **Well-grounded summaries** - Executive summary reflects all content
+- ✅ **Maintains conciseness** - Summary stays short by synthesizing clusters, not all 20+ individual articles
 
 ### Project Structure
 
@@ -143,12 +183,15 @@ briefly/
 ├── cmd/
 │   ├── briefly/main.go          # Entry point (uses ExecuteSimplified)
 │   └── handlers/                 # Cobra command handlers
-│       ├── root_simplified.go    # 5-command root (digest, read, cache, theme, url)
-│       ├── digest_simplified.go  # Weekly digest generation
+│       ├── root_simplified.go    # Root command
+│       ├── digest_generate.go    # Database-driven digest generation
+│       ├── digest.go             # Digest command group
+│       ├── aggregate.go          # News aggregation
+│       ├── feed.go               # Feed management
 │       ├── read_simplified.go    # Quick article summary
 │       ├── cache.go              # Cache management
-│       ├── theme.go              # NEW Phase 0: Theme management CLI
-│       └── manual_url.go         # NEW Phase 0: Manual URL submission CLI
+│       ├── theme.go              # Theme management
+│       └── manual_url.go         # Manual URL submission
 ├── internal/
 │   ├── parser/                   # URL parsing from markdown
 │   ├── summarize/                # Centralized summarization with prompts
@@ -222,51 +265,53 @@ briefly/
 - `tui/` - Terminal UI browser
 - `visual/` - Banner generation (future)
 
-### Pipeline Architecture (v3.0)
+### Pipeline Architecture
 
-**Core Concept:** Clean separation of concerns with adapter pattern
+**Core Concept:** Database-driven workflow with hierarchical summarization
 
-**9-Step Processing Pipeline:**
+**Digest Generation Pipeline (9 Steps):**
 
-1. **Parse URLs** - Extract URLs from markdown file (parser)
+1. **Parse URLs** - Extract URLs from database (feeds + manual submissions)
 2. **Fetch & Summarize** - Retrieve content and generate summaries (fetch, summarize)
 3. **Generate Embeddings** - Create 768-dim vectors for clustering (llm)
 4. **Cluster Articles** - Group by topic similarity using K-means (clustering)
-5. **Order Articles** - Sort articles within clusters (stubbed)
-6. **Executive Summary** - Generate narrative from top 3 per cluster (narrative)
-7. **Build Digest** - Construct final digest structure (pipeline)
-8. **Render Markdown** - Create LinkedIn-ready output (templates, render)
-9. **Generate Banner** - Optional AI image generation (future)
+5. **🆕 Generate Cluster Narratives** - Synthesize ALL articles in each cluster into 2-3 paragraph narrative (hierarchical stage 1)
+6. **Generate Digest Content** - Create executive summary from cluster narratives (hierarchical stage 2)
+7. **Build Digest** - Construct final digest structure
+8. **Render Markdown** - Create LinkedIn-ready output
+9. **Store in Database** - Persist digest with relationships
 
 **Key Files:**
 
-- `internal/pipeline/pipeline.go` - Central orchestrator with comprehensive logging
-- `internal/pipeline/interfaces.go` - Component contracts (URLParser, ContentFetcher, etc.)
-- `internal/pipeline/adapters.go` - Wrappers for existing packages
-- `internal/pipeline/builder.go` - Fluent API for pipeline construction
+- `internal/pipeline/pipeline.go` - Central orchestrator (GenerateDigests)
+- `internal/narrative/generator.go` - Hierarchical summarization logic
+- `internal/core/core.go` - ClusterNarrative and TopicCluster structs
+- `internal/pipeline/interfaces.go` - Component contracts
 
-### Data Flow
+### Data Flow (Hierarchical Summarization)
 
 ```
-Markdown File → Parser → URLs
-    ↓
-URLs → Fetcher → Articles (with cache)
-    ↓
-Articles → Summarizer → Summaries (with cache)
+Database (Articles) → Fetcher → Articles + Summaries (with cache)
     ↓
 Summaries → LLM → Embeddings (768-dim vectors)
     ↓
 Articles + Embeddings → Clusterer → TopicClusters (K-means)
     ↓
-Clusters → Orderer → OrderedClusters (priority-based)
-    ↓
-Clusters + Articles + Summaries → Narrative → Executive Summary
+TopicClusters + ALL Articles → ClusterNarrative Generator → Cluster Narratives
+    ↓                                                           (2-3 paragraphs each)
+Cluster Narratives → Executive Summary Generator → Digest Summary
     ↓
 All Data → Builder → Digest Structure
     ↓
 Digest → Renderer → Markdown File
     ↓
-Output: digests/digest_signal_2025-10-01.md
+Output: digests/digest_2025-11-06.md
+```
+
+**Hierarchical Flow:**
+```
+Stage 1: Articles (per cluster) → Cluster Narrative (synthesizes ALL)
+Stage 2: Cluster Narratives → Executive Summary (concise synthesis)
 ```
 
 ### Core Data Structures
@@ -282,14 +327,23 @@ Output: digests/digest_signal_2025-10-01.md
 - `SummaryText`, `ModelUsed`
 - Used for both article summaries and executive summaries
 
+**ClusterNarrative** (`internal/core/core.go`) - NEW for hierarchical summarization:
+- `Title` string - Short, punchy cluster title (5-8 words)
+- `Summary` string - 2-3 paragraph narrative synthesizing ALL articles
+- `KeyThemes` []string - 3-5 main themes from the cluster
+- `ArticleRefs` []int - Citation numbers of articles included
+- `Confidence` float64 - Cluster coherence confidence (0-1)
+
 **TopicCluster** (`internal/core/core.go`):
 - `Label` - Auto-generated cluster name
 - `ArticleIDs` []string - Articles in this cluster
 - `Centroid` []float64 - K-means centroid
+- `Narrative` *ClusterNarrative - Generated cluster summary (hierarchical summarization)
 
 **Digest** (`internal/core/core.go`):
 - `ArticleGroups` []ArticleGroup - Clustered articles
-- `DigestSummary` string - Executive summary
+- `DigestSummary` string - Executive summary (generated from cluster narratives)
+- `KeyMoments` []KeyMoment - Important quotes with citations
 - `Metadata` - Title, date, article count
 
 ### Component Interfaces (v3.0)
@@ -668,8 +722,17 @@ If you need removed features (research, sentiment, alerts, etc.), use v2.0 on th
 go build -o briefly ./cmd/briefly
 go test ./...
 
-# Generate digest
-./briefly digest input/weekly-links.md
+# Add feeds
+./briefly feed add https://hnrss.org/newest
+
+# Aggregate news (run daily)
+./briefly aggregate --since 24
+
+# Generate digest (database-driven with hierarchical summarization)
+./briefly digest generate --since 7
+
+# List recent digests
+./briefly digest list --limit 20
 
 # Quick read
 ./briefly read https://example.com/article
@@ -684,7 +747,7 @@ golangci-lint run --timeout=5m
 # View help
 ./briefly --help
 ./briefly digest --help
-./briefly read --help
+./briefly aggregate --help
 ```
 
 ## Documentation

@@ -198,14 +198,24 @@ type FeedItem struct {
 	DateDiscovered time.Time `json:"date_discovered"` // When the item was discovered
 }
 
+// ClusterNarrative represents a generated summary narrative for a topic cluster
+type ClusterNarrative struct {
+	Title       string   `json:"title"`         // Short, punchy cluster title (5-8 words)
+	Summary     string   `json:"summary"`       // 2-3 paragraph narrative synthesizing all articles
+	KeyThemes   []string `json:"key_themes"`    // 3-5 main themes from the cluster
+	ArticleRefs []int    `json:"article_refs"`  // Citation numbers of articles included
+	Confidence  float64  `json:"confidence"`    // Confidence in cluster coherence (0-1)
+}
+
 // TopicCluster represents a cluster of articles with similar topics.
 type TopicCluster struct {
-	ID         string    `json:"id"`          // Unique identifier for the cluster
-	Label      string    `json:"label"`       // Human-readable topic label
-	Keywords   []string  `json:"keywords"`    // Key terms associated with this topic
-	ArticleIDs []string  `json:"article_ids"` // IDs of articles in this cluster
-	Centroid   []float64 `json:"centroid"`    // Cluster centroid in embedding space
-	CreatedAt  time.Time `json:"created_at"`  // When the cluster was created
+	ID         string            `json:"id"`          // Unique identifier for the cluster
+	Label      string            `json:"label"`       // Human-readable topic label
+	Keywords   []string          `json:"keywords"`    // Key terms associated with this topic
+	ArticleIDs []string          `json:"article_ids"` // IDs of articles in this cluster
+	Centroid   []float64         `json:"centroid"`    // Cluster centroid in embedding space
+	CreatedAt  time.Time         `json:"created_at"`  // When the cluster was created
+	Narrative  *ClusterNarrative `json:"narrative,omitempty"` // Generated cluster summary (hierarchical summarization)
 }
 
 // CacheStats represents statistics about the cache.

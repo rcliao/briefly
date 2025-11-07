@@ -474,11 +474,6 @@ func generateDigestsWithClustering(ctx context.Context, db *persistence.Postgres
 
 	fmt.Printf("   ✓ Found %d topic clusters\n", len(clusters))
 
-	// Step 4: Generate one digest per cluster
-	fmt.Println("   ✨ Generating digest for each cluster...")
-
-	digests := make([]*core.Digest, 0, len(clusters))
-
 	// Create article and summary maps
 	articleMap := make(map[string]core.Article)
 	summaryMap := make(map[string]core.Summary)
@@ -494,6 +489,33 @@ func generateDigestsWithClustering(ctx context.Context, db *persistence.Postgres
 	// Create narrative generator
 	narrativeAdapter := &narrativeLLMAdapter{client: llmClient}
 	narrativeGen := narrative.NewGenerator(narrativeAdapter)
+
+	// Step 4: Generate cluster narratives (hierarchical summarization - Stage 1)
+	fmt.Println("   📖 Generating cluster narratives from ALL articles...")
+	for i, cluster := range clusters {
+		if len(cluster.ArticleIDs) == 0 {
+			continue
+		}
+
+		fmt.Printf("   [%d/%d] Cluster: %s (%d articles)\n", i+1, len(clusters), cluster.Label, len(cluster.ArticleIDs))
+
+		// Generate comprehensive narrative from ALL articles in this cluster
+		clusterNarrative, err := narrativeGen.GenerateClusterSummary(ctx, cluster, articleMap, summaryMap)
+		if err != nil {
+			log.Warn("Failed to generate cluster narrative", "cluster", cluster.Label, "error", err)
+			fmt.Printf("   ⚠  Cluster narrative generation failed, using legacy approach\n")
+			continue
+		}
+
+		// Update cluster with generated narrative
+		clusters[i].Narrative = clusterNarrative
+		fmt.Printf("   ✓ Generated: %s (%d words)\n", clusterNarrative.Title, len(clusterNarrative.Summary)/5)
+	}
+
+	// Step 5: Generate one digest per cluster (using cluster narratives - Stage 2)
+	fmt.Println("   ✨ Generating digest for each cluster...")
+
+	digests := make([]*core.Digest, 0, len(clusters))
 
 	for clusterIdx, cluster := range clusters {
 		if len(cluster.ArticleIDs) == 0 {
