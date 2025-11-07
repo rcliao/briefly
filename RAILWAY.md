@@ -225,6 +225,132 @@ Railway allows you to run one-off commands in your deployed environment:
 ./briefly migrate status
 ```
 
+## Automated Scheduling with Railway Cron
+
+Railway supports native cron jobs for automated tasks. Create separate services for scheduled tasks.
+
+### How Railway Cron Works
+
+- **Separate services**: Each cron job is a dedicated service that executes and exits
+- **Minimum frequency**: 5 minutes (cannot run more often)
+- **Timezone**: All schedules use UTC
+- **Cost efficient**: Only pay for execution time (seconds to minutes)
+
+### Recommended Cron Services
+
+#### 1. Daily Aggregation Service
+
+Fetches articles from feeds daily.
+
+**Setup in Railway Dashboard:**
+1. Click "+ New" → "Empty Service"
+2. Connect to your GitHub repository
+3. Configure:
+   - **Service Name**: `daily-aggregation`
+   - **Build Command**: `go build -o briefly ./cmd/briefly`
+   - **Start Command**: `./briefly aggregate --since 24 --themes`
+   - **Cron Schedule**: `0 2 * * *` (2 AM UTC daily)
+4. Link environment variables: `DATABASE_URL`, `GEMINI_API_KEY`
+
+#### 2. Weekly Digest Service
+
+Generates weekly digest every Monday.
+
+**Setup:**
+1. Click "+ New" → "Empty Service"
+2. Connect to same repository
+3. Configure:
+   - **Service Name**: `weekly-digest`
+   - **Build Command**: `go build -o briefly ./cmd/briefly`
+   - **Start Command**: `./briefly digest generate --since 7`
+   - **Cron Schedule**: `0 10 * * 1` (10 AM UTC every Monday)
+4. Link environment variables: `DATABASE_URL`, `GEMINI_API_KEY`
+
+#### 3. Frequent Updates (Optional)
+
+For more up-to-date content throughout the day.
+
+**Setup:**
+- **Service Name**: `frequent-aggregation`
+- **Start Command**: `./briefly aggregate --since 4 --themes`
+- **Cron Schedule**: `0 */4 * * *` (every 4 hours)
+
+### Cron Schedule Examples
+
+```bash
+# Every 5 minutes (minimum)
+*/5 * * * *
+
+# Every hour
+0 * * * *
+
+# Every 4 hours
+0 */4 * * *
+
+# Every day at 2 AM UTC
+0 2 * * *
+
+# Weekdays at 9 AM UTC
+0 9 * * 1-5
+
+# Every Monday at 10 AM UTC
+0 10 * * 1
+
+# First day of month at midnight
+0 0 1 * *
+```
+
+**Tool**: Use [crontab.guru](https://crontab.guru/) to test expressions
+
+### Timezone Conversion
+
+Railway uses UTC. Convert your local time:
+
+| Your Time | UTC Equivalent |
+|-----------|----------------|
+| 6 AM PST | 2 PM UTC |
+| 9 AM PST | 5 PM UTC |
+| 6 PM PST | 2 AM UTC (next day) |
+| 9 AM EST | 2 PM UTC |
+| 6 PM EST | 11 PM UTC |
+
+### Monitoring Cron Jobs
+
+**View Execution Logs:**
+```bash
+# Via Railway CLI
+railway logs -s daily-aggregation
+railway logs -s weekly-digest --follow
+
+# Via Dashboard
+Go to service → Observability → Logs
+```
+
+**Manual Trigger (Testing):**
+1. Go to cron service in dashboard
+2. Click "Deploy" → "Trigger Deploy"
+3. Watch logs to verify execution
+
+### Cost Optimization
+
+Cron services are extremely cost-efficient:
+
+- **Daily 2-minute task**: ~$0.01-0.05/month
+- **Weekly 5-minute task**: ~$0.001/month
+- **Comparison**: 24/7 service = $10-20/month
+
+Most cron jobs fall within Railway's free credits ($5 Hobby, $20 Pro).
+
+### Important Notes
+
+✅ **Your code is already ready** - Commands exit properly after completion
+
+⚠️ **Limitations:**
+- Minimum frequency: 5 minutes
+- Timing may vary by a few minutes
+- Always UTC timezone
+- No concurrent execution (skips if previous run still active)
+
 ## Scaling
 
 Railway supports horizontal and vertical scaling:
