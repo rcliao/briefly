@@ -160,6 +160,12 @@ type DigestRepository interface {
 
 	// GetLatest retrieves the most recent digests
 	GetLatest(ctx context.Context, limit int) ([]core.Digest, error)
+
+	// GetByID retrieves a digest by ID (alias for Get, for consistency)
+	GetByID(ctx context.Context, id string) (*core.Digest, error)
+
+	// GetDigestArticles retrieves all articles associated with a digest
+	GetDigestArticles(ctx context.Context, digestID string) ([]core.Article, error)
 }
 
 // ThemeRepository handles theme persistence operations (Phase 0)

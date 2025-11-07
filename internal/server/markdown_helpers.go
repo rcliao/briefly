@@ -32,13 +32,21 @@ func renderMarkdown(text string) template.HTML {
 	return template.HTML(htmlBytes)
 }
 
-// convertCitationLinksToAnchors converts citation links like [[N]](url) to anchor links [[N]](#article-N)
+// convertCitationLinksToAnchors converts citation markers like [N] to clickable anchor links
 // This makes citations clickable and jump to the article in the same page
 func convertCitationLinksToAnchors(text string) string {
-	// Pattern: [[N]](url) -> [[N]](#article-N)
+	// Pattern 1: [[N]](url) -> [[N]](#article-N) (double bracket format)
 	// Matches: [[1]](https://example.com) or [[2]](http://...)
-	pattern := regexp.MustCompile(`\[\[(\d+)\]\]\([^)]+\)`)
-	return pattern.ReplaceAllString(text, `[[$1]](#article-$1)`)
+	pattern1 := regexp.MustCompile(`\[\[(\d+)\]\]\([^)]+\)`)
+	text = pattern1.ReplaceAllString(text, `[[$1]](#article-$1)`)
+
+	// Pattern 2: [N] -> [N](#article-N) (single bracket format - most common)
+	// Matches: [1], [2], [3], etc. but NOT [1](url) markdown links
+	// Match [number] followed by space, punctuation, or end of string (not opening paren)
+	pattern2 := regexp.MustCompile(`\[(\d+)\]([\s.,;:!?\-\n]|$)`)
+	text = pattern2.ReplaceAllString(text, `[$1](#article-$1)$2`)
+
+	return text
 }
 
 // renderMarkdownWithCitations renders markdown and converts citation links to anchors

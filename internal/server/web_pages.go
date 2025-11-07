@@ -499,16 +499,19 @@ func (s *Server) prepareDigestDetailData(ctx context.Context, digest *core.Diges
 
 	// Collect all articles from all groups
 	articles := make([]ArticleView, 0)
+	citationNum := 1 // Citation numbers start at 1
 	for _, group := range digest.ArticleGroups {
 		for _, article := range group.Articles {
 			articles = append(articles, ArticleView{
-				ID:          article.ID,
-				URL:         article.URL,
-				Title:       article.Title,
-				Domain:      extractDomain(article.URL),
-				ContentType: string(article.ContentType),
-				DateFetched: article.DateFetched,
+				ID:             article.ID,
+				URL:            article.URL,
+				Title:          article.Title,
+				Domain:         extractDomain(article.URL),
+				ContentType:    string(article.ContentType),
+				DateFetched:    article.DateFetched,
+				CitationNumber: citationNum, // Assign citation number based on order
 			})
+			citationNum++ // Increment for next article
 		}
 	}
 

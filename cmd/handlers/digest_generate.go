@@ -9,6 +9,7 @@ import (
 	"briefly/internal/markdown"
 	"briefly/internal/narrative"
 	"briefly/internal/persistence"
+	"briefly/internal/quality"
 	"briefly/internal/summarize"
 	"context"
 	"fmt"
@@ -524,8 +525,10 @@ func generateDigestsWithClustering(ctx context.Context, db *persistence.Postgres
 
 		fmt.Printf("   [%d/%d] Cluster: %s (%d articles)\n", clusterIdx+1, len(clusters), cluster.Label, len(cluster.ArticleIDs))
 
-		// Generate digest content for this cluster
-		digestContent, err := narrativeGen.GenerateDigestContent(ctx, []core.TopicCluster{cluster}, articleMap, summaryMap)
+		// Generate digest content for this cluster WITH SELF-CRITIQUE
+		// This ensures quality through always-on critique (signal over noise)
+		critiqueConfig := narrative.DefaultCritiqueConfig()
+		digestContent, err := narrativeGen.GenerateDigestContentWithCritique(ctx, []core.TopicCluster{cluster}, articleMap, summaryMap, critiqueConfig)
 		if err != nil {
 			log.Warn("Failed to generate digest content for cluster", "cluster", cluster.Label, "error", err)
 			// Use fallback
@@ -624,6 +627,9 @@ func generateDigestsWithClustering(ctx context.Context, db *persistence.Postgres
 				TLDRSummary:   digestContent.TLDRSummary,
 			},
 		}
+
+		// Calculate and log quality metrics
+		logDigestQualityMetrics(digest, clusterArticles)
 
 		digests = append(digests, digest)
 	}
@@ -792,4 +798,33 @@ func getThemeEmoji(theme string) string {
 	}
 
 	return "📌" // Default
+}
+
+// logDigestQualityMetrics calculates and logs quality metrics for a digest
+func logDigestQualityMetrics(digest *core.Digest, articles []core.Article) {
+	// Create quality evaluator
+	evaluator := quality.NewDigestEvaluator()
+
+	// Evaluate digest quality
+	metrics := evaluator.EvaluateDigest(digest, articles)
+
+	// Log quality metrics to console
+	fmt.Printf("   📊 Quality Metrics:\n")
+	fmt.Printf("      • Coverage: %.0f%% (%d/%d articles cited)\n",
+		metrics.CoveragePct*100, metrics.CitationsFound, metrics.ArticleCount)
+	fmt.Printf("      • Vague phrases: %d\n", metrics.VaguePhrases)
+	fmt.Printf("      • Specificity: %d/100\n", metrics.SpecificityScore)
+	fmt.Printf("      • Citation density: %.2f per 100 words\n", metrics.CitationDensity)
+	fmt.Printf("      • Grade: %s\n", metrics.Grade)
+	if metrics.Passed {
+		fmt.Printf("      • Status: ✓ PASSED\n")
+	} else {
+		fmt.Printf("      • Status: ⚠️  NEEDS IMPROVEMENT\n")
+		if len(metrics.Warnings) > 0 {
+			fmt.Printf("      • Warnings:\n")
+			for _, warning := range metrics.Warnings {
+				fmt.Printf("        - %s\n", warning)
+			}
+		}
+	}
 }

@@ -10,6 +10,20 @@ import (
 	"github.com/humilityai/hdbscan"
 )
 
+// HDBSCANConfig holds configuration for HDBSCAN clustering
+type HDBSCANConfig struct {
+	MinClusterSize int // Minimum number of articles to form a cluster
+	MinSamples     int // Minimum samples in neighborhood for core point
+}
+
+// DefaultHDBSCANConfig returns sensible defaults for HDBSCAN clustering
+func DefaultHDBSCANConfig() HDBSCANConfig {
+	return HDBSCANConfig{
+		MinClusterSize: 3, // Minimum 3 articles per topic (allows smaller, more focused clusters)
+		MinSamples:     1, // Low threshold - let HDBSCAN find natural groupings
+	}
+}
+
 // HDBSCANClusterer implements HDBSCAN clustering for articles based on embeddings
 type HDBSCANClusterer struct {
 	MinClusterSize int // Minimum number of articles to form a cluster
@@ -18,9 +32,10 @@ type HDBSCANClusterer struct {
 
 // NewHDBSCANClusterer creates a new HDBSCAN clusterer with default parameters
 func NewHDBSCANClusterer() *HDBSCANClusterer {
+	config := DefaultHDBSCANConfig()
 	return &HDBSCANClusterer{
-		MinClusterSize: 3,  // Minimum 3 articles per topic (allows smaller, more focused clusters)
-		MinSamples:     1,  // Low threshold - let HDBSCAN find natural groupings
+		MinClusterSize: config.MinClusterSize,
+		MinSamples:     config.MinSamples,
 	}
 }
 

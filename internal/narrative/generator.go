@@ -35,11 +35,11 @@ func NewGenerator(llmClient LLMClient) *Generator {
 
 // DigestContent contains all generated content for a digest (v2.0 structured format)
 type DigestContent struct {
-	Title            string               // Generated title (25-45 chars ideal, 50 max)
-	TLDRSummary      string               // One-sentence summary (40-80 chars ideal, 100 max)
-	KeyMoments       []core.KeyMoment     // 3-5 key developments with structured quotes and citations
-	Perspectives     []core.Perspective   // Supporting/opposing viewpoints (optional)
-	ExecutiveSummary string               // Full narrative summary with [N] citation placeholders
+	Title            string               `json:"title"`             // Generated title (25-45 chars ideal, 50 max)
+	TLDRSummary      string               `json:"tldr_summary"`      // One-sentence summary (40-80 chars ideal, 100 max)
+	KeyMoments       []core.KeyMoment     `json:"key_moments"`       // 3-5 key developments with structured quotes and citations
+	Perspectives     []core.Perspective   `json:"perspectives"`      // Supporting/opposing viewpoints (optional)
+	ExecutiveSummary string               `json:"executive_summary"` // Full narrative summary with [N] citation placeholders
 }
 
 // GenerateClusterSummary generates a comprehensive narrative for a single cluster using ALL articles
@@ -90,9 +90,89 @@ func (g *Generator) GenerateClusterSummary(ctx context.Context, cluster core.Top
 	return narrative, nil
 }
 
+// GenerateDigestContentWithCritique generates digest content with self-critique refinement pass
+// This is the NEW recommended entry point that ensures quality through critique
+func (g *Generator) GenerateDigestContentWithCritique(ctx context.Context, clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary, config CritiqueConfig) (*DigestContent, error) {
+	// Step 1: Generate initial draft
+	fmt.Println("   📝 Generating initial digest draft...")
+	draftDigest, err := g.GenerateDigestContent(ctx, clusters, articles, summaries)
+	if err != nil {
+		return nil, fmt.Errorf("draft generation failed: %w", err)
+	}
+
+	// Step 2: Determine if critique pass should run
+	if !g.ShouldRunCritique(draftDigest, config) {
+		fmt.Println("   ℹ️  Skipping critique pass (not required)")
+		return draftDigest, nil
+	}
+
+	// Step 3: Run self-critique with retry logic
+	fmt.Println("   🔍 Running self-critique refinement pass...")
+
+	var finalDigest *DigestContent
+	var critiqueResult *CritiqueResult
+
+	for attempt := 0; attempt <= config.MaxRetries; attempt++ {
+		if attempt > 0 {
+			fmt.Printf("   🔄 Retry attempt %d/%d...\n", attempt, config.MaxRetries)
+		}
+
+		// Run critique
+		critiqueResult, err = g.RefineDigestWithCritique(ctx, draftDigest, clusters, articles, summaries)
+		if err != nil {
+			fmt.Printf("   ⚠️  Critique failed: %v\n", err)
+
+			// If this is the last retry, return draft
+			if attempt == config.MaxRetries {
+				fmt.Println("   ⚠️  Max retries reached, using draft digest")
+				return draftDigest, nil
+			}
+
+			continue // Retry
+		}
+
+		// Check if quality improved
+		if critiqueResult.QualityImproved {
+			fmt.Println("   ✓ Quality improved by critique pass")
+
+			// Print critique summary
+			if len(critiqueResult.Critique.ArticlesMissing) > 0 {
+				fmt.Printf("      • Fixed missing articles: %v\n", critiqueResult.Critique.ArticlesMissing)
+			}
+			if len(critiqueResult.Critique.VaguePhrases) > 0 {
+				fmt.Printf("      • Fixed vague phrases: %v\n", critiqueResult.Critique.VaguePhrases)
+			}
+			if critiqueResult.Critique.SpecificityScore > 0 {
+				fmt.Printf("      • Specificity score: %d/100\n", critiqueResult.Critique.SpecificityScore)
+			}
+
+			finalDigest = critiqueResult.ImprovedDigest
+			break
+		}
+
+		// Quality not improved, retry if attempts remaining
+		if attempt < config.MaxRetries {
+			fmt.Println("   ⚠️  Quality not improved, retrying...")
+			continue
+		}
+
+		// Max retries reached with no improvement
+		fmt.Println("   ⚠️  Quality not improved after retries, using draft")
+		finalDigest = draftDigest
+	}
+
+	if finalDigest == nil {
+		// Fallback to draft if something went wrong
+		finalDigest = draftDigest
+	}
+
+	return finalDigest, nil
+}
+
 // GenerateDigestContent creates title, TL;DR, and executive summary from clustered articles
 // Returns structured content with all three components
 // NEW: If clusters have narratives (hierarchical summarization), uses those instead of top-3 articles
+// NOTE: This is the base generation function. Use GenerateDigestContentWithCritique for quality-assured generation.
 func (g *Generator) GenerateDigestContent(ctx context.Context, clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (*DigestContent, error) {
 	if len(clusters) == 0 {
 		return nil, fmt.Errorf("no clusters provided")
@@ -648,13 +728,43 @@ func (g *Generator) buildClusterSummaryPrompt(clusterLabel string, articles []Ar
 	prompt.WriteString("1. Identifies the common themes and patterns across articles\n")
 	prompt.WriteString("2. Shows how the articles relate to each other (complementary, contrasting, building on each other)\n")
 	prompt.WriteString("3. Extracts the key insights that matter to technical readers\n")
-	prompt.WriteString("4. Maintains accuracy - don't invent information not in the articles\n\n")
+	prompt.WriteString("4. Maintains accuracy - don't invent information not in the articles\n")
+	prompt.WriteString("5. Uses SPECIFIC facts, numbers, names, and dates from the articles\n\n")
+
+	prompt.WriteString("**CRITICAL SPECIFICITY RULES:**\n")
+	prompt.WriteString("❌ BANNED VAGUE PHRASES - Never use:\n")
+	prompt.WriteString("   \"several\", \"various\", \"multiple\", \"many\", \"some\", \"a few\", \"numerous\"\n")
+	prompt.WriteString("   \"recently\", \"soon\", \"significant\", \"substantial\"\n\n")
+
+	prompt.WriteString("✅ REQUIRED SPECIFICITY - Must include:\n")
+	prompt.WriteString("   • At least 3 specific numbers/percentages/metrics\n")
+	prompt.WriteString("   • At least 5 specific proper nouns (companies, people, products)\n")
+	prompt.WriteString("   • Exact dates or specific timeframes when mentioned\n")
+	prompt.WriteString("   • Citations for EVERY claim: \"Company X announced Y [1]\" not \"A company announced something\"\n\n")
+
+	prompt.WriteString("✅ EXAMPLES:\n")
+	prompt.WriteString("   WRONG: \"Several companies announced updates\"\n")
+	prompt.WriteString("   RIGHT: \"Google [1], Meta [2], and Anthropic [3] announced updates\"\n\n")
+
+	prompt.WriteString("   WRONG: \"Performance improved significantly\"\n")
+	prompt.WriteString("   RIGHT: \"Inference speed increased 40% from 3.5s to 2.1s [2]\"\n\n")
+
+	prompt.WriteString("**VERIFICATION BEFORE FINALIZING:**\n")
+	prompt.WriteString("Before returning, verify:\n")
+	prompt.WriteString(fmt.Sprintf("1. All %d articles are cited at least once in article_refs array\n", len(articles)))
+	prompt.WriteString("2. No banned vague phrases appear in the summary\n")
+	prompt.WriteString("3. At least 3 specific numbers/metrics in summary\n")
+	prompt.WriteString("4. At least 5 proper nouns (companies/people/products)\n")
+	prompt.WriteString("If any check fails, revise the summary until all pass.\n\n")
 
 	prompt.WriteString("**OUTPUT REQUIREMENTS:**\n")
 	prompt.WriteString("- Title: Short, punchy cluster title (5-8 words)\n")
 	prompt.WriteString("- Summary: 2-3 paragraph narrative synthesizing all articles (150-250 words)\n")
+	prompt.WriteString(fmt.Sprintf("  * MUST include specific facts from ALL %d articles\n", len(articles)))
+	prompt.WriteString("  * MUST cite sources: [1], [2], [3] etc.\n")
+	prompt.WriteString("  * NO vague/generic phrases\n")
 	prompt.WriteString("- Key Themes: 3-5 main themes from the cluster\n")
-	prompt.WriteString("- Article Refs: Citation numbers of all articles included (1-based array)\n")
+	prompt.WriteString(fmt.Sprintf("- Article Refs: Citation numbers of ALL %d articles (1-based array)\n", len(articles)))
 	prompt.WriteString("- Confidence: How coherent this cluster is (0.0-1.0)\n\n")
 
 	prompt.WriteString("Generate the cluster narrative in JSON format matching the schema.\n")
@@ -766,29 +876,79 @@ func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluste
 	prompt.WriteString("\n**REQUIREMENTS:**\n\n")
 
 	prompt.WriteString("**Title (20-40 characters STRICT MAXIMUM):**\n")
-	prompt.WriteString("- Catchy and specific headline\n")
+	prompt.WriteString("- MUST use active voice with strong action verbs\n")
+	prompt.WriteString("- REQUIRED: Include specific actor (company/tech/concept)\n")
+	prompt.WriteString("- BANNED generic verbs: \"updates\", \"changes\", \"announces\", \"releases\"\n")
+	prompt.WriteString("- PREFERRED power verbs: \"cuts\", \"hits\", \"beats\", \"breaks\", \"surges\", \"doubles\", \"slashes\"\n")
 	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 40 characters\n")
-	prompt.WriteString("- Examples: \"GPT-5 Launch and API Updates\" (30 chars) ✓\n")
-	prompt.WriteString("            \"AI Agents Gain Autonomy\" (25 chars) ✓\n\n")
+	prompt.WriteString("- Examples:\n")
+	prompt.WriteString("  ✓ \"Voice AI Hits 1-Second Latency\" (32 chars) - specific metric\n")
+	prompt.WriteString("  ✓ \"GPT-5 Cuts Inference Cost 60%\" (31 chars) - quantified impact\n")
+	prompt.WriteString("  ✗ \"New AI Model Updates Released\" (31 chars) - generic, passive\n\n")
 
 	prompt.WriteString("**TLDR Summary (40-75 characters STRICT MAXIMUM):**\n")
-	prompt.WriteString("- One complete sentence capturing the key insight\n")
+	prompt.WriteString("- REQUIRED STRUCTURE: [Subject] + [Action Verb] + [Object] + [Quantified Impact]\n")
+	prompt.WriteString("- Subject: Specific company/technology (e.g., \"OpenAI\", \"Voice AI\")\n")
+	prompt.WriteString("- Action Verb: Strong active verb (e.g., \"cuts\", \"achieves\", \"beats\")\n")
+	prompt.WriteString("- Object: What was changed (e.g., \"inference speed\", \"latency\")\n")
+	prompt.WriteString("- Impact: Numeric result (e.g., \"by 40%\", \"to 1 second\", \"95% accuracy\")\n")
 	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 75 characters\n")
-	prompt.WriteString("- Examples: \"OpenAI releases GPT-5 with faster inference\" (48 chars) ✓\n\n")
+	prompt.WriteString("- Examples:\n")
+	prompt.WriteString("  ✓ \"Perplexity hits 400 Gbps for distributed AI inference\" (56 chars)\n")
+	prompt.WriteString("  ✓ \"Voice AI achieves 1-second latency with open models\" (54 chars)\n")
+	prompt.WriteString("  ✗ \"AI technology sees improvements in performance\" (49 chars) - vague, no metrics\n\n")
 
 	prompt.WriteString("**Executive Summary (2-3 paragraphs):**\n")
-	prompt.WriteString("- Synthesize the cluster narratives into a cohesive story\n")
-	prompt.WriteString("- Show how the different clusters relate and connect\n")
+	prompt.WriteString("- REQUIRED: Explicitly connect clusters with transition phrases:\n")
+	prompt.WriteString("  \"Building on...\", \"In contrast to...\", \"Supporting this trend...\", \"Meanwhile...\"\n")
+	prompt.WriteString("- Paragraph 1: Main narrative thread connecting 2-3 largest clusters\n")
+	prompt.WriteString("- Paragraph 2: Secondary trends and how they relate to the main thread\n")
+	prompt.WriteString("- Paragraph 3 (optional): Implications or contrasts (e.g., technical vs creative domains)\n")
 	prompt.WriteString("- Include citations using [1], [2], [3] format (CRITICAL: use numbers only)\n")
 	prompt.WriteString("- Focus on 'why it matters' not just 'what happened'\n")
 	prompt.WriteString("- Write for developers, PMs, and technical leaders\n")
 	prompt.WriteString("- 150-200 words total\n\n")
 
+	prompt.WriteString("**CRITICAL SPECIFICITY RULES:**\n")
+	prompt.WriteString("❌ BANNED VAGUE PHRASES - Never use:\n")
+	prompt.WriteString("   \"several\", \"various\", \"multiple\", \"many\", \"some\", \"numerous\"\n")
+	prompt.WriteString("   \"recently\", \"significant\", \"substantial\"\n\n")
+
+	prompt.WriteString("✅ REQUIRED SPECIFICITY:\n")
+	prompt.WriteString(fmt.Sprintf("   • Cite EVERY article at least once (you have %d articles total)\n", articleNum-1))
+	prompt.WriteString("   • Include at least 5 specific facts with citations\n")
+	prompt.WriteString("   • Use exact numbers/percentages from cluster narratives\n")
+	prompt.WriteString("   • Name specific companies, products, people\n\n")
+
+	prompt.WriteString("**SELF-VALIDATION CHECKLIST (verify before finalizing):**\n")
+	prompt.WriteString("Before returning JSON, verify ALL these conditions:\n")
+	prompt.WriteString("1. ✓ Title ≤ 40 characters AND uses active power verb (not \"updates\", \"announces\")\n")
+	prompt.WriteString("2. ✓ Title includes specific actor (company/tech) + quantified result\n")
+	prompt.WriteString("3. ✓ TLDR ≤ 75 characters AND follows [Subject]+[Verb]+[Object]+[Impact] structure\n")
+	prompt.WriteString("4. ✓ TLDR contains at least one specific number/percentage\n")
+	prompt.WriteString(fmt.Sprintf("5. ✓ All %d articles cited at least once in executive summary\n", articleNum-1))
+	prompt.WriteString("6. ✓ Executive summary has clear cluster connections (\"Building on...\", \"Meanwhile...\")\n")
+	prompt.WriteString("7. ✓ No banned vague phrases in executive summary or key moments\n")
+	prompt.WriteString("8. ✓ At least 5 specific facts with citations [1][2][3]\n")
+	prompt.WriteString("9. ✓ At least 3 specific numbers/percentages/metrics\n")
+	prompt.WriteString("10. ✓ At least 5 proper nouns (companies/people/products)\n")
+	prompt.WriteString("11. ✓ Key moments have diversity (at least one from each major cluster)\n\n")
+
+	prompt.WriteString("**IF ANY CHECK FAILS:** Revise the content until ALL checks pass.\n")
+	prompt.WriteString("Do NOT return the JSON until all 11 validation checks are satisfied.\n\n")
+
 	prompt.WriteString("**Key Moments (3-5 structured quotes):**\n")
+	prompt.WriteString("- REQUIRED: At least one quote from each major cluster (clusters with 3+ articles)\n")
+	prompt.WriteString("- DIVERSITY REQUIREMENT: No more than 2 quotes from the same cluster\n")
+	prompt.WriteString("- PRIORITY ORDER:\n")
+	prompt.WriteString("  1. Quantified achievements (e.g., \"400 Gbps throughput\", \"98.5% accuracy\")\n")
+	prompt.WriteString("  2. Major product launches or acquisitions\n")
+	prompt.WriteString("  3. Funding announcements with specific amounts\n")
+	prompt.WriteString("  4. Technical breakthroughs with measurable impacts\n")
 	prompt.WriteString("- Each must have:\n")
-	prompt.WriteString("  - quote: Important insight or development (1-2 sentences)\n")
+	prompt.WriteString("  - quote: Important insight or development (1-2 sentences, MUST include specific numbers)\n")
 	prompt.WriteString("  - citation_number: Reference to article [1-N]\n")
-	prompt.WriteString("- Select the most impactful developments across all clusters\n\n")
+	prompt.WriteString("- Example: {\"quote\": \"Perplexity's TransferEngine hit 400 Gbps for distributed inference\", \"citation_number\": 1}\n\n")
 
 	prompt.WriteString("**Perspectives (optional, 0-3 viewpoints):**\n")
 	prompt.WriteString("- Identify supporting or opposing viewpoints if present\n")
@@ -822,20 +982,28 @@ func (g *Generator) buildStructuredNarrativePrompt(insights []ClusterInsight) st
 
 	prompt.WriteString("\n**REQUIREMENTS:**\n\n")
 
-	prompt.WriteString("**Title (20-40 characters STRICT MAXIMUM - COUNT CAREFULLY!):**\n")
-	prompt.WriteString("- Catchy and specific headline\n")
-	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 40 characters (database hard limit: 50 chars, you MUST stay under 40)\n")
-	prompt.WriteString("- EXCEEDING 50 CHARS WILL CAUSE COMPLETE FAILURE - Count every character including spaces!\n")
-	prompt.WriteString("- Examples: \"GPT-5 Launch and API Updates\" (30 chars) ✓\n")
-	prompt.WriteString("            \"AI Agents Gain Autonomy\" (25 chars) ✓\n")
-	prompt.WriteString("            \"Voice AI Hits 1-Second Latency\" (32 chars) ✓\n\n")
+	prompt.WriteString("**Title (20-40 characters STRICT MAXIMUM):**\n")
+	prompt.WriteString("- MUST use active voice with strong action verbs\n")
+	prompt.WriteString("- REQUIRED: Include specific actor (company/tech/concept)\n")
+	prompt.WriteString("- BANNED generic verbs: \"updates\", \"changes\", \"announces\", \"releases\"\n")
+	prompt.WriteString("- PREFERRED power verbs: \"cuts\", \"hits\", \"beats\", \"breaks\", \"surges\", \"doubles\", \"slashes\"\n")
+	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 40 characters (database hard limit: 50 chars)\n")
+	prompt.WriteString("- Examples:\n")
+	prompt.WriteString("  ✓ \"Voice AI Hits 1-Second Latency\" (32 chars) - specific metric\n")
+	prompt.WriteString("  ✓ \"GPT-5 Cuts Inference Cost 60%\" (31 chars) - quantified impact\n")
+	prompt.WriteString("  ✗ \"New AI Model Updates Released\" (31 chars) - generic, passive\n\n")
 
-	prompt.WriteString("**TLDR Summary (40-75 characters STRICT MAXIMUM - COUNT CAREFULLY!):**\n")
-	prompt.WriteString("- One complete sentence capturing the key insight\n")
-	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 75 characters (database hard limit: 100 chars, you MUST stay under 75)\n")
-	prompt.WriteString("- EXCEEDING 100 CHARS WILL CAUSE COMPLETE FAILURE - Count every character including spaces!\n")
-	prompt.WriteString("- Examples: \"OpenAI releases GPT-5 with faster inference\" (48 chars) ✓\n")
-	prompt.WriteString("            \"AI agents gain new autonomy features\" (40 chars) ✓\n\n")
+	prompt.WriteString("**TLDR Summary (40-75 characters STRICT MAXIMUM):**\n")
+	prompt.WriteString("- REQUIRED STRUCTURE: [Subject] + [Action Verb] + [Object] + [Quantified Impact]\n")
+	prompt.WriteString("- Subject: Specific company/technology (e.g., \"OpenAI\", \"Voice AI\")\n")
+	prompt.WriteString("- Action Verb: Strong active verb (e.g., \"cuts\", \"achieves\", \"beats\")\n")
+	prompt.WriteString("- Object: What was changed (e.g., \"inference speed\", \"latency\")\n")
+	prompt.WriteString("- Impact: Numeric result (e.g., \"by 40%\", \"to 1 second\", \"95% accuracy\")\n")
+	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 75 characters (database hard limit: 100 chars)\n")
+	prompt.WriteString("- Examples:\n")
+	prompt.WriteString("  ✓ \"Perplexity hits 400 Gbps for distributed AI inference\" (56 chars)\n")
+	prompt.WriteString("  ✓ \"Voice AI achieves 1-second latency with open models\" (54 chars)\n")
+	prompt.WriteString("  ✗ \"AI technology sees improvements in performance\" (49 chars) - vague, no metrics\n\n")
 
 	prompt.WriteString("**Executive Summary (2-3 paragraphs):**\n")
 	prompt.WriteString("- Tell the story of this week's developments\n")
@@ -845,13 +1013,18 @@ func (g *Generator) buildStructuredNarrativePrompt(insights []ClusterInsight) st
 	prompt.WriteString("- 150-200 words total\n\n")
 
 	prompt.WriteString("**Key Moments (3-5 structured quotes):**\n")
+	prompt.WriteString("- PRIORITY ORDER:\n")
+	prompt.WriteString("  1. Quantified achievements (e.g., \"400 Gbps throughput\", \"98.5% accuracy\")\n")
+	prompt.WriteString("  2. Major product launches or acquisitions\n")
+	prompt.WriteString("  3. Funding announcements with specific amounts\n")
+	prompt.WriteString("  4. Technical breakthroughs with measurable impacts\n")
 	prompt.WriteString("- Each must have:\n")
-	prompt.WriteString("  - quote: Exact quote from article (1-2 sentences)\n")
+	prompt.WriteString("  - quote: Exact quote from article (1-2 sentences, MUST include specific numbers)\n")
 	prompt.WriteString("  - citation_number: Reference to article [1-N]\n")
-	prompt.WriteString("- Select the most impactful quotes\n")
 	prompt.WriteString("- Examples:\n")
-	prompt.WriteString("  - {\"quote\": \"GPT-5 achieves 95% on MMLU benchmarks\", \"citation_number\": 1}\n")
-	prompt.WriteString("  - {\"quote\": \"Early testing shows 40% cost reduction\", \"citation_number\": 3}\n\n")
+	prompt.WriteString("  ✓ {\"quote\": \"GPT-5 achieves 95% on MMLU benchmarks\", \"citation_number\": 1}\n")
+	prompt.WriteString("  ✓ {\"quote\": \"Early testing shows 40% cost reduction\", \"citation_number\": 3}\n")
+	prompt.WriteString("  ✗ {\"quote\": \"Performance improved significantly\", \"citation_number\": 2} - no numbers\n\n")
 
 	prompt.WriteString("**Perspectives (optional, 0-3 viewpoints):**\n")
 	prompt.WriteString("- Identify supporting or opposing viewpoints if present\n")

@@ -45,11 +45,11 @@ func DefaultQuickReadOptions() PromptOptions {
 	}
 }
 
-// BuildSummarizationPrompt creates a prompt for article summarization
+// BuildSummarizationPrompt creates a prompt for article summarization with fact extraction
 func BuildSummarizationPrompt(title, content string, opts PromptOptions) string {
 	var prompt strings.Builder
 
-	prompt.WriteString("Summarize this article concisely and accurately.\n\n")
+	prompt.WriteString("Summarize this article with CONCRETE FACTS and SPECIFIC DETAILS.\n\n")
 
 	// Article details
 	if title != "" {
@@ -58,25 +58,66 @@ func BuildSummarizationPrompt(title, content string, opts PromptOptions) string 
 
 	prompt.WriteString(fmt.Sprintf("**Content:**\n%s\n\n", truncateContent(content, 4000)))
 
-	// Instructions
-	prompt.WriteString("**Instructions:**\n")
-	prompt.WriteString(fmt.Sprintf("1. Create a %d-word summary that captures the essence of the article\n", opts.MaxWords))
-	prompt.WriteString("2. Focus on the main insights, findings, and conclusions\n")
-	prompt.WriteString("3. Use clear, direct language appropriate for a professional audience\n")
+	// PHASE 1: Fact Extraction (NEW)
+	prompt.WriteString("**PHASE 1: Extract Concrete Facts**\n")
+	prompt.WriteString("Before summarizing, identify these SPECIFIC facts:\n\n")
+	prompt.WriteString("WHO:\n")
+	prompt.WriteString("- Specific people mentioned (full names, titles)\n")
+	prompt.WriteString("- Specific companies/organizations\n")
+	prompt.WriteString("- Specific products/technologies\n\n")
 
+	prompt.WriteString("WHAT:\n")
+	prompt.WriteString("- Exact numbers, percentages, metrics (e.g., \"40% faster\", \"$1.5M\", \"768 dimensions\")\n")
+	prompt.WriteString("- Specific technologies, versions, features\n")
+	prompt.WriteString("- Concrete actions taken or announcements made\n\n")
+
+	prompt.WriteString("WHEN:\n")
+	prompt.WriteString("- Exact dates mentioned (e.g., \"November 7, 2025\", \"Q4 2024\")\n")
+	prompt.WriteString("- Specific timelines (e.g., \"within 6 months\", \"by end of year\")\n\n")
+
+	prompt.WriteString("WHY/IMPACT:\n")
+	prompt.WriteString("- Specific problems solved\n")
+	prompt.WriteString("- Measurable impact or improvements\n")
+	prompt.WriteString("- Target audience or use cases\n\n")
+
+	// PHASE 2: Summary with Facts (ENHANCED)
+	prompt.WriteString("**PHASE 2: Create Summary Using Facts**\n")
+	prompt.WriteString(fmt.Sprintf("Write a %d-word summary that:\n", opts.MaxWords))
+	prompt.WriteString("1. Uses ONLY the concrete facts you extracted above\n")
+	prompt.WriteString("2. Includes specific numbers, names, and dates (not vague terms)\n")
+	prompt.WriteString("3. Focuses on what actually happened and why it matters\n\n")
+
+	// BANNED PHRASES (NEW)
+	prompt.WriteString("**CRITICAL RULES - BANNED VAGUE PHRASES:**\n")
+	prompt.WriteString("❌ NEVER use: \"several\", \"various\", \"multiple\", \"many\", \"some\", \"a few\", \"numerous\"\n")
+	prompt.WriteString("✅ INSTEAD use: Exact counts or specific examples\n")
+	prompt.WriteString("   Example: NOT \"several companies\" → USE \"Google, Meta, and Anthropic\"\n")
+	prompt.WriteString("   Example: NOT \"significantly faster\" → USE \"40% faster (2.1s vs 3.5s)\"\n\n")
+
+	// Key Points (if requested)
 	if opts.IncludeKeyPoints {
-		prompt.WriteString(fmt.Sprintf("4. Extract %d key points as bullet points\n", opts.KeyPointCount))
+		prompt.WriteString(fmt.Sprintf("**PHASE 3: Extract %d Key Points**\n", opts.KeyPointCount))
+		prompt.WriteString("Each key point must:\n")
+		prompt.WriteString("- Be specific (include numbers, names, or dates)\n")
+		prompt.WriteString("- State ONE concrete fact or insight\n")
+		prompt.WriteString("- Avoid vague generalities\n\n")
 	}
 
 	// Output format
-	prompt.WriteString("\n**Output Format:**\n")
+	prompt.WriteString("**OUTPUT FORMAT:**\n")
+	prompt.WriteString("FACTS EXTRACTED:\n")
+	prompt.WriteString("WHO: [List specific names/companies]\n")
+	prompt.WriteString("WHAT: [List specific numbers/metrics/technologies]\n")
+	prompt.WriteString("WHEN: [List specific dates/timelines]\n")
+	prompt.WriteString("IMPACT: [List specific problems solved/improvements]\n\n")
+
 	prompt.WriteString("SUMMARY:\n")
-	prompt.WriteString("[Your summary here - exactly " + fmt.Sprintf("%d", opts.MaxWords) + " words]\n\n")
+	prompt.WriteString(fmt.Sprintf("[Your %d-word summary using facts above]\n\n", opts.MaxWords))
 
 	if opts.IncludeKeyPoints {
 		prompt.WriteString("KEY POINTS:\n")
 		for i := 1; i <= opts.KeyPointCount; i++ {
-			prompt.WriteString(fmt.Sprintf("- [Key point %d]\n", i))
+			prompt.WriteString(fmt.Sprintf("- [Specific key point %d with numbers/names/dates]\n", i))
 		}
 	}
 

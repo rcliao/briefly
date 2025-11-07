@@ -31,6 +31,7 @@ Examples:
 	cmd.AddCommand(NewDigestGenerateCmd())      // Database-driven digest generation
 	cmd.AddCommand(NewDigestListCmd())          // List recent digests
 	cmd.AddCommand(NewDigestShowCmd())          // Show specific digest
+	cmd.AddCommand(NewDigestCompareCmd())       // Compare digests (A/B testing)
 
 	return cmd
 }

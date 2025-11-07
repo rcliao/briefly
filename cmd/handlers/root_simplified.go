@@ -67,6 +67,7 @@ Examples:
 	rootCmd.AddCommand(NewThemeCmd())              // NEW: Theme management (Phase 0)
 	rootCmd.AddCommand(NewManualURLCmd())          // NEW: Manual URL management (Phase 0)
 	rootCmd.AddCommand(NewServeCmd())              // NEW: HTTP server
+	rootCmd.AddCommand(NewQualityCmd())            // NEW: Quality evaluation and metrics (Phase 1)
 	rootCmd.AddCommand(NewDigestCmd())             // Digest commands (file-based and database-based)
 	rootCmd.AddCommand(NewReadSimplifiedCmd())     // Existing: Quick read
 	rootCmd.AddCommand(NewCacheCmd())              // Existing: Cache management

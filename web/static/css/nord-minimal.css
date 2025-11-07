@@ -251,15 +251,22 @@ footer {
    Digest List
    ======================================== */
 .digest-list {
-    list-style: decimal;
+    list-style: decimal;         /* Enable list markers */
     padding-left: 1.5rem;        /* 24px for numbering */
     margin: 0;
+    counter-reset: digest-index -1;  /* Start at 0 instead of 1 */
 }
 
 .digest-item {
     padding: 0.75rem 0;              /* 12px desktop */
     transition: background-color 0.2s;
     cursor: pointer;
+    counter-increment: digest-index; /* Increment counter for each item */
+    display: list-item;              /* Ensure list item display */
+}
+
+.digest-item::marker {
+    content: counter(digest-index) ". ";  /* Display counter with period */
 }
 
 .digest-item:hover {
@@ -281,16 +288,30 @@ footer {
     }
 }
 
-.digest-title a {
+.digest-title {
     font-size: 1rem;                /* 16px desktop, scales responsive */
     font-weight: 600;
     color: var(--nord6);
     text-decoration: none;
     display: block;
+    line-height: 1.4;               /* Better line spacing for wrapped text */
 }
 
-.digest-title a:hover {
+.digest-title:hover {
     color: var(--nord8);
+}
+
+/* Theme list styling */
+.digest-theme-list {
+    font-weight: 400;               /* Normal weight for themes */
+    font-size: 0.875rem;            /* Slightly smaller */
+    color: var(--nord4);            /* Dimmer color */
+    white-space: nowrap;            /* Prevent breaking within parentheses */
+}
+
+/* Individual theme tags */
+.digest-theme-tag {
+    color: inherit;                 /* Inherit from digest-theme-list */
 }
 
 .digest-summary {
@@ -483,6 +504,21 @@ footer {
 
 .summary-content p {
     margin-bottom: 1rem;             /* 16px */
+}
+
+/* Citation links within summary */
+.summary-content a[href^="#article-"] {
+    color: var(--nord8);             /* Teal for citations */
+    text-decoration: none;
+    font-weight: 600;
+    padding: 0.125rem 0.25rem;       /* 2px 4px */
+    border-radius: 0.125rem;         /* 2px */
+    transition: background-color 0.2s;
+}
+
+.summary-content a[href^="#article-"]:hover {
+    background-color: rgba(136, 192, 208, 0.15);  /* Nord8 at 15% */
+    text-decoration: none;
 }
 
 /* Copy notification */
@@ -735,11 +771,28 @@ footer {
 .article-item {
     padding: 0.5rem 0;               /* 8px */
     border-bottom: 1px solid var(--nord1);
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, outline 0.2s;
 }
 
 .article-item:hover {
     background-color: rgba(59, 66, 82, 0.3);
+}
+
+/* Highlight article when targeted via citation link */
+.article-item:target {
+    background-color: rgba(136, 192, 208, 0.2);  /* Nord8 at 20% */
+    outline: 2px solid var(--nord8);
+    outline-offset: 2px;
+    animation: highlightPulse 0.6s ease-in-out;
+}
+
+@keyframes highlightPulse {
+    0%, 100% {
+        outline-color: var(--nord8);
+    }
+    50% {
+        outline-color: var(--nord9);  /* Brighter blue pulse */
+    }
 }
 
 .article-item.selected {

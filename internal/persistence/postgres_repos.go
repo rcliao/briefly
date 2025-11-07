@@ -1247,6 +1247,66 @@ func (r *postgresDigestRepo) ListByCluster(ctx context.Context, clusterID int, l
 	return []core.Digest{}, nil
 }
 
+// GetByID retrieves a digest by ID (alias for Get, for API consistency)
+func (r *postgresDigestRepo) GetByID(ctx context.Context, id string) (*core.Digest, error) {
+	return r.Get(ctx, id)
+}
+
+// GetDigestArticles retrieves all articles associated with a specific digest
+func (r *postgresDigestRepo) GetDigestArticles(ctx context.Context, digestID string) ([]core.Article, error) {
+	query := `
+		SELECT
+			a.id, a.url, a.title, a.content_type, a.cleaned_text, a.raw_content,
+			a.topic_cluster, a.cluster_confidence, a.date_fetched, a.embedding
+		FROM articles a
+		INNER JOIN digest_articles da ON a.id = da.article_id
+		WHERE da.digest_id = $1
+		ORDER BY da.citation_number ASC`
+
+	rows, err := r.query().QueryContext(ctx, query, digestID)
+	if err != nil {
+		return nil, fmt.Errorf("query articles for digest failed: %w", err)
+	}
+	defer rows.Close()
+
+	var articles []core.Article
+	for rows.Next() {
+		var article core.Article
+		var embedding []byte
+
+		err := rows.Scan(
+			&article.ID,
+			&article.URL,
+			&article.Title,
+			&article.ContentType,
+			&article.CleanedText,
+			&article.RawContent,
+			&article.TopicCluster,
+			&article.ClusterConfidence,
+			&article.DateFetched,
+			&embedding,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan article failed: %w", err)
+		}
+
+		// Deserialize embedding if present
+		if len(embedding) > 0 {
+			if err := json.Unmarshal(embedding, &article.Embedding); err != nil {
+				return nil, fmt.Errorf("unmarshal embedding failed: %w", err)
+			}
+		}
+
+		articles = append(articles, article)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration failed: %w", err)
+	}
+
+	return articles, nil
+}
+
 // postgresThemeRepo implements ThemeRepository for PostgreSQL (Phase 0)
 type postgresThemeRepo struct {
 	db *sql.DB

@@ -3,6 +3,7 @@ package pipeline
 import (
 	"briefly/internal/core"
 	"briefly/internal/narrative"
+	"briefly/internal/quality"
 	"context"
 	"fmt"
 	"time"
@@ -179,7 +180,7 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 
 	// Step 3: Generate embeddings for clustering
 	fmt.Printf("🧠 Step 3/9: Generating embeddings for clustering...\n")
-	embeddings, err := p.generateEmbeddings(ctx, summaries)
+	embeddings, err := p.generateEmbeddings(ctx, articles, summaries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embeddings: %w", err)
 	}
@@ -194,6 +195,16 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 
 	stats.ClustersGenerated = len(clusters)
 	fmt.Printf("   ✓ Created %d topic clusters\n\n", stats.ClustersGenerated)
+
+	// Quality Gate: Validate clustering quality
+	clusteringGate := NewClusteringQualityGate(
+		DefaultQualityGateConfig(),
+		clusters,
+		embeddings,
+	)
+	if err := clusteringGate.Validate(ctx); err != nil {
+		return nil, fmt.Errorf("clustering quality gate failed: %w", err)
+	}
 
 	// Step 5: Generate cluster narratives (hierarchical summarization)
 	fmt.Printf("📖 Step 5/9: Generating cluster narratives from ALL articles...\n")
@@ -211,6 +222,16 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 		}
 		fmt.Printf("   ✓ Generated %d cluster narratives\n", narrativeCount)
 		fmt.Printf("   ✓ Each narrative synthesizes ALL articles in its cluster\n\n")
+
+		// Quality Gate: Validate cluster narratives
+		narrativeGate := NewNarrativeQualityGate(
+			DefaultQualityGateConfig(),
+			clusters,
+		)
+		if err := narrativeGate.Validate(ctx); err != nil {
+			// Non-blocking: log warning but continue
+			fmt.Printf("   ⚠️  Narrative quality gate warning (non-blocking)\n")
+		}
 	}
 
 	// Step 6-9: Generate one digest per cluster (v2.0 architecture)
@@ -291,6 +312,12 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 				fmt.Printf("   • Continuing with markdown generation\n")
 			} else {
 				fmt.Printf("   ✓ Stored in database\n")
+
+				// Calculate and store quality metrics
+				if err := p.storeQualityMetrics(ctx, digest, clusterArticles); err != nil {
+					// Non-fatal: log warning but continue
+					fmt.Printf("   ⚠️  Quality metrics storage failed: %v\n", err)
+				}
 			}
 		}
 
@@ -458,24 +485,53 @@ func (p *Pipeline) processArticles(ctx context.Context, links []core.Link, stats
 	return articles, summaries, nil
 }
 
-// generateEmbeddings creates vector embeddings for all summaries
-func (p *Pipeline) generateEmbeddings(ctx context.Context, summaries []core.Summary) (map[string][]float64, error) {
+// generateEmbeddings creates vector embeddings for all articles using FULL CONTENT
+// This provides richer semantic information for clustering compared to using just summaries
+func (p *Pipeline) generateEmbeddings(ctx context.Context, articles []core.Article, summaries []core.Summary) (map[string][]float64, error) {
 	embeddings := make(map[string][]float64)
 	var failedCount int
 
-	for i, summary := range summaries {
-		fmt.Printf("   [%d/%d] Generating embedding for summary %s\n", i+1, len(summaries), summary.ID)
+	// Build article map for fast lookup
+	articleMap := make(map[string]*core.Article)
+	for i := range articles {
+		articleMap[articles[i].ID] = &articles[i]
+	}
 
-		embedding, err := p.embedder.GenerateEmbedding(ctx, summary.SummaryText)
+	for i, summary := range summaries {
+		fmt.Printf("   [%d/%d] Generating embedding for article %s\n", i+1, len(summaries), summary.ID)
+
+		// Get corresponding article
+		article, found := articleMap[summary.ArticleIDs[0]] // Summary.ArticleIDs[0] is the article ID
+		if !found {
+			fmt.Printf("           ✗ Article not found for summary %s\n", summary.ID)
+			failedCount++
+			continue
+		}
+
+		// Use first 2000 words of article content for richer semantics
+		// This provides much better clustering than using just 150-word summaries
+		embeddingText := article.CleanedText
+		maxChars := 2000 * 5 // ~2000 words (assuming avg 5 chars/word)
+		if len(embeddingText) > maxChars {
+			embeddingText = embeddingText[:maxChars]
+		}
+
+		// Fallback to summary if article content is too short
+		if len(embeddingText) < 200 {
+			fmt.Printf("           ⚠️  Article content too short (%d chars), using summary\n", len(embeddingText))
+			embeddingText = summary.SummaryText
+		}
+
+		embedding, err := p.embedder.GenerateEmbedding(ctx, embeddingText)
 		if err != nil {
-			// Log error but continue with other summaries
+			// Log error but continue with other articles
 			fmt.Printf("           ✗ Embedding generation failed: %v\n", err)
 			failedCount++
 			continue
 		}
 
 		embeddings[summary.ID] = embedding
-		fmt.Printf("           ✓ Embedding generated (%d dimensions)\n", len(embedding))
+		fmt.Printf("           ✓ Embedding generated (%d dimensions, %d chars)\n", len(embedding), len(embeddingText))
 	}
 
 	if len(embeddings) == 0 {
@@ -719,6 +775,7 @@ func (p *Pipeline) getCategoryPriority(category string) int {
 // This ensures article numbering in the prompt matches the final output
 // generateDigestContentWithNarratives generates digest content using cluster narratives (hierarchical summarization)
 // This is the NEW approach that uses cluster-level summaries instead of individual articles
+// NOW WITH SELF-CRITIQUE: Always runs quality refinement pass for maximum quality
 func (p *Pipeline) generateDigestContentWithNarratives(ctx context.Context, clusters []core.TopicCluster, articles []core.Article, summaries []core.Summary) (*narrative.DigestContent, error) {
 	if len(clusters) == 0 {
 		return nil, fmt.Errorf("no clusters provided")
@@ -728,19 +785,31 @@ func (p *Pipeline) generateDigestContentWithNarratives(ctx context.Context, clus
 	articleMap := articlesToMap(articles)
 	summaryMap := summariesToMap(summaries)
 
-	// Check if we have a narrative generator that supports cluster narratives
-	type ContentGenerator interface {
-		GenerateDigestContent(ctx context.Context, clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (*narrative.DigestContent, error)
+	// Check if we have a narrative generator that supports cluster narratives with critique
+	type ContentGeneratorWithCritique interface {
+		GenerateDigestContentWithCritique(ctx context.Context, clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary, config narrative.CritiqueConfig) (*narrative.DigestContent, error)
 	}
 
-	gen, ok := p.narrative.(ContentGenerator)
+	gen, ok := p.narrative.(ContentGeneratorWithCritique)
 	if !ok {
-		return nil, fmt.Errorf("narrative generator does not support digest content generation")
+		// Fallback to base generator without critique (backward compatibility)
+		type ContentGenerator interface {
+			GenerateDigestContent(ctx context.Context, clusters []core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (*narrative.DigestContent, error)
+		}
+
+		baseGen, ok := p.narrative.(ContentGenerator)
+		if !ok {
+			return nil, fmt.Errorf("narrative generator does not support digest content generation")
+		}
+
+		fmt.Printf("   ⚠️  Using legacy generator without self-critique\n")
+		return baseGen.GenerateDigestContent(ctx, clusters, articleMap, summaryMap)
 	}
 
-	// Pass clusters with narratives directly to the generator
-	// The generator will check if narratives exist and use them, otherwise fall back to legacy approach
-	return gen.GenerateDigestContent(ctx, clusters, articleMap, summaryMap)
+	// Use NEW generator with self-critique refinement pass
+	// This ensures quality through always-on critique (signal over noise)
+	critiqueConfig := narrative.DefaultCritiqueConfig()
+	return gen.GenerateDigestContentWithCritique(ctx, clusters, articleMap, summaryMap, critiqueConfig)
 }
 
 // checkArticleCache checks if an article and its summary are cached
@@ -797,4 +866,38 @@ func summariesToMap(summaries []core.Summary) map[string]core.Summary {
 
 func generateID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
+}
+
+// storeQualityMetrics calculates and stores quality metrics for a digest
+func (p *Pipeline) storeQualityMetrics(ctx context.Context, digest *core.Digest, articles []core.Article) error {
+	// Create quality evaluator
+	evaluator := quality.NewDigestEvaluator()
+
+	// Evaluate digest quality
+	metrics := evaluator.EvaluateDigest(digest, articles)
+
+	// Log quality metrics to console
+	fmt.Printf("   📊 Quality Metrics:\n")
+	fmt.Printf("      • Coverage: %.0f%% (%d/%d articles cited)\n",
+		metrics.CoveragePct*100, metrics.CitationsFound, metrics.ArticleCount)
+	fmt.Printf("      • Vague phrases: %d\n", metrics.VaguePhrases)
+	fmt.Printf("      • Specificity: %d/100\n", metrics.SpecificityScore)
+	fmt.Printf("      • Citation density: %.2f per 100 words\n", metrics.CitationDensity)
+	fmt.Printf("      • Grade: %s\n", metrics.Grade)
+	if metrics.Passed {
+		fmt.Printf("      • Status: ✓ PASSED\n")
+	} else {
+		fmt.Printf("      • Status: ⚠️  NEEDS IMPROVEMENT\n")
+		if len(metrics.Warnings) > 0 {
+			fmt.Printf("      • Warnings:\n")
+			for _, warning := range metrics.Warnings {
+				fmt.Printf("        - %s\n", warning)
+			}
+		}
+	}
+
+	// TODO: Store metrics in database using quality_thresholds table
+	// For now, metrics are logged to console for visibility
+
+	return nil
 }

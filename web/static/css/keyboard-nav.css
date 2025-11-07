@@ -184,38 +184,56 @@ body.context-theme .theme-tab.cursor.selected {
 
 /* Consistent colors for themes across tabs and digest tags */
 
-/* AI Applications & Use Cases - Light Blue */
-.theme-tab[data-theme-id="theme-ai-applications"],
-.digest-theme-tag[data-theme-name="AI Applications & Use Cases"] {
-  color: var(--nord9, #81a1c1);
-}
-
-/* AI Development Tools & Platforms - Green */
-.theme-tab[data-theme-id="theme-ai-dev-tools"],
-.digest-theme-tag[data-theme-name="AI Development Tools & Platforms"] {
-  color: var(--nord14, #a3be8c);
-}
-
-/* LLM Models & Research - Purple */
-.theme-tab[data-theme-id="theme-llm-research"],
-.digest-theme-tag[data-theme-name="LLM Models & Research"] {
+/* GenAI - Purple (AI/innovation color) */
+.theme-tab[data-theme-id="theme-genai"],
+.digest-theme-tag[data-theme-name="GenAI"] {
   color: var(--nord15, #b48ead);
 }
 
-/* Unknown Theme - Yellow */
-.digest-theme-tag[data-theme-name="Unknown Theme"] {
+/* Gaming - Red (energy/excitement color) */
+.theme-tab[data-theme-id="theme-gaming"],
+.digest-theme-tag[data-theme-name="Gaming"] {
+  color: var(--nord11, #bf616a);
+}
+
+/* Technology - Light Blue (tech/innovation color) */
+.theme-tab[data-theme-id="theme-technology"],
+.digest-theme-tag[data-theme-name="Technology"] {
+  color: var(--nord9, #81a1c1);
+}
+
+/* Healthcare - Green (health/growth color) */
+.theme-tab[data-theme-id="theme-healthcare"],
+.digest-theme-tag[data-theme-name="Healthcare"] {
+  color: var(--nord14, #a3be8c);
+}
+
+/* Finance - Yellow/Gold (wealth/business color) */
+.theme-tab[data-theme-id="theme-business"],
+.digest-theme-tag[data-theme-name="Finance"] {
   color: var(--nord13, #ebcb8b);
 }
 
-/* Legacy themes fallback colors */
+/* Unknown Theme - Orange (neutral warning color) */
+.digest-theme-tag[data-theme-name="Unknown Theme"] {
+  color: var(--nord12, #d08770);
+}
+
+/* Legacy themes fallback colors (for backward compatibility) */
+.theme-tab[data-theme-id="theme-ai-applications"],
+.digest-theme-tag[data-theme-name="AI Applications & Use Cases"],
+.theme-tab[data-theme-id="theme-ai-dev-tools"],
+.digest-theme-tag[data-theme-name="AI Development Tools & Platforms"],
+.theme-tab[data-theme-id="theme-llm-research"],
+.digest-theme-tag[data-theme-name="LLM Models & Research"],
 .theme-tab[data-theme-id="theme-ai-ml"],
 .digest-theme-tag[data-theme-name="AI & Machine Learning"] {
-  color: var(--nord9, #81a1c1);
+  color: var(--nord15, #b48ead); /* Map to GenAI color */
 }
 
 .theme-tab[data-theme-id="theme-security"],
 .digest-theme-tag[data-theme-name="Security & Privacy"] {
-  color: var(--nord12, #d08770);
+  color: var(--nord9, #81a1c1); /* Map to Technology color */
 }
 
 /* Grey metadata row */
