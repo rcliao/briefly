@@ -208,7 +208,7 @@ func TestDeduplicateURLs(t *testing.T) {
 	input := []string{
 		"https://example.com/article1",
 		"https://example.com/article2",
-		"https://example.com/article1", // Duplicate
+		"https://example.com/article1",                    // Duplicate
 		"https://example.com/article1?utm_source=twitter", // Duplicate after normalization
 		"https://example.com/article3",
 	}

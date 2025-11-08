@@ -134,11 +134,11 @@ func (c *Categorizer) heuristicCategorize(article *core.Article, summary *core.S
 
 	// Check URL patterns for platform updates
 	if strings.Contains(urlLower, "/blog") || strings.Contains(urlLower, "/news") ||
-	   strings.Contains(urlLower, "/changelog") || strings.Contains(urlLower, "/release") {
+		strings.Contains(urlLower, "/changelog") || strings.Contains(urlLower, "/release") {
 		if strings.Contains(urlLower, "anthropic.com") ||
-		   strings.Contains(urlLower, "openai.com") ||
-		   strings.Contains(urlLower, "google") ||
-		   strings.Contains(urlLower, "microsoft.com") {
+			strings.Contains(urlLower, "openai.com") ||
+			strings.Contains(urlLower, "google") ||
+			strings.Contains(urlLower, "microsoft.com") {
 			return "Platform Updates"
 		}
 	}

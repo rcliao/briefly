@@ -123,10 +123,10 @@ func (t *TracedSummarizer) trackStructuredSections(trace *observability.TraceCli
 	keyPointsSpan := t.langfuse.CreateSpan(trace, observability.SpanOptions{
 		Name: "section_key_points",
 		Metadata: map[string]string{
-			"count":          fmt.Sprintf("%d", len(content.KeyPoints)),
-			"total_length":   fmt.Sprintf("%d", totalLength(content.KeyPoints)),
-			"avg_length":     fmt.Sprintf("%.1f", avgLength(content.KeyPoints)),
-			"section_type":   "required",
+			"count":        fmt.Sprintf("%d", len(content.KeyPoints)),
+			"total_length": fmt.Sprintf("%d", totalLength(content.KeyPoints)),
+			"avg_length":   fmt.Sprintf("%.1f", avgLength(content.KeyPoints)),
+			"section_type": "required",
 		},
 	})
 	t.langfuse.EndSpan(keyPointsSpan, map[string]interface{}{
@@ -200,18 +200,18 @@ func (t *TracedSummarizer) trackStructuredSections(trace *observability.TraceCli
 	qualitySpan := t.langfuse.CreateSpan(trace, observability.SpanOptions{
 		Name: "structure_quality_metrics",
 		Metadata: map[string]string{
-			"key_points_count":      fmt.Sprintf("%d", len(content.KeyPoints)),
-			"optional_sections":     fmt.Sprintf("%d", optionalSectionsCount(content)),
-			"completeness_score":    fmt.Sprintf("%.2f", completenessScore(content)),
-			"total_content_length":  fmt.Sprintf("%d", totalContentLength(content)),
+			"key_points_count":     fmt.Sprintf("%d", len(content.KeyPoints)),
+			"optional_sections":    fmt.Sprintf("%d", optionalSectionsCount(content)),
+			"completeness_score":   fmt.Sprintf("%.2f", completenessScore(content)),
+			"total_content_length": fmt.Sprintf("%d", totalContentLength(content)),
 		},
 	})
 	t.langfuse.EndSpan(qualitySpan, map[string]interface{}{
 		"quality_metrics": map[string]interface{}{
-			"key_points_count":    len(content.KeyPoints),
-			"optional_sections":   optionalSectionsCount(content),
-			"completeness_score":  completenessScore(content),
-			"total_length":        totalContentLength(content),
+			"key_points_count":   len(content.KeyPoints),
+			"optional_sections":  optionalSectionsCount(content),
+			"completeness_score": completenessScore(content),
+			"total_length":       totalContentLength(content),
 		},
 	}, nil)
 }

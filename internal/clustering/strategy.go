@@ -360,7 +360,7 @@ type StrategyComparison struct {
 func (c *StrategyComparison) PrintComparison() {
 	fmt.Println("\n═══════════════════════════════════════════════════════════════════")
 	fmt.Printf("CLUSTERING STRATEGY COMPARISON (%d articles)\n", c.NumArticles)
-	fmt.Println("═══════════════════════════════════════════════════════════════════\n")
+	fmt.Println("═══════════════════════════════════════════════════════════════════")
 
 	// K-means results
 	fmt.Println("K-MEANS:")
@@ -395,5 +395,5 @@ func (c *StrategyComparison) PrintComparison() {
 		fmt.Printf("%s WINNER: %s (margin: %.3f)\n", icon, c.Winner, math.Abs(c.WinnerMargin))
 	}
 
-	fmt.Println("═══════════════════════════════════════════════════════════════════\n")
+	fmt.Println("═══════════════════════════════════════════════════════════════════")
 }

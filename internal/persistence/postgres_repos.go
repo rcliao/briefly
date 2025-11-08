@@ -927,8 +927,8 @@ func (r *postgresDigestRepo) List(ctx context.Context, opts ListOptions) ([]core
 		// Unmarshal legacy content JSONB for Metadata and fallback ArticleGroups
 		if len(contentJSON) > 0 {
 			var legacyData struct {
-				ArticleGroups []core.ArticleGroup  `json:"article_groups"`
-				Metadata      core.DigestMetadata  `json:"metadata"`
+				ArticleGroups []core.ArticleGroup `json:"article_groups"`
+				Metadata      core.DigestMetadata `json:"metadata"`
 				DigestSummary string              `json:"summary"`
 			}
 			if err := json.Unmarshal(contentJSON, &legacyData); err == nil {
@@ -1010,9 +1010,9 @@ func (r *postgresDigestRepo) StoreWithRelationships(ctx context.Context, digest 
 
 	// Build legacy content JSONB for backward compatibility
 	contentJSON := map[string]interface{}{
-		"summary":  digest.Summary,
-		"title":    digest.Title,
-		"my_take":  "",
+		"summary": digest.Summary,
+		"title":   digest.Title,
+		"my_take": "",
 		"metadata": map[string]interface{}{
 			"title":          digest.Title,
 			"tldr_summary":   digest.TLDRSummary,
@@ -1039,16 +1039,16 @@ func (r *postgresDigestRepo) StoreWithRelationships(ctx context.Context, digest 
 
 	_, err = tx.ExecContext(ctx, query,
 		digest.ID,
-		dateValue,               // Legacy date column
-		contentJSONBytes,        // Legacy content JSONB column
-		digest.Title,            // Legacy title column
-		digest.Summary,          // v2.0 summary field
-		digest.TLDRSummary,      // v2.0 tldr
-		keyMomentsJSON,          // v2.0
-		perspectivesJSON,        // v2.0
-		digest.ClusterID,        // v2.0
-		digest.ProcessedDate,    // v2.0
-		digest.ArticleCount,     // v2.0
+		dateValue,            // Legacy date column
+		contentJSONBytes,     // Legacy content JSONB column
+		digest.Title,         // Legacy title column
+		digest.Summary,       // v2.0 summary field
+		digest.TLDRSummary,   // v2.0 tldr
+		keyMomentsJSON,       // v2.0
+		perspectivesJSON,     // v2.0
+		digest.ClusterID,     // v2.0
+		digest.ProcessedDate, // v2.0
+		digest.ArticleCount,  // v2.0
 		time.Now().UTC(),
 	)
 	if err != nil {

@@ -62,7 +62,7 @@ func (s *Server) handleListDigests(w http.ResponseWriter, r *http.Request) {
 
 	// List digests from database
 	digests, err := s.db.Digests().List(ctx, persistence.ListOptions{
-		Limit:  50,  // Show last 50 digests
+		Limit:  50, // Show last 50 digests
 		Offset: 0,
 	})
 

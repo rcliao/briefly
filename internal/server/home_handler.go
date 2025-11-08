@@ -23,15 +23,15 @@ type HomePageData struct {
 	LatestDigestDate time.Time
 
 	// Pagination
-	HasMore          bool
-	HasPrevious      bool
-	CurrentPage      int
-	TotalPages       int
-	NextPage         int
-	PreviousPage     int
-	PageSize         int
+	HasMore      bool
+	HasPrevious  bool
+	CurrentPage  int
+	TotalPages   int
+	NextPage     int
+	PreviousPage int
+	PageSize     int
 
-	CurrentYear      int
+	CurrentYear int
 
 	// PostHog integration
 	PostHogEnabled bool
@@ -60,11 +60,11 @@ type DigestSummaryView struct {
 
 // DigestMetadataView contains digest metadata for the view
 type DigestMetadataView struct {
-	Title        string
-	ArticleCount int
-	ThemeCount   int
+	Title         string
+	ArticleCount  int
+	ThemeCount    int
 	DateGenerated time.Time
-	QualityScore float64
+	QualityScore  float64
 }
 
 // handleHomePage renders the homepage with theme tabs and digests
@@ -243,18 +243,18 @@ func (s *Server) getHomePageData(ctx context.Context, activeThemeID string, page
 		LatestDigestDate: latestDate,
 
 		// Pagination
-		HasMore:          page < totalPages,
-		HasPrevious:      page > 1,
-		CurrentPage:      page,
-		TotalPages:       totalPages,
-		NextPage:         page + 1,
-		PreviousPage:     page - 1,
-		PageSize:         digestsPerPage,
+		HasMore:      page < totalPages,
+		HasPrevious:  page > 1,
+		CurrentPage:  page,
+		TotalPages:   totalPages,
+		NextPage:     page + 1,
+		PreviousPage: page - 1,
+		PageSize:     digestsPerPage,
 
-		CurrentYear:      time.Now().Year(),
-		PostHogEnabled:   postHogEnabled,
-		PostHogAPIKey:    postHogAPIKey,
-		PostHogHost:      postHogHost,
+		CurrentYear:    time.Now().Year(),
+		PostHogEnabled: postHogEnabled,
+		PostHogAPIKey:  postHogAPIKey,
+		PostHogHost:    postHogHost,
 	}, nil
 }
 

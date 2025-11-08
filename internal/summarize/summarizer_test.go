@@ -10,15 +10,15 @@ import (
 
 // MockLLMClient implements LLMClient for testing
 type MockLLMClient struct {
-	responses map[string]string
-	callCount int
+	responses  map[string]string
+	callCount  int
 	shouldFail bool
 }
 
 func NewMockLLMClient() *MockLLMClient {
 	return &MockLLMClient{
-		responses: make(map[string]string),
-		callCount: 0,
+		responses:  make(map[string]string),
+		callCount:  0,
 		shouldFail: false,
 	}
 }

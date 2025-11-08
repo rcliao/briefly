@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/generative-ai-go/genai"
 	"briefly/internal/core"
 	"briefly/internal/llm"
+	"github.com/google/generative-ai-go/genai"
 )
 
 // CritiqueResult contains the critique and improved digest
 type CritiqueResult struct {
-	Critique        *Critique       `json:"critique"`
-	ImprovedDigest  *DigestContent  `json:"improved_digest"`
-	QualityImproved bool            `json:"quality_improved"`
+	Critique        *Critique      `json:"critique"`
+	ImprovedDigest  *DigestContent `json:"improved_digest"`
+	QualityImproved bool           `json:"quality_improved"`
 }
 
 // Critique contains detailed analysis of digest quality issues
@@ -358,16 +358,16 @@ func (g *Generator) ShouldRunCritique(draftDigest *DigestContent, config Critiqu
 
 // CritiqueConfig holds configuration for self-critique pass
 type CritiqueConfig struct {
-	AlwaysRun       bool    // Run critique on every digest
-	MinQualityGrade string  // Run critique if quality below this grade (A/B/C/D)
-	MaxRetries      int     // Maximum retry attempts
+	AlwaysRun       bool   // Run critique on every digest
+	MinQualityGrade string // Run critique if quality below this grade (A/B/C/D)
+	MaxRetries      int    // Maximum retry attempts
 }
 
 // DefaultCritiqueConfig returns default configuration
 func DefaultCritiqueConfig() CritiqueConfig {
 	return CritiqueConfig{
-		AlwaysRun:       true,  // Always run for maximum quality
-		MinQualityGrade: "B",   // Critique if below B grade
-		MaxRetries:      1,     // One refinement pass
+		AlwaysRun:       true, // Always run for maximum quality
+		MinQualityGrade: "B",  // Critique if below B grade
+		MaxRetries:      1,    // One refinement pass
 	}
 }

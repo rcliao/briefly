@@ -39,12 +39,12 @@ func (w *simpleClassifierWrapper) GetBestMatch(ctx context.Context, article core
 // NewClassifyCmd creates the classify command for article theme classification
 func NewClassifyCmd() *cobra.Command {
 	var (
-		maxArticles    int
-		minRelevance   float64
-		themeFilter    string
-		concurrency    int
-		dryRun         bool
-		withLangfuse   bool
+		maxArticles  int
+		minRelevance float64
+		themeFilter  string
+		concurrency  int
+		dryRun       bool
+		withLangfuse bool
 	)
 
 	cmd := &cobra.Command{

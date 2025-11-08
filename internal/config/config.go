@@ -43,14 +43,14 @@ type Database struct {
 
 // Server holds HTTP server configuration
 type Server struct {
-	Host            string        `mapstructure:"host"`
-	Port            int           `mapstructure:"port"`
-	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
-	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
-	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
-	StaticDir       string        `mapstructure:"static_dir"`
-	TemplateDir     string        `mapstructure:"template_dir"`
-	CORS            CORSConfig    `mapstructure:"cors"`
+	Host            string          `mapstructure:"host"`
+	Port            int             `mapstructure:"port"`
+	ReadTimeout     time.Duration   `mapstructure:"read_timeout"`
+	WriteTimeout    time.Duration   `mapstructure:"write_timeout"`
+	ShutdownTimeout time.Duration   `mapstructure:"shutdown_timeout"`
+	StaticDir       string          `mapstructure:"static_dir"`
+	TemplateDir     string          `mapstructure:"template_dir"`
+	CORS            CORSConfig      `mapstructure:"cors"`
 	RateLimit       RateLimitConfig `mapstructure:"rate_limit"`
 }
 
@@ -396,7 +396,7 @@ type PostHogConfig struct {
 // Themes holds theme classification configuration
 type Themes struct {
 	Enabled             bool    `mapstructure:"enabled"`
-	MinRelevanceScore   float64 `mapstructure:"min_relevance_score"` // 0.0-1.0, minimum score to assign theme
+	MinRelevanceScore   float64 `mapstructure:"min_relevance_score"`  // 0.0-1.0, minimum score to assign theme
 	ClassificationModel string  `mapstructure:"classification_model"` // LLM model to use for classification
 }
 
@@ -939,8 +939,8 @@ func IsLangFuseEnabled() bool           { return Get().Observability.LangFuse.En
 func IsPostHogEnabled() bool            { return Get().Observability.PostHog.Enabled }
 
 // Themes convenience getters
-func IsThemesEnabled() bool            { return Get().Themes.Enabled }
-func GetThemeMinRelevance() float64    { return Get().Themes.MinRelevanceScore }
+func IsThemesEnabled() bool               { return Get().Themes.Enabled }
+func GetThemeMinRelevance() float64       { return Get().Themes.MinRelevanceScore }
 func GetThemeClassificationModel() string { return Get().Themes.ClassificationModel }
 
 // GenerateTeamContextPrompt creates a formatted prompt string for LLM context

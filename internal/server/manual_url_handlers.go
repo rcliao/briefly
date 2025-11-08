@@ -138,7 +138,7 @@ func (s *Server) handleSubmitURLs(w http.ResponseWriter, r *http.Request) {
 
 	response := SubmitURLResponse{
 		Submitted: []ManualURLResponse{},
-		Failed:    []struct {
+		Failed: []struct {
 			URL   string `json:"url"`
 			Error string `json:"error"`
 		}{},

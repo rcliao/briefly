@@ -111,7 +111,7 @@ func qualityAuditRun(cmd *cobra.Command, limit int, since int, verbose bool) {
 		// Verbose mode: show detailed metrics for each digest
 		fmt.Println("═══════════════════════════════════════════════════════════════════")
 		fmt.Println("DETAILED QUALITY REPORT (per digest)")
-		fmt.Println("═══════════════════════════════════════════════════════════════════\n")
+		fmt.Println("═══════════════════════════════════════════════════════════════════")
 
 		for _, digest := range digests {
 			articles := articlesMap[digest.ID]
@@ -198,7 +198,7 @@ func printRecommendations(report *quality.AuditReport) {
 	fmt.Println("\n═══════════════════════════════════════════════════════════════════")
 	fmt.Println("💡 For comprehensive improvement strategies, see:")
 	fmt.Println("   docs/digest-improvement-plan.md")
-	fmt.Println("═══════════════════════════════════════════════════════════════════\n")
+	fmt.Println("═══════════════════════════════════════════════════════════════════")
 }
 
 // NewQualityReportCmd creates the quality report command for a specific digest
@@ -400,7 +400,7 @@ func analyzeTrends(digests []core.Digest, articlesMap map[string][]core.Article)
 	// Calculate averages and print
 	fmt.Println("═══════════════════════════════════════════════════════════════════")
 	fmt.Println("QUALITY TRENDS (by week)")
-	fmt.Println("═══════════════════════════════════════════════════════════════════\n")
+	fmt.Println("═══════════════════════════════════════════════════════════════════")
 	fmt.Printf("%-12s  %5s  %8s  %9s  %11s  %s\n",
 		"Week", "Count", "Coverage", "Vagueness", "Specificity", "Grades (A/B/C/D)")
 	fmt.Println("───────────────────────────────────────────────────────────────────")
@@ -438,7 +438,7 @@ func analyzeTrends(digests []core.Digest, articlesMap map[string][]core.Article)
 			ws.gradeACounts, ws.gradeBCounts, ws.gradeCCounts, ws.gradeDCounts)
 	}
 
-	fmt.Println("═══════════════════════════════════════════════════════════════════\n")
+	fmt.Println("═══════════════════════════════════════════════════════════════════")
 
 	// Simple trend detection
 	if len(weeks) >= 4 {
@@ -474,7 +474,7 @@ func analyzeTrends(digests []core.Digest, articlesMap map[string][]core.Article)
 			} else {
 				fmt.Printf("🟡 Coverage stable: %.0f%% → %.0f%% (%.1f%%)\n", firstAvg, secondAvg, change)
 			}
-			fmt.Println("═══════════════════════════════════════════════════════════════════\n")
+			fmt.Println("═══════════════════════════════════════════════════════════════════")
 		}
 	}
 }

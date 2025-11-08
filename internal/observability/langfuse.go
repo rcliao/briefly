@@ -34,11 +34,11 @@ type SpanClient struct {
 
 // TraceOptions contains options for creating traces
 type TraceOptions struct {
-	Name       string            // Trace name (e.g., "article_summarization")
-	UserID     string            // Optional user identifier
-	SessionID  string            // Optional session identifier
-	Tags       []string          // Optional tags for filtering
-	Metadata   map[string]string // Optional metadata
+	Name      string            // Trace name (e.g., "article_summarization")
+	UserID    string            // Optional user identifier
+	SessionID string            // Optional session identifier
+	Tags      []string          // Optional tags for filtering
+	Metadata  map[string]string // Optional metadata
 }
 
 // SpanOptions contains options for creating spans within a trace
@@ -211,11 +211,11 @@ func (l *LangFuseClient) estimateCost(model string, promptTokens, completionToke
 	switch {
 	case model == "gemini-flash-lite-latest":
 		// Gemini Flash pricing example
-		promptCostPer1M = 0.075      // $0.075 per 1M input tokens
-		completionCostPer1M = 0.30   // $0.30 per 1M output tokens
+		promptCostPer1M = 0.075    // $0.075 per 1M input tokens
+		completionCostPer1M = 0.30 // $0.30 per 1M output tokens
 	case model == "text-embedding-004":
 		// Embedding pricing example
-		promptCostPer1M = 0.00001    // Very cheap for embeddings
+		promptCostPer1M = 0.00001 // Very cheap for embeddings
 		completionCostPer1M = 0.0
 	default:
 		// Default conservative estimate

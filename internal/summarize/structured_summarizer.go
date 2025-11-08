@@ -19,26 +19,26 @@ func CreateStructuredSummarySchema() *genai.Schema {
 		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
 			"key_points": {
-				Type: genai.TypeArray,
+				Type:        genai.TypeArray,
 				Description: "3-5 key bullet points that capture the essential information",
 				Items: &genai.Schema{
 					Type: genai.TypeString,
 				},
 			},
 			"context": {
-				Type: genai.TypeString,
+				Type:        genai.TypeString,
 				Description: "Background information explaining why this article matters (2-3 sentences)",
 			},
 			"main_insight": {
-				Type: genai.TypeString,
+				Type:        genai.TypeString,
 				Description: "The core takeaway or most important finding (1-2 sentences)",
 			},
 			"technical_details": {
-				Type: genai.TypeString,
+				Type:        genai.TypeString,
 				Description: "Technical aspects, methodologies, or specific details for those who want deeper understanding (optional, can be empty if not applicable)",
 			},
 			"impact": {
-				Type: genai.TypeString,
+				Type:        genai.TypeString,
 				Description: "Who this affects and how - practical implications (optional, can be empty if not applicable)",
 			},
 		},
@@ -135,10 +135,10 @@ func (s *Summarizer) SummarizeArticleStructured(ctx context.Context, article *co
 
 	// Create summary object
 	summary := &core.Summary{
-		ID:          uuid.NewString(),
-		ArticleIDs:  []string{article.ID},
-		SummaryText: plainText,
-		ModelUsed:   s.options.ModelName,
+		ID:            uuid.NewString(),
+		ArticleIDs:    []string{article.ID},
+		SummaryText:   plainText,
+		ModelUsed:     s.options.ModelName,
 		DateGenerated: time.Now().UTC(),
 
 		// Phase 1: Structured summary fields

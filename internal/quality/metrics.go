@@ -25,24 +25,24 @@ type DigestQualityMetrics struct {
 	SpecificityScore int  `json:"specificity_score"` // 0-100
 
 	// Citation analysis
-	CitationDensity  float64 `json:"citation_density"` // Citations per 100 words
-	UncitedArticles  []int   `json:"uncited_articles,omitempty"`
+	CitationDensity float64 `json:"citation_density"` // Citations per 100 words
+	UncitedArticles []int   `json:"uncited_articles,omitempty"`
 
 	// Quality assessment
-	Grade    string   `json:"grade"`     // A/B/C/D
+	Grade    string   `json:"grade"` // A/B/C/D
 	Warnings []string `json:"warnings"`
-	Passed   bool     `json:"passed"`    // Overall pass/fail
+	Passed   bool     `json:"passed"` // Overall pass/fail
 }
 
 // ClusterCoherenceMetrics contains quality metrics for topic clustering
 type ClusterCoherenceMetrics struct {
 	// Cluster count
-	NumClusters     int     `json:"num_clusters"`
-	NumArticles     int     `json:"num_articles"`
-	AvgClusterSize  float64 `json:"avg_cluster_size"`
+	NumClusters    int     `json:"num_clusters"`
+	NumArticles    int     `json:"num_articles"`
+	AvgClusterSize float64 `json:"avg_cluster_size"`
 
 	// Silhouette scores (range: -1 to 1, higher is better)
-	AvgSilhouette    float64   `json:"avg_silhouette"`     // Overall clustering quality
+	AvgSilhouette      float64   `json:"avg_silhouette"`      // Overall clustering quality
 	ClusterSilhouettes []float64 `json:"cluster_silhouettes"` // Per-cluster scores
 
 	// Cohesion metrics (0 to 1, higher is better)
@@ -61,17 +61,17 @@ type ClusterCoherenceMetrics struct {
 // QualityThresholds defines minimum acceptable quality levels
 type QualityThresholds struct {
 	// Digest quality
-	MinCoveragePct       float64 `yaml:"min_coverage_pct"`       // Default: 0.80 (80%)
-	MaxVaguePhrases      int     `yaml:"max_vague_phrases"`      // Default: 2
-	MinWordCount         int     `yaml:"min_word_count"`         // Default: 150
-	MaxWordCount         int     `yaml:"max_word_count"`         // Default: 400
-	MinSpecificityScore  int     `yaml:"min_specificity_score"`  // Default: 50
-	MinCitationDensity   float64 `yaml:"min_citation_density"`   // Default: 2.0 (2 citations per 100 words)
+	MinCoveragePct      float64 `yaml:"min_coverage_pct"`      // Default: 0.80 (80%)
+	MaxVaguePhrases     int     `yaml:"max_vague_phrases"`     // Default: 2
+	MinWordCount        int     `yaml:"min_word_count"`        // Default: 150
+	MaxWordCount        int     `yaml:"max_word_count"`        // Default: 400
+	MinSpecificityScore int     `yaml:"min_specificity_score"` // Default: 50
+	MinCitationDensity  float64 `yaml:"min_citation_density"`  // Default: 2.0 (2 citations per 100 words)
 
 	// Cluster quality
-	MinSilhouetteScore   float64 `yaml:"min_silhouette_score"`   // Default: 0.3
-	MinIntraClusterSim   float64 `yaml:"min_intra_cluster_sim"`  // Default: 0.5
-	MinInterClusterDist  float64 `yaml:"min_inter_cluster_dist"` // Default: 0.3
+	MinSilhouetteScore  float64 `yaml:"min_silhouette_score"`   // Default: 0.3
+	MinIntraClusterSim  float64 `yaml:"min_intra_cluster_sim"`  // Default: 0.5
+	MinInterClusterDist float64 `yaml:"min_inter_cluster_dist"` // Default: 0.3
 
 	// Grade cutoffs
 	GradeAThresholds GradeThresholds `yaml:"grade_a"`
@@ -81,12 +81,12 @@ type QualityThresholds struct {
 
 // GradeThresholds defines requirements for each grade level
 type GradeThresholds struct {
-	MinCoverage      float64 `yaml:"min_coverage"`
-	MaxVague         int     `yaml:"max_vague"`
-	MinSpecificity   int     `yaml:"min_specificity"`
-	RequireNumbers   bool    `yaml:"require_numbers"`
-	RequireNames     bool    `yaml:"require_names"`
-	MinSilhouette    float64 `yaml:"min_silhouette"`
+	MinCoverage    float64 `yaml:"min_coverage"`
+	MaxVague       int     `yaml:"max_vague"`
+	MinSpecificity int     `yaml:"min_specificity"`
+	RequireNumbers bool    `yaml:"require_numbers"`
+	RequireNames   bool    `yaml:"require_names"`
+	MinSilhouette  float64 `yaml:"min_silhouette"`
 }
 
 // DefaultThresholds returns the default quality thresholds
@@ -168,10 +168,10 @@ func DetectVaguePhrases(text string) (count int, found []string) {
 func DetectNumbers(text string) (count int, hasNumbers bool) {
 	// Regex for numbers: percentages, dollar amounts, numbers with commas, multipliers
 	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`\d+%`),                    // 40%
-		regexp.MustCompile(`\d+x`),                    // 10x
+		regexp.MustCompile(`\d+%`),                     // 40%
+		regexp.MustCompile(`\d+x`),                     // 10x
 		regexp.MustCompile(`\$[\d,]+(?:\.\d+)?[BMK]?`), // $1.5M, $100K
-		regexp.MustCompile(`[\d,]+`),                  // 1,000 or 42
+		regexp.MustCompile(`[\d,]+`),                   // 1,000 or 42
 	}
 
 	for _, pattern := range patterns {
@@ -232,18 +232,14 @@ func ExtractCitations(text string) []int {
 
 	for _, match := range matches {
 		if len(match) > 1 {
-			var citationNum int
-			// Parse citation number
-			if _, err := regexp.MatchString(`^\d+$`, match[1]); err == nil {
-				// Convert to int
-				citationNum = 0
-				for _, c := range match[1] {
-					citationNum = citationNum*10 + int(c-'0')
-				}
-				if !citationMap[citationNum] {
-					citationMap[citationNum] = true
-					citations = append(citations, citationNum)
-				}
+			// Convert to int (match[1] is guaranteed to be digits from the regex pattern)
+			citationNum := 0
+			for _, c := range match[1] {
+				citationNum = citationNum*10 + int(c-'0')
+			}
+			if !citationMap[citationNum] {
+				citationMap[citationNum] = true
+				citations = append(citations, citationNum)
 			}
 		}
 	}

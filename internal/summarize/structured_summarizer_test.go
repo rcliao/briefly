@@ -13,10 +13,10 @@ import (
 
 // MockLLMClientStructured implements LLMClient for testing structured summaries
 type MockLLMClientStructured struct {
-	response    string
-	shouldFail  bool
-	callCount   int
-	failUntil   int // Fail until this attempt number
+	response   string
+	shouldFail bool
+	callCount  int
+	failUntil  int // Fail until this attempt number
 }
 
 func (m *MockLLMClientStructured) GenerateText(ctx context.Context, prompt string, options interface{}) (string, error) {

@@ -11,9 +11,9 @@ import (
 
 // TracedClient wraps an LLM Client with LangFuse tracing
 type TracedClient struct {
-	client    *Client
-	langfuse  *observability.LangFuseClient
-	posthog   *observability.PostHogClient
+	client   *Client
+	langfuse *observability.LangFuseClient
+	posthog  *observability.PostHogClient
 }
 
 // NewTracedClient creates a new traced LLM client

@@ -106,32 +106,32 @@ func DefaultAggregateOptions() AggregateOptions {
 
 // AggregateResult contains aggregation statistics
 type AggregateResult struct {
-	FeedsFetched     int
-	FeedsSkipped     int
-	FeedsFailed      int
-	NewArticles      int
+	FeedsFetched      int
+	FeedsSkipped      int
+	FeedsFailed       int
+	NewArticles       int
 	DuplicateArticles int
-	Errors           []error
+	Errors            []error
 }
 
 // AggregateWithClassificationOptions configures aggregation with inline classification
 type AggregateWithClassificationOptions struct {
-	MaxArticles    int           // Maximum number of articles to process (0 = no limit)
-	MinRelevance   float64       // Minimum relevance score to keep article (0.0-1.0)
-	ThemeFilter    string        // Optional: Only process articles matching this theme
-	Since          time.Time     // Only fetch items published after this date
-	MaxConcurrency int           // Number of articles to process concurrently
+	MaxArticles    int       // Maximum number of articles to process (0 = no limit)
+	MinRelevance   float64   // Minimum relevance score to keep article (0.0-1.0)
+	ThemeFilter    string    // Optional: Only process articles matching this theme
+	Since          time.Time // Only fetch items published after this date
+	MaxConcurrency int       // Number of articles to process concurrently
 }
 
 // AggregateWithClassificationResult contains aggregation + classification statistics
 type AggregateWithClassificationResult struct {
-	FeedsFetched        int
-	ArticlesFetched     int
-	ArticlesClassified  int
-	ArticlesFiltered    int
-	ArticlesFailed      int
-	ThemeDistribution   map[string]int // theme_name -> count
-	Errors              []error
+	FeedsFetched       int
+	ArticlesFetched    int
+	ArticlesClassified int
+	ArticlesFiltered   int
+	ArticlesFailed     int
+	ThemeDistribution  map[string]int // theme_name -> count
+	Errors             []error
 }
 
 // Aggregate fetches new articles from all active feeds
@@ -616,12 +616,12 @@ func DefaultClassificationOptions() ClassificationOptions {
 
 // ArticleClassificationResult contains classification statistics
 type ArticleClassificationResult struct {
-	ArticlesProcessed   int
-	ArticlesClassified  int
-	ArticlesFiltered    int // Below relevance threshold
-	ArticlesFailed      int
-	ThemeDistribution   map[string]int // theme_name -> count
-	Errors              []error
+	ArticlesProcessed  int
+	ArticlesClassified int
+	ArticlesFiltered   int // Below relevance threshold
+	ArticlesFailed     int
+	ThemeDistribution  map[string]int // theme_name -> count
+	Errors             []error
 }
 
 // ClassifyFeedItems processes unprocessed feed items and classifies them by theme

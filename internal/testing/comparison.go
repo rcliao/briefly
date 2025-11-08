@@ -12,23 +12,23 @@ import (
 
 // ComparisonResult holds results from comparing two digests
 type ComparisonResult struct {
-	DigestA         *core.Digest
-	DigestB         *core.Digest
-	MetricsA        *quality.DigestQualityMetrics
-	MetricsB        *quality.DigestQualityMetrics
-	Winner          string // "A", "B", or "Tie"
-	QualityDelta    *QualityDelta
-	Recommendation  string
-	ComparisonDate  time.Time
+	DigestA        *core.Digest
+	DigestB        *core.Digest
+	MetricsA       *quality.DigestQualityMetrics
+	MetricsB       *quality.DigestQualityMetrics
+	Winner         string // "A", "B", or "Tie"
+	QualityDelta   *QualityDelta
+	Recommendation string
+	ComparisonDate time.Time
 }
 
 // QualityDelta represents the difference between two digest quality metrics
 type QualityDelta struct {
-	CoverageDelta      float64 // Percentage point difference
-	VaguenessDelta     int     // Lower is better (negative = improvement)
-	SpecificityDelta   int     // Higher is better (positive = improvement)
-	CitationDelta      int     // Absolute citation count difference
-	GradeImprovement   int     // Letter grade improvement (A=4, B=3, C=2, D=1)
+	CoverageDelta    float64 // Percentage point difference
+	VaguenessDelta   int     // Lower is better (negative = improvement)
+	SpecificityDelta int     // Higher is better (positive = improvement)
+	CitationDelta    int     // Absolute citation count difference
+	GradeImprovement int     // Letter grade improvement (A=4, B=3, C=2, D=1)
 }
 
 // ComparisonFramework provides A/B testing capabilities for digests
@@ -81,8 +81,8 @@ func (cf *ComparisonFramework) calculateDelta(
 	metricsB *quality.DigestQualityMetrics,
 ) *QualityDelta {
 	return &QualityDelta{
-		CoverageDelta:    (metricsB.CoveragePct - metricsA.CoveragePct) * 100, // Percentage points
-		VaguenessDelta:   metricsB.VaguePhrases - metricsA.VaguePhrases,       // Negative = improvement
+		CoverageDelta:    (metricsB.CoveragePct - metricsA.CoveragePct) * 100,   // Percentage points
+		VaguenessDelta:   metricsB.VaguePhrases - metricsA.VaguePhrases,         // Negative = improvement
 		SpecificityDelta: metricsB.SpecificityScore - metricsA.SpecificityScore, // Positive = improvement
 		CitationDelta:    metricsB.CitationsFound - metricsA.CitationsFound,
 		GradeImprovement: cf.gradeToNumeric(metricsB.Grade) - cf.gradeToNumeric(metricsA.Grade),
@@ -263,7 +263,7 @@ func (cf *ComparisonFramework) PrintComparisonReport(result *ComparisonResult) {
 	fmt.Printf("│ Overall Status                  │     %s      │     %s      │           │\n",
 		passA, passB)
 
-	fmt.Println("└─────────────────────────────────┴───────────────┴───────────────┴───────────┘\n")
+	fmt.Println("└─────────────────────────────────┴───────────────┴───────────────┴───────────┘")
 
 	// Recommendation
 	fmt.Println("📝 RECOMMENDATION:")
@@ -301,10 +301,10 @@ func (cf *ComparisonFramework) formatGradeDelta(improvement int) string {
 
 // BatchCompare compares multiple digest versions against a baseline
 type BatchCompareResult struct {
-	Baseline       *core.Digest
+	Baseline        *core.Digest
 	BaselineMetrics *quality.DigestQualityMetrics
-	Variants       []VariantResult
-	BestVariant    string
+	Variants        []VariantResult
+	BestVariant     string
 }
 
 // VariantResult holds comparison results for a single variant
@@ -327,9 +327,9 @@ func (cf *ComparisonFramework) BatchCompareDigests(
 	baselineMetrics := cf.evaluator.EvaluateDigest(baseline, articles)
 
 	result := &BatchCompareResult{
-		Baseline:       baseline,
+		Baseline:        baseline,
 		BaselineMetrics: baselineMetrics,
-		Variants:       make([]VariantResult, 0, len(variants)),
+		Variants:        make([]VariantResult, 0, len(variants)),
 	}
 
 	bestScore := -1.0
@@ -426,9 +426,9 @@ func (cf *ComparisonFramework) PrintBatchComparisonReport(result *BatchCompareRe
 			variant.Delta.SpecificityDelta)
 	}
 
-	fmt.Println("└──────────────┴──────────┴───────────┴────────────┴───────┴───────────────────────────────┘\n")
+	fmt.Println("└──────────────┴──────────┴───────────┴────────────┴───────┴───────────────────────────────┘")
 
-	fmt.Println(strings.Repeat("═", 100) + "\n")
+	fmt.Println(strings.Repeat("═", 100))
 }
 
 // getBestScore retrieves the highest composite score from batch results

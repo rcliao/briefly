@@ -17,14 +17,14 @@ import (
 type Builder struct {
 	cacheDir       string
 	llmClient      *llm.Client
-	tracedClient   *llm.TracedClient  // For theme classification with observability
+	tracedClient   *llm.TracedClient    // For theme classification with observability
 	db             persistence.Database // Optional: for theme-based categorization
 	langfuse       *observability.LangFuseClient
 	posthog        *observability.PostHogClient
 	config         *Config
 	skipCache      bool
 	skipBanner     bool
-	useThemeSystem bool               // Enable theme-based categorization
+	useThemeSystem bool // Enable theme-based categorization
 }
 
 // NewBuilder creates a new pipeline builder with default settings

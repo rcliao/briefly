@@ -241,8 +241,8 @@ func (e *DigestEvaluator) PrintDigestReport(digest *core.Digest, articles []core
 // AuditRecentDigests audits multiple digests and provides aggregate statistics
 func (e *DigestEvaluator) AuditRecentDigests(digests []core.Digest, articlesMap map[string][]core.Article) *AuditReport {
 	report := &AuditReport{
-		TotalDigests: len(digests),
-		GradeCounts:  make(map[string]int),
+		TotalDigests:  len(digests),
+		GradeCounts:   make(map[string]int),
 		DigestMetrics: []DigestQualityMetrics{},
 	}
 
@@ -303,16 +303,16 @@ func (e *DigestEvaluator) PrintAuditReport(report *AuditReport) {
 
 // AuditReport contains aggregate statistics from auditing multiple digests
 type AuditReport struct {
-	TotalDigests    int
-	AvgCoverage     float64
-	AvgVagueness    float64
-	AvgSpecificity  float64
-	GradeCounts     map[string]int
-	Recommendation  string
-	DigestMetrics   []DigestQualityMetrics
+	TotalDigests   int
+	AvgCoverage    float64
+	AvgVagueness   float64
+	AvgSpecificity float64
+	GradeCounts    map[string]int
+	Recommendation string
+	DigestMetrics  []DigestQualityMetrics
 
 	// Totals for averaging
-	TotalCoverage   float64
-	TotalVagueness  float64
+	TotalCoverage    float64
+	TotalVagueness   float64
 	TotalSpecificity float64
 }

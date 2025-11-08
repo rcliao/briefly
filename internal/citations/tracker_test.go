@@ -145,15 +145,15 @@ func (m *MockDatabase) Citations() persistence.CitationRepository {
 	return m.citationRepo
 }
 
-func (m *MockDatabase) Articles() persistence.ArticleRepository       { return nil }
-func (m *MockDatabase) Summaries() persistence.SummaryRepository      { return nil }
-func (m *MockDatabase) Feeds() persistence.FeedRepository             { return nil }
-func (m *MockDatabase) FeedItems() persistence.FeedItemRepository     { return nil }
-func (m *MockDatabase) Digests() persistence.DigestRepository         { return nil }
-func (m *MockDatabase) Themes() persistence.ThemeRepository           { return nil }
-func (m *MockDatabase) ManualURLs() persistence.ManualURLRepository   { return nil }
-func (m *MockDatabase) Close() error                                  { return nil }
-func (m *MockDatabase) Ping(ctx context.Context) error                { return nil }
+func (m *MockDatabase) Articles() persistence.ArticleRepository     { return nil }
+func (m *MockDatabase) Summaries() persistence.SummaryRepository    { return nil }
+func (m *MockDatabase) Feeds() persistence.FeedRepository           { return nil }
+func (m *MockDatabase) FeedItems() persistence.FeedItemRepository   { return nil }
+func (m *MockDatabase) Digests() persistence.DigestRepository       { return nil }
+func (m *MockDatabase) Themes() persistence.ThemeRepository         { return nil }
+func (m *MockDatabase) ManualURLs() persistence.ManualURLRepository { return nil }
+func (m *MockDatabase) Close() error                                { return nil }
+func (m *MockDatabase) Ping(ctx context.Context) error              { return nil }
 func (m *MockDatabase) BeginTx(ctx context.Context) (persistence.Transaction, error) {
 	return nil, nil
 }
@@ -599,7 +599,7 @@ func TestEnrichWithMetadata_NilMetadata(t *testing.T) {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		len(s) > len(substr)+1 && anySubstring(s[1:len(s)-1], substr)))
+			len(s) > len(substr)+1 && anySubstring(s[1:len(s)-1], substr)))
 }
 
 func anySubstring(s, substr string) bool {

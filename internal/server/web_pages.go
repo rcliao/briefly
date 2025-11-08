@@ -568,7 +568,7 @@ func (s *Server) prepareDigestDetailData(ctx context.Context, digest *core.Diges
 		Articles:       articles,
 		Themes:         []ThemeWithCount{}, // Empty for digest detail page (theme filter not shown)
 		RecentDigests:  recentDigestItems,
-		ActiveTheme:    "",                 // No active theme on digest detail page
+		ActiveTheme:    "", // No active theme on digest detail page
 		CurrentYear:    time.Now().Year(),
 		PostHogEnabled: postHogEnabled,
 		PostHogAPIKey:  postHogAPIKey,
@@ -578,20 +578,20 @@ func (s *Server) prepareDigestDetailData(ctx context.Context, digest *core.Diges
 
 // DigestDetailPageData contains all data for the digest detail page
 type DigestDetailPageData struct {
-	ID             string
-	Title          string
-	ArticleCount   int
-	ThemeCount     int
-	DateGenerated  time.Time
-	QualityScore   float64
-	SummaryHTML    template.HTML
-	KeyMoments     []KeyMomentView          // v2.0: Structured key moments
-	Perspectives   []PerspectiveDetailView  // v2.0: Structured perspectives
-	Articles       []ArticleView
-	Themes         []ThemeWithCount    // Themes for this digest
-	RecentDigests  []DigestListItem    // Recent digests list for sidebar
-	ActiveTheme    string              // Added for theme-filter compatibility (unused on detail page)
-	CurrentYear    int
+	ID            string
+	Title         string
+	ArticleCount  int
+	ThemeCount    int
+	DateGenerated time.Time
+	QualityScore  float64
+	SummaryHTML   template.HTML
+	KeyMoments    []KeyMomentView         // v2.0: Structured key moments
+	Perspectives  []PerspectiveDetailView // v2.0: Structured perspectives
+	Articles      []ArticleView
+	Themes        []ThemeWithCount // Themes for this digest
+	RecentDigests []DigestListItem // Recent digests list for sidebar
+	ActiveTheme   string           // Added for theme-filter compatibility (unused on detail page)
+	CurrentYear   int
 
 	// PostHog integration
 	PostHogEnabled bool
@@ -636,9 +636,8 @@ type KeyMomentView struct {
 
 // PerspectiveDetailView represents a perspective for v2.0 rendering
 type PerspectiveDetailView struct {
-	Type            string   // "supporting" or "opposing"
+	Type            string // "supporting" or "opposing"
 	Summary         string
 	CitationNumbers []int
 	ArticleIDs      []string
 }
-

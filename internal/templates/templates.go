@@ -48,14 +48,14 @@ type DigestTemplate struct {
 	IntroductionText          string
 	ConclusionText            string
 	SectionSeparator          string
-	
+
 	// LinkedIn optimization fields
-	IncludeLinkedInHook       bool   // Whether to include LinkedIn hook at top
-	IncludeGameChanger        bool   // Whether to include "This Week's Game-Changer" section
-	IncludeDiscussionPrompt   bool   // Whether to include engagement question at end
-	IncludeTryThisWeek        bool   // Whether to include actionable items section
-	LinkedInHookPattern       string // Pattern for hook generation (Pattern1, Pattern2, Pattern3)
-	GameChangerFormat         string // Format template for game-changer section
+	IncludeLinkedInHook     bool   // Whether to include LinkedIn hook at top
+	IncludeGameChanger      bool   // Whether to include "This Week's Game-Changer" section
+	IncludeDiscussionPrompt bool   // Whether to include engagement question at end
+	IncludeTryThisWeek      bool   // Whether to include actionable items section
+	LinkedInHookPattern     string // Pattern for hook generation (Pattern1, Pattern2, Pattern3)
+	GameChangerFormat       string // Format template for game-changer section
 }
 
 // GetTemplate returns a pre-configured template for the specified format
@@ -130,7 +130,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: false,
 			IncludeTopicClustering:    true, // Enable topic clustering for newsletter organization
 			IncludeBanner:             true, // Enable banner for newsletter format
-			IncludeDiscussionPrompt:   true,  // Enable discussion prompt for engagement
+			IncludeDiscussionPrompt:   true, // Enable discussion prompt for engagement
 			MaxSummaryLength:          25,   // v2.0: 15-25 words per article summary
 			MaxDigestWords:            800,  // v2.0: 800-word target for newsletter format to include more articles
 			IntroductionText:          "Welcome to this week's curated selection of insights! Here's what caught our attention:",
@@ -170,7 +170,7 @@ func GetTemplate(format DigestFormat) *DigestTemplate {
 			IncludeIndividualArticles: true,
 			IncludeTopicClustering:    true, // Enable topic clustering for email organization
 			IncludeBanner:             true, // Enable banner for email format
-			IncludeDiscussionPrompt:   true,  // Enable discussion prompt for engagement
+			IncludeDiscussionPrompt:   true, // Enable discussion prompt for engagement
 			MaxSummaryLength:          25,   // v2.0: 15-25 words per article summary
 			MaxDigestWords:            400,  // v2.0: 400-word target for email format
 			IntroductionText:          "Here's your personalized digest with today's most important insights:",
@@ -322,7 +322,7 @@ func truncateToScannableFormat(text string, minWords, maxWords int) string {
 	// First attempt: look for complete sentence within range
 	for i := maxWords; i >= minWords; i-- {
 		candidate := strings.Join(words[:i], " ")
-		
+
 		// Check if this ends with proper punctuation
 		if strings.HasSuffix(candidate, ".") || strings.HasSuffix(candidate, "!") || strings.HasSuffix(candidate, "?") {
 			return candidate
@@ -332,7 +332,7 @@ func truncateToScannableFormat(text string, minWords, maxWords int) string {
 	// Second attempt: look for clause boundaries (commas, semicolons)
 	for i := maxWords; i >= minWords; i-- {
 		candidate := strings.Join(words[:i], " ")
-		
+
 		if strings.HasSuffix(candidate, ",") || strings.HasSuffix(candidate, ";") {
 			// Remove trailing comma/semicolon and add period
 			return strings.TrimSuffix(strings.TrimSuffix(candidate, ","), ";") + "."
@@ -341,15 +341,15 @@ func truncateToScannableFormat(text string, minWords, maxWords int) string {
 
 	// Final fallback: hard truncate at maxWords with proper ending
 	truncated := strings.Join(words[:maxWords], " ")
-	
+
 	// Remove any trailing punctuation and add ellipsis if we cut mid-sentence
 	truncated = strings.TrimRight(truncated, ".,;:!?")
-	
+
 	// If the next word (if exists) would complete a thought, hint at continuation
 	if wordCount > maxWords {
 		return truncated + "..."
 	}
-	
+
 	return truncated + "."
 }
 
@@ -527,14 +527,14 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 	categorized := false
 	categoryGroups := make(map[string][]render.DigestData)
 	categoryOrder := []string{
-		"🔥 Breaking & Hot", 
-		"🚀 Product Updates", 
-		"🤖 AI & Machine Learning", 
-		"🔒 Security & Privacy", 
-		"🛠️ Dev Tools & Techniques", 
-		"☁️ Infrastructure & Cloud", 
-		"📊 Research & Analysis", 
-		"💡 Ideas & Inspiration", 
+		"🔥 Breaking & Hot",
+		"🚀 Product Updates",
+		"🤖 AI & Machine Learning",
+		"🔒 Security & Privacy",
+		"🛠️ Dev Tools & Techniques",
+		"☁️ Infrastructure & Cloud",
+		"📊 Research & Analysis",
+		"💡 Ideas & Inspiration",
 		"🔍 Worth Monitoring",
 	}
 
@@ -547,8 +547,8 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 				if categoryName != "" {
 					// Check if this matches any of our expected categories
 					for _, expectedCategory := range categoryOrder {
-						if categoryName == expectedCategory || 
-						   strings.HasSuffix(expectedCategory, strings.TrimSpace(strings.TrimLeft(categoryName, "🔥🚀🤖🔒🛠☁️📊💡🔍"))) {
+						if categoryName == expectedCategory ||
+							strings.HasSuffix(expectedCategory, strings.TrimSpace(strings.TrimLeft(categoryName, "🔥🚀🤖🔒🛠☁️📊💡🔍"))) {
 							categorized = true
 							categoryGroups[expectedCategory] = append(categoryGroups[expectedCategory], item)
 							break
@@ -561,30 +561,30 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 
 	if categorized {
 		content.WriteString("## 📖 Featured Articles\n\n")
-		
+
 		// Track article numbering across categories
 		articleNum := 1
-		
+
 		// Render articles grouped by category in priority order
 		for _, categoryName := range categoryOrder {
 			if articles, exists := categoryGroups[categoryName]; exists && len(articles) > 0 {
 				content.WriteString(fmt.Sprintf("### %s\n\n", categoryName))
-				
+
 				// Sort articles within category by priority score
 				sortedArticles := SortByPriority(articles)
-				
+
 				for i, item := range sortedArticles {
 					if i > 0 {
 						content.WriteString("\n")
 					}
-					
+
 					// Get content type emoji
 					contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
-					
+
 					// Article title with number and content type emoji
 					content.WriteString(fmt.Sprintf("**[%d] %s %s**\n\n", articleNum, contentEmoji, item.Title))
 					articleNum++
-					
+
 					// Key insight (summary) - simplified to just the summary
 					if template.IncludeSummaries && item.SummaryText != "" {
 						summary := item.SummaryText
@@ -594,7 +594,7 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 						}
 						content.WriteString(fmt.Sprintf("%s\n\n", summary))
 					}
-					
+
 					// Link with clear call to action and reference URL
 					if template.IncludeSourceLinks {
 						content.WriteString(fmt.Sprintf("%s\n", formatScannableLink(item.URL)))
@@ -603,7 +603,7 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 				}
 			}
 		}
-		
+
 		// Handle any uncategorized items
 		uncategorized := []render.DigestData{}
 		for _, item := range digestItems {
@@ -623,7 +623,7 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 				uncategorized = append(uncategorized, item)
 			}
 		}
-		
+
 		if len(uncategorized) > 0 {
 			content.WriteString("### 🔍 Additional Items\n\n")
 			for i, item := range uncategorized {
@@ -633,7 +633,7 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 				contentEmoji := getContentTypeEmoji(item.ContentType, item.Title)
 				content.WriteString(fmt.Sprintf("**[%d] %s %s**\n\n", articleNum, contentEmoji, item.Title))
 				articleNum++
-				
+
 				if template.IncludeSummaries && item.SummaryText != "" {
 					summary := item.SummaryText
 					if template.MaxSummaryLength > 0 {
@@ -642,7 +642,7 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 					}
 					content.WriteString(fmt.Sprintf("%s\n\n", summary))
 				}
-				
+
 				if template.IncludeSourceLinks {
 					content.WriteString(fmt.Sprintf("%s\n", formatScannableLink(item.URL)))
 					content.WriteString(fmt.Sprintf("*Reference: %s*\n\n", item.URL))
@@ -652,7 +652,7 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 	} else {
 		// Fallback to original format if not categorized
 		content.WriteString("## 📖 Featured Articles\n\n")
-		
+
 		// Sort all articles by priority score when not categorized
 		sortedItems := SortByPriority(digestItems)
 
@@ -692,12 +692,12 @@ func renderScannableArticlesSection(digestItems []render.DigestData, template *D
 // Score is based on multiple factors: sentiment, alerts, topic confidence, content type, etc.
 func calculatePriorityScore(item render.DigestData) float64 {
 	score := 0.5 // Base score
-	
+
 	// Alert factor (highest priority) - articles that triggered alerts are most important
 	if item.AlertTriggered {
 		score += 0.3
 	}
-	
+
 	// Sentiment factor - positive articles get slight boost, negative get attention too
 	sentimentBoost := 0.0
 	switch item.SentimentLabel {
@@ -709,12 +709,12 @@ func calculatePriorityScore(item render.DigestData) float64 {
 		sentimentBoost = 0.0
 	}
 	score += sentimentBoost
-	
+
 	// Topic confidence factor - higher confidence means better categorization
 	if item.TopicConfidence > 0 {
 		score += item.TopicConfidence * 0.15 // Scale confidence (0-1) to contribute up to 0.15
 	}
-	
+
 	// Content type factor - certain content types are more valuable
 	switch item.ContentType {
 	case "pdf": // Research papers, whitepapers are high value
@@ -724,7 +724,7 @@ func calculatePriorityScore(item render.DigestData) float64 {
 	default: // Web articles
 		score += 0.0
 	}
-	
+
 	// Title length factor - longer titles often indicate more substantial content
 	titleWords := len(strings.Fields(item.Title))
 	if titleWords >= 8 { // Substantial titles
@@ -732,7 +732,7 @@ func calculatePriorityScore(item render.DigestData) float64 {
 	} else if titleWords <= 3 { // Very short titles might be less informative
 		score -= 0.05
 	}
-	
+
 	// Research queries factor - articles that generated more research queries are more interesting
 	if len(item.ResearchQueries) > 0 {
 		// Scale based on number of research queries (max 5)
@@ -742,14 +742,14 @@ func calculatePriorityScore(item render.DigestData) float64 {
 		}
 		score += queryBoost
 	}
-	
+
 	// Ensure score stays within bounds [0.0, 1.0]
 	if score > 1.0 {
 		score = 1.0
 	} else if score < 0.0 {
 		score = 0.0
 	}
-	
+
 	return score
 }
 
@@ -761,11 +761,11 @@ func SortByPriority(items []render.DigestData) []render.DigestData {
 			items[i].PriorityScore = calculatePriorityScore(items[i])
 		}
 	}
-	
+
 	// Create a copy to avoid modifying the original slice
 	sorted := make([]render.DigestData, len(items))
 	copy(sorted, items)
-	
+
 	// Simple bubble sort by priority score (descending)
 	for i := 0; i < len(sorted)-1; i++ {
 		for j := i + 1; j < len(sorted); j++ {
@@ -774,7 +774,7 @@ func SortByPriority(items []render.DigestData) []render.DigestData {
 			}
 		}
 	}
-	
+
 	return sorted
 }
 
@@ -787,14 +787,14 @@ func generateLinkedInHook(digestItems []render.DigestData, pattern string) strin
 	// Sort by priority to get the most impactful items
 	sortedItems := SortByPriority(digestItems)
 	topItem := sortedItems[0]
-	
+
 	// Extract key themes from top articles
 	var themes []string
 	for i, item := range sortedItems {
 		if i >= 3 { // Only look at top 3 for themes
 			break
 		}
-		
+
 		// Extract technology names and themes from titles
 		title := strings.ToLower(item.Title)
 		if strings.Contains(title, "ai") || strings.Contains(title, "artificial intelligence") {
@@ -810,18 +810,18 @@ func generateLinkedInHook(digestItems []render.DigestData, pattern string) strin
 			themes = append(themes, "big tech moves")
 		}
 	}
-	
+
 	// Generate hook based on pattern
 	switch pattern {
 	case "Pattern1":
 		// "X happened this week that changes Y"
 		if len(themes) > 0 {
-			return fmt.Sprintf("%s breakthroughs this week that change how engineers work.\n\n%s just made complex tasks instant. Here's what you need to know 👇", 
+			return fmt.Sprintf("%s breakthroughs this week that change how engineers work.\n\n%s just made complex tasks instant. Here's what you need to know 👇",
 				themes[0], extractProductName(topItem.Title))
 		}
 		return fmt.Sprintf("%s just changed the game for engineering teams.\n\nHere's what happened this week that you can't ignore 👇",
 			extractProductName(topItem.Title))
-			
+
 	case "Pattern2":
 		// "The gap between [leader] and [followers] just widened"
 		leader := extractCompanyName(topItem.Title)
@@ -830,7 +830,7 @@ func generateLinkedInHook(digestItems []render.DigestData, pattern string) strin
 		}
 		return fmt.Sprintf("The gap between AI leaders and followers just widened.\n\n%s is proof. Here's this week's developments 👇",
 			extractProductName(topItem.Title))
-			
+
 	case "Pattern3":
 		// "While everyone talks about X, Y quietly shipped Z"
 		if len(sortedItems) >= 2 {
@@ -838,7 +838,7 @@ func generateLinkedInHook(digestItems []render.DigestData, pattern string) strin
 				extractTopic(sortedItems[1].Title), extractProductName(topItem.Title))
 		}
 		return "While everyone talks about AI hype, real engineering breakthroughs happened this week.\n\nHere's what actually matters 👇"
-		
+
 	default:
 		// Default engaging hook
 		return fmt.Sprintf("%s developments this week that engineering teams are already using.\n\nFrom %s to practical applications - here's what you need to know 👇",
@@ -849,20 +849,20 @@ func generateLinkedInHook(digestItems []render.DigestData, pattern string) strin
 // extractProductName extracts product name from article title for hooks
 func extractProductName(title string) string {
 	title = strings.ToLower(title)
-	
+
 	// Common product patterns
 	products := []string{
 		"gemini", "claude", "chatgpt", "copilot", "jules",
 		"deep think", "opus", "gpt-4", "llama", "midjourney",
 	}
-	
+
 	for _, product := range products {
 		if strings.Contains(title, product) {
 			// Capitalize first letter
 			return strings.ToUpper(string(product[0])) + product[1:]
 		}
 	}
-	
+
 	// Fall back to first significant word
 	words := strings.Fields(title)
 	for _, word := range words {
@@ -870,32 +870,32 @@ func extractProductName(title string) string {
 			return strings.ToUpper(string(word[0])) + word[1:]
 		}
 	}
-	
+
 	return "AI tools"
 }
 
-// extractCompanyName extracts company name from article title for hooks  
+// extractCompanyName extracts company name from article title for hooks
 func extractCompanyName(title string) string {
 	title = strings.ToLower(title)
-	
+
 	companies := []string{
 		"google", "anthropic", "openai", "microsoft", "meta",
 		"apple", "amazon", "nvidia", "deepmind",
 	}
-	
+
 	for _, company := range companies {
 		if strings.Contains(title, company) {
 			return strings.ToUpper(string(company[0])) + company[1:]
 		}
 	}
-	
+
 	return ""
 }
 
 // extractTopic extracts general topic from title for contrast hooks
 func extractTopic(title string) string {
 	title = strings.ToLower(title)
-	
+
 	if strings.Contains(title, "ai") || strings.Contains(title, "artificial intelligence") {
 		return "AI"
 	}
@@ -905,18 +905,18 @@ func extractTopic(title string) string {
 	if strings.Contains(title, "cloud") || strings.Contains(title, "infrastructure") {
 		return "cloud infrastructure"
 	}
-	
+
 	return "tech developments"
 }
 
 // isStopWord checks if word should be ignored in product name extraction
 func isStopWord(word string) bool {
 	stopWords := []string{
-		"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", 
+		"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
 		"of", "with", "by", "is", "are", "was", "were", "has", "have", "had",
 		"now", "new", "just", "here", "this", "that", "your", "you", "can",
 	}
-	
+
 	word = strings.ToLower(word)
 	for _, stopWord := range stopWords {
 		if word == stopWord {
@@ -931,22 +931,22 @@ func extractDomainFromURL(url string) string {
 	// Remove protocol
 	domain := strings.TrimPrefix(url, "https://")
 	domain = strings.TrimPrefix(domain, "http://")
-	
+
 	// Remove www prefix
 	domain = strings.TrimPrefix(domain, "www.")
-	
+
 	// Extract domain before first slash
 	if slashIndex := strings.Index(domain, "/"); slashIndex != -1 {
 		domain = domain[:slashIndex]
 	}
-	
+
 	// Clean up common subdomains for better readability
 	if strings.HasPrefix(domain, "blog.") {
 		domain = strings.TrimPrefix(domain, "blog.")
 	} else if strings.HasPrefix(domain, "docs.") {
 		domain = strings.TrimPrefix(domain, "docs.")
 	}
-	
+
 	return domain
 }
 
@@ -958,45 +958,45 @@ func selectGameChanger(digestItems []render.DigestData) *render.DigestData {
 
 	// Sort by priority to get the most impactful items
 	sortedItems := SortByPriority(digestItems)
-	
+
 	// Look for the highest impact item that's not just breaking news
 	for _, item := range sortedItems {
 		// Skip items with generic or unclear summaries
 		if strings.Contains(strings.ToLower(item.SummaryText), "no identifiable information") ||
-		   len(item.SummaryText) < 50 {
+			len(item.SummaryText) < 50 {
 			continue
 		}
-		
+
 		// Prefer items with clear practical impact
 		title := strings.ToLower(item.Title)
 		summary := strings.ToLower(item.SummaryText)
-		
+
 		// Boost score for items with practical impact keywords
 		impactScore := item.PriorityScore
-		
-		if strings.Contains(title, "launch") || strings.Contains(title, "available") || 
-		   strings.Contains(title, "release") || strings.Contains(summary, "now available") {
+
+		if strings.Contains(title, "launch") || strings.Contains(title, "available") ||
+			strings.Contains(title, "release") || strings.Contains(summary, "now available") {
 			impactScore += 0.2 // Production-ready tools
 		}
-		
-		if strings.Contains(summary, "developer") || strings.Contains(summary, "coding") || 
-		   strings.Contains(summary, "programming") || strings.Contains(summary, "engineer") {
+
+		if strings.Contains(summary, "developer") || strings.Contains(summary, "coding") ||
+			strings.Contains(summary, "programming") || strings.Contains(summary, "engineer") {
 			impactScore += 0.15 // Direct relevance to engineers
 		}
-		
+
 		if item.AlertTriggered {
 			impactScore += 0.1 // Alert-worthy developments
 		}
-		
+
 		// Update the item's priority score for comparison
 		item.PriorityScore = impactScore
-		
+
 		// Return the first high-impact item
 		if impactScore > 0.6 {
 			return &item
 		}
 	}
-	
+
 	// Fallback to highest priority item
 	return &sortedItems[0]
 }
@@ -1006,10 +1006,10 @@ func formatGameChanger(gameChanger *render.DigestData) string {
 	if gameChanger == nil {
 		return ""
 	}
-	
+
 	var content strings.Builder
 	content.WriteString("## 🔥 This Week's Game-Changer\n\n")
-	
+
 	// Winner - use the actual article title (shortened if needed)
 	winnerTitle := gameChanger.Title
 	if len(winnerTitle) > 60 {
@@ -1017,31 +1017,31 @@ func formatGameChanger(gameChanger *render.DigestData) string {
 		winnerTitle = winnerTitle[:57] + "..."
 	}
 	content.WriteString(fmt.Sprintf("**Winner:** %s\n\n", winnerTitle))
-	
+
 	// Why It Matters - extract key benefit from summary
 	whyItMatters := generateWhyItMatters(gameChanger.SummaryText)
 	content.WriteString(fmt.Sprintf("**Why It Matters:** %s\n\n", whyItMatters))
-	
+
 	// Try It - generate actionable suggestion
 	tryIt := generateTryItSuggestion(gameChanger.Title, gameChanger.SummaryText)
 	content.WriteString(fmt.Sprintf("**Try It:** %s\n\n", tryIt))
-	
+
 	// Reality Check - add balanced perspective
 	realityCheck := generateRealityCheck(gameChanger.SummaryText)
 	content.WriteString(fmt.Sprintf("**Reality Check:** %s\n\n", realityCheck))
-	
+
 	// User Take - add personal commentary if available
 	if gameChanger.UserTakeText != "" {
 		content.WriteString(fmt.Sprintf("**Your Take:** %s\n\n", gameChanger.UserTakeText))
 	}
-	
+
 	return content.String()
 }
 
 // generateWhyItMatters extracts the key benefit for engineers from article summary
 func generateWhyItMatters(summary string) string {
 	summary = strings.ToLower(summary)
-	
+
 	// Look for key impact phrases
 	if strings.Contains(summary, "parallel thinking") || strings.Contains(summary, "complex") {
 		return "Parallel thinking for complex code = junior dev tasks automated"
@@ -1058,7 +1058,7 @@ func generateWhyItMatters(summary string) string {
 	if strings.Contains(summary, "breakthrough") || strings.Contains(summary, "advance") {
 		return "Major capability leap that changes what's possible"
 	}
-	
+
 	// Fallback to generic but engaging message
 	return "Game-changing capability that engineering teams can use today"
 }
@@ -1067,7 +1067,7 @@ func generateWhyItMatters(summary string) string {
 func generateTryItSuggestion(title, summary string) string {
 	title = strings.ToLower(title)
 	summary = strings.ToLower(summary)
-	
+
 	if strings.Contains(title, "deep think") || strings.Contains(summary, "complex") {
 		return "Upload your gnarliest legacy codebase section and ask for refactoring suggestions"
 	}
@@ -1083,7 +1083,7 @@ func generateTryItSuggestion(title, summary string) string {
 	if strings.Contains(summary, "text-to-speech") || strings.Contains(summary, "voice") {
 		return "Generate voice narration for your technical documentation"
 	}
-	
+
 	// Extract product name and create generic suggestion
 	product := extractProductName(title)
 	return fmt.Sprintf("Test %s on your current project's biggest technical challenge", product)
@@ -1092,7 +1092,7 @@ func generateTryItSuggestion(title, summary string) string {
 // generateRealityCheck provides balanced perspective on limitations
 func generateRealityCheck(summary string) string {
 	summary = strings.ToLower(summary)
-	
+
 	if strings.Contains(summary, "beta") || strings.Contains(summary, "preview") {
 		return "Still in beta - expect some rough edges but worth exploring"
 	}
@@ -1105,7 +1105,7 @@ func generateRealityCheck(summary string) string {
 	if strings.Contains(summary, "improvement") || strings.Contains(summary, "upgrade") {
 		return "Incremental improvement - valuable but not revolutionary"
 	}
-	
+
 	// Default balanced view
 	return "Promising technology - test thoroughly before production deployment"
 }
@@ -1115,43 +1115,43 @@ func generateDiscussionPrompt(digestItems []render.DigestData) string {
 	if len(digestItems) == 0 {
 		return "What's the biggest AI development you're testing in your workflow this week? Share your experience below 👇"
 	}
-	
+
 	// Sort by priority to get the most discussion-worthy items
 	sortedItems := SortByPriority(digestItems)
-	
+
 	// Look for controversial, interesting, or practical topics
 	for _, item := range sortedItems {
 		title := strings.ToLower(item.Title)
 		summary := strings.ToLower(item.SummaryText)
-		
+
 		// Agent/automation discussions
 		if strings.Contains(title, "agent") || strings.Contains(summary, "autonomous") {
 			product := extractProductName(item.Title)
 			return fmt.Sprintf("%s claims to handle entire workflows autonomously.\n\nWho's already using AI agents for real work? What's working and what still needs human oversight?", product)
 		}
-		
+
 		// Coding tools discussions
 		if strings.Contains(summary, "coding") || strings.Contains(summary, "developer") {
 			return "AI coding tools are getting impressive results in demos.\n\nWhat's your experience with them on real projects? Where do they excel vs. fall short?"
 		}
-		
+
 		// Performance/speed claims
 		if strings.Contains(summary, "10x") || strings.Contains(summary, "faster") || strings.Contains(summary, "speed") {
 			return "Another week, another \"10x faster\" AI tool claim.\n\nWhich tools have actually made your team measurably more productive? Looking for real examples."
 		}
-		
+
 		// Beta/new releases
 		if strings.Contains(summary, "beta") || strings.Contains(summary, "launch") {
 			product := extractProductName(item.Title)
 			return fmt.Sprintf("%s just launched publicly after beta testing.\n\nWho tried it during beta? How does it compare to alternatives for your use cases?", product)
 		}
-		
+
 		// Subscription/pricing model
 		if strings.Contains(summary, "subscription") || strings.Contains(summary, "premium") {
 			return "More AI tools moving to premium tiers and higher pricing.\n\nHow do you evaluate ROI on AI subscriptions for your team? What's your decision framework?"
 		}
 	}
-	
+
 	// Topic-based fallbacks
 	themes := extractTopicThemes(sortedItems)
 	if len(themes) > 0 {
@@ -1166,7 +1166,7 @@ func generateDiscussionPrompt(digestItems []render.DigestData) string {
 			return "This week brought several interesting tech developments.\n\nWhich one are you most likely to try with your team? What's your evaluation process?"
 		}
 	}
-	
+
 	// Default engaging question
 	return "Another week of rapid AI development across the industry.\n\nWhat's the most interesting tool or development you're considering for your workflow? Why that one?"
 }
@@ -1175,15 +1175,15 @@ func generateDiscussionPrompt(digestItems []render.DigestData) string {
 func extractTopicThemes(digestItems []render.DigestData) []string {
 	var themes []string
 	themeCount := make(map[string]int)
-	
+
 	for i, item := range digestItems {
 		if i >= 5 { // Only check top 5 articles
 			break
 		}
-		
+
 		title := strings.ToLower(item.Title)
 		summary := strings.ToLower(item.SummaryText)
-		
+
 		if strings.Contains(title, "ai") || strings.Contains(summary, "artificial intelligence") {
 			themeCount["AI"]++
 		}
@@ -1197,18 +1197,18 @@ func extractTopicThemes(digestItems []render.DigestData) []string {
 			themeCount["AI agents"]++
 		}
 	}
-	
+
 	// Sort themes by frequency
 	type themeFreq struct {
 		theme string
 		count int
 	}
-	
+
 	var sortedThemes []themeFreq
 	for theme, count := range themeCount {
 		sortedThemes = append(sortedThemes, themeFreq{theme, count})
 	}
-	
+
 	// Simple sort by count (descending)
 	for i := 0; i < len(sortedThemes)-1; i++ {
 		for j := i + 1; j < len(sortedThemes); j++ {
@@ -1217,19 +1217,19 @@ func extractTopicThemes(digestItems []render.DigestData) []string {
 			}
 		}
 	}
-	
+
 	// Extract theme names
 	for _, tf := range sortedThemes {
 		themes = append(themes, tf.theme)
 	}
-	
+
 	return themes
 }
 
 // formatScannableLink formats links with source attribution for scannable format
 func formatScannableLink(url string) string {
 	domain := extractDomainFromURL(url)
-	
+
 	// Format with domain and subtle styling
 	return fmt.Sprintf("🔗 [Read more](%s) *(%s)*", url, domain)
 }
@@ -2304,23 +2304,23 @@ func GetAvailableFormats() []string {
 // This is a Phase 4 bridge function until full Signal+Sources implementation
 func RenderSignalStyleDigest(digestItems []render.DigestData, outputDir string, finalDigest string, template *DigestTemplate, customTitle string) (string, string, error) {
 	var content strings.Builder
-	
+
 	// Generate Signal-style title
 	title := customTitle
 	if title == "" {
 		title = generateSignalStyleTitle(digestItems)
 	}
-	
+
 	// Signal Header
 	content.WriteString(fmt.Sprintf("# %s\n\n", title))
 	content.WriteString(fmt.Sprintf("📊 %d sources • ⏱️ 2m read\n\n", len(digestItems)))
-	
+
 	// Signal Insight (60-80 words)
 	signalInsight := generateSignalInsight(digestItems, finalDigest)
 	content.WriteString("## 🔍 Signal\n\n")
 	content.WriteString(signalInsight)
 	content.WriteString("\n\n")
-	
+
 	// Implications
 	implications := generateSignalImplications(digestItems)
 	if len(implications) > 0 {
@@ -2330,7 +2330,7 @@ func RenderSignalStyleDigest(digestItems []render.DigestData, outputDir string, 
 		}
 		content.WriteString("\n")
 	}
-	
+
 	// Action Items
 	actions := generateSignalActions(digestItems)
 	if len(actions) > 0 {
@@ -2340,20 +2340,20 @@ func RenderSignalStyleDigest(digestItems []render.DigestData, outputDir string, 
 		}
 		content.WriteString("\n")
 	}
-	
+
 	// Sources Section
 	content.WriteString("## 📚 Sources\n\n")
-	
+
 	// Use items in the exact order they were passed - they are already ordered consistently with LLM input
 	// Track categories we've already shown to avoid duplicate headers
 	categoriesShown := make(map[string]bool)
 	currentCategory := ""
 	referenceNumber := 1
-	
+
 	for _, item := range digestItems {
 		// Determine category for this item using the same logic as ordering
 		category := extractCategoryFromItem(item)
-		
+
 		// Add category header only if we haven't shown this category yet, or if it's different from current
 		if category != currentCategory {
 			if !categoriesShown[category] {
@@ -2362,11 +2362,11 @@ func RenderSignalStyleDigest(digestItems []render.DigestData, outputDir string, 
 				currentCategory = category
 			}
 		}
-		
+
 		// Render the item with its sequential reference number
 		content.WriteString(fmt.Sprintf("**[%d] %s**\n", referenceNumber, item.Title))
 		referenceNumber++
-		
+
 		// Use full summary for better comprehensiveness, only truncate if extremely long
 		summaryText := item.SummaryText
 		if len(strings.Fields(summaryText)) > 100 {
@@ -2375,15 +2375,15 @@ func RenderSignalStyleDigest(digestItems []render.DigestData, outputDir string, 
 		content.WriteString(fmt.Sprintf("%s\n\n", summaryText))
 		content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", item.URL))
 	}
-	
+
 	// Footer
 	content.WriteString("---\n\n")
 	content.WriteString("*Generated using hybrid AI processing*\n")
-	
+
 	// Write to file
 	filename := fmt.Sprintf("digest_signal_%s.md", time.Now().Format("2006-01-02"))
 	filePath, err := render.WriteDigestToFile(content.String(), outputDir, filename)
-	
+
 	return content.String(), filePath, err
 }
 
@@ -2393,13 +2393,13 @@ func generateSignalStyleTitle(digestItems []render.DigestData) string {
 	if len(digestItems) == 0 {
 		return "Signal Digest"
 	}
-	
+
 	// Extract key themes from article titles
 	themes := extractSignalThemes(digestItems)
 	if len(themes) > 0 {
 		return fmt.Sprintf("Signal: %s", strings.Join(themes[:min(2, len(themes))], " & "))
 	}
-	
+
 	return fmt.Sprintf("Signal: %d Key Developments", len(digestItems))
 }
 
@@ -2414,31 +2414,31 @@ func generateSignalInsight(digestItems []render.DigestData, finalDigest string) 
 		}
 		return finalDigest
 	}
-	
+
 	// Generate basic insight from article titles
 	if len(digestItems) == 0 {
 		return "No articles to analyze."
 	}
-	
+
 	themes := extractSignalThemes(digestItems)
 	insight := fmt.Sprintf("Today's developments highlight %d key areas", len(digestItems))
-	
+
 	if len(themes) > 0 {
 		insight += fmt.Sprintf(" including %s", strings.Join(themes, ", "))
 	}
-	
+
 	insight += ". These changes signal evolving priorities in technology adoption and strategic decision-making across the industry."
-	
+
 	return insight
 }
 
 func generateSignalImplications(digestItems []render.DigestData) []string {
 	implications := []string{}
-	
+
 	if len(digestItems) > 3 {
 		implications = append(implications, "Multiple concurrent developments suggest accelerating change")
 	}
-	
+
 	// Check for AI-related content
 	aiCount := 0
 	for _, item := range digestItems {
@@ -2446,22 +2446,22 @@ func generateSignalImplications(digestItems []render.DigestData) []string {
 			aiCount++
 		}
 	}
-	
+
 	if aiCount > 0 {
 		implications = append(implications, "AI integration remains a key strategic priority")
 	}
-	
+
 	// Default implications
 	if len(implications) == 0 {
 		implications = append(implications, "Technology landscape continues evolving rapidly")
 	}
-	
+
 	return implications[:min(3, len(implications))]
 }
 
 func generateSignalActions(digestItems []render.DigestData) []SignalAction {
 	actions := []SignalAction{}
-	
+
 	// Generate actions based on content
 	if len(digestItems) > 0 {
 		actions = append(actions, SignalAction{
@@ -2469,20 +2469,20 @@ func generateSignalActions(digestItems []render.DigestData) []SignalAction {
 			Timeline:    "this week",
 		})
 	}
-	
+
 	if len(digestItems) > 2 {
 		actions = append(actions, SignalAction{
 			Description: "Assess impact on current technology roadmap",
 			Timeline:    "this month",
 		})
 	}
-	
+
 	return actions[:min(3, len(actions))]
 }
 
 func extractSignalThemes(digestItems []render.DigestData) []string {
 	themes := make(map[string]int)
-	
+
 	for _, item := range digestItems {
 		words := strings.Fields(strings.ToLower(item.Title))
 		for _, word := range words {
@@ -2491,7 +2491,7 @@ func extractSignalThemes(digestItems []render.DigestData) []string {
 			}
 		}
 	}
-	
+
 	// Get most common themes
 	var sortedThemes []string
 	for theme, count := range themes {
@@ -2499,7 +2499,7 @@ func extractSignalThemes(digestItems []render.DigestData) []string {
 			sortedThemes = append(sortedThemes, theme)
 		}
 	}
-	
+
 	return sortedThemes[:min(3, len(sortedThemes))]
 }
 
@@ -2530,16 +2530,16 @@ func extractCategoryFromItem(item render.DigestData) string {
 	if item.MyTake != "" && strings.Contains(item.MyTake, "💰") {
 		return "💰 Business & Economics"
 	}
-	
+
 	// Fallback to keyword-based categorization
 	title := strings.ToLower(item.Title)
 	summary := strings.ToLower(item.SummaryText)
-	
+
 	if containsAny(title, []string{"breaking", "urgent", "announcement", "released", "launched"}) {
 		return "🔥 Breaking & Hot"
 	}
-	if containsAny(title, []string{"tool", "github", "framework", "library", "sdk"}) || 
-	   containsAny(summary, []string{"developer", "coding", "programming"}) {
+	if containsAny(title, []string{"tool", "github", "framework", "library", "sdk"}) ||
+		containsAny(summary, []string{"developer", "coding", "programming"}) {
 		return "🛠️ Tools & Platforms"
 	}
 	if containsAny(title, []string{"analysis", "research", "study", "report", "survey"}) {
@@ -2548,7 +2548,7 @@ func extractCategoryFromItem(item render.DigestData) string {
 	if containsAny(title, []string{"business", "market", "revenue", "funding", "cost"}) {
 		return "💰 Business & Economics"
 	}
-	
+
 	return "💡 Additional Items"
 }
 
@@ -2557,15 +2557,15 @@ func truncateToWords(text string, maxWords int) string {
 	if len(words) <= maxWords {
 		return text
 	}
-	
+
 	// Try to find a sentence boundary near the word limit
 	truncated := strings.Join(words[:maxWords], " ")
-	
+
 	// Look for the last complete sentence within the truncated text
 	lastPeriod := strings.LastIndex(truncated, ". ")
 	lastQuestion := strings.LastIndex(truncated, "? ")
 	lastExclamation := strings.LastIndex(truncated, "! ")
-	
+
 	// Find the latest sentence ending
 	lastSentence := lastPeriod
 	if lastQuestion > lastSentence {
@@ -2574,12 +2574,12 @@ func truncateToWords(text string, maxWords int) string {
 	if lastExclamation > lastSentence {
 		lastSentence = lastExclamation
 	}
-	
+
 	// If we found a sentence boundary and it's at least 70% of the target length, use it
 	if lastSentence > 0 && lastSentence > len(truncated)*7/10 {
 		return truncated[:lastSentence+1]
 	}
-	
+
 	// Otherwise, truncate at word boundary with ellipsis
 	return truncated + "..."
 }

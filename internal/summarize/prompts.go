@@ -16,32 +16,32 @@ const (
 
 // PromptOptions configures prompt generation
 type PromptOptions struct {
-	Type           PromptType
-	MaxWords       int      // Target word count for summary
+	Type             PromptType
+	MaxWords         int    // Target word count for summary
 	IncludeKeyPoints bool   // Whether to include key points
-	KeyPointCount  int      // Number of key points (3-5)
-	Format         string   // Output format preference
+	KeyPointCount    int    // Number of key points (3-5)
+	Format           string // Output format preference
 }
 
 // DefaultDigestOptions returns default options for digest summaries
 func DefaultDigestOptions() PromptOptions {
 	return PromptOptions{
-		Type:           PromptTypeDigest,
-		MaxWords:       150,
+		Type:             PromptTypeDigest,
+		MaxWords:         150,
 		IncludeKeyPoints: true,
-		KeyPointCount:  5,
-		Format:         "markdown",
+		KeyPointCount:    5,
+		Format:           "markdown",
 	}
 }
 
 // DefaultQuickReadOptions returns default options for quick reads
 func DefaultQuickReadOptions() PromptOptions {
 	return PromptOptions{
-		Type:           PromptTypeQuickRead,
-		MaxWords:       200,
+		Type:             PromptTypeQuickRead,
+		MaxWords:         200,
 		IncludeKeyPoints: true,
-		KeyPointCount:  5,
-		Format:         "markdown",
+		KeyPointCount:    5,
+		Format:           "markdown",
 	}
 }
 
@@ -293,7 +293,7 @@ func ParseSummaryResponse(response string) (summary string, keyPoints []string) 
 		}
 
 		if strings.HasPrefix(strings.ToUpper(line), "KEY POINTS:") ||
-		   strings.HasPrefix(strings.ToUpper(line), "KEY TAKEAWAYS:") {
+			strings.HasPrefix(strings.ToUpper(line), "KEY TAKEAWAYS:") {
 			inSummary = false
 			inKeyPoints = true
 			continue

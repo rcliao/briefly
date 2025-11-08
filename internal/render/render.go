@@ -36,19 +36,19 @@ type DigestData struct {
 	// v2.0 Priority scoring
 	PriorityScore float64 // Combined priority score for article ordering (0.0-1.0)
 	// v2.1 Interactive features
-	UserSelected  bool   // Whether this article was manually selected by user
-	UserTakeText  string // User's personal commentary for this specific article
+	UserSelected bool   // Whether this article was manually selected by user
+	UserTakeText string // User's personal commentary for this specific article
 }
 
 // InteractiveSession manages the interactive article selection workflow
 type InteractiveSession struct {
-	SessionID        string        // Unique session identifier
-	ArticlePool      []DigestData  // All processed articles available for selection
-	SelectedArticle  *DigestData   // User's selected "Game-Changer" article
-	UserTake         string        // User's personal take on the selected article
-	CreatedAt        time.Time     // Session creation timestamp
-	CompletedAt      *time.Time    // Session completion timestamp (nil if not completed)
-	Status           string        // Session status: "created", "selecting", "inputting", "completed", "cancelled"
+	SessionID       string       // Unique session identifier
+	ArticlePool     []DigestData // All processed articles available for selection
+	SelectedArticle *DigestData  // User's selected "Game-Changer" article
+	UserTake        string       // User's personal take on the selected article
+	CreatedAt       time.Time    // Session creation timestamp
+	CompletedAt     *time.Time   // Session completion timestamp (nil if not completed)
+	Status          string       // Session status: "created", "selecting", "inputting", "completed", "cancelled"
 }
 
 // RenderMarkdownDigest creates a markdown file with the given summaries.

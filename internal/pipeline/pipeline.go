@@ -13,19 +13,19 @@ import (
 // It coordinates all components according to the simplified architecture
 type Pipeline struct {
 	// Core components
-	parser        URLParser
-	fetcher       ContentFetcher
-	summarizer    ArticleSummarizer
-	categorizer   ArticleCategorizer // NEW: Categorizes articles
-	embedder      EmbeddingGenerator
-	clusterer     TopicClusterer
-	orderer       ArticleOrderer
-	narrative     NarrativeGenerator
-	renderer      MarkdownRenderer
-	cache         CacheManager
-	banner        BannerGenerator   // Optional
-	citationTracker CitationTracker // Phase 1: Track citations for articles
-	digestRepo    DigestRepository  // Optional: For storing digests in database (v2.0)
+	parser          URLParser
+	fetcher         ContentFetcher
+	summarizer      ArticleSummarizer
+	categorizer     ArticleCategorizer // NEW: Categorizes articles
+	embedder        EmbeddingGenerator
+	clusterer       TopicClusterer
+	orderer         ArticleOrderer
+	narrative       NarrativeGenerator
+	renderer        MarkdownRenderer
+	cache           CacheManager
+	banner          BannerGenerator  // Optional
+	citationTracker CitationTracker  // Phase 1: Track citations for articles
+	digestRepo      DigestRepository // Optional: For storing digests in database (v2.0)
 
 	// Configuration
 	config *Config
@@ -43,9 +43,9 @@ type Config struct {
 	RequestTimeout       time.Duration
 
 	// Output settings
-	OutputFormat    string // Always "markdown" for now
-	GenerateBanner  bool
-	BannerStyle     string
+	OutputFormat   string // Always "markdown" for now
+	GenerateBanner bool
+	BannerStyle    string
 
 	// Quality settings
 	MinArticleLength  int     // Minimum chars for valid article
@@ -58,16 +58,16 @@ type Config struct {
 // DefaultConfig returns sensible default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		CacheEnabled:         true,
-		CacheTTL:             7 * 24 * time.Hour, // 7 days
-		MaxConcurrentFetches: 5,
-		RetryAttempts:        3,
-		RequestTimeout:       30 * time.Second,
-		OutputFormat:         "markdown",
-		GenerateBanner:       false,
-		BannerStyle:          "tech",
-		MinArticleLength:     100,
-		MinSummaryQuality:    0.5,
+		CacheEnabled:           true,
+		CacheTTL:               7 * 24 * time.Hour, // 7 days
+		MaxConcurrentFetches:   5,
+		RetryAttempts:          3,
+		RequestTimeout:         30 * time.Second,
+		OutputFormat:           "markdown",
+		GenerateBanner:         false,
+		BannerStyle:            "tech",
+		MinArticleLength:       100,
+		MinSummaryQuality:      0.5,
 		UseStructuredSummaries: false, // Default to simple summaries for backward compatibility
 	}
 }
@@ -86,7 +86,7 @@ func NewPipeline(
 	cache CacheManager,
 	banner BannerGenerator,
 	citationTracker CitationTracker,
-	digestRepo DigestRepository,  // v2.0: Optional digest repository for database storage
+	digestRepo DigestRepository, // v2.0: Optional digest repository for database storage
 	config *Config,
 ) *Pipeline {
 	if config == nil {
@@ -279,7 +279,7 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 		// Update digest with generated content
 		digest.Title = digestContent.Title
 		digest.TLDRSummary = digestContent.TLDRSummary
-		digest.KeyMoments = digestContent.KeyMoments // v2.0 structured format
+		digest.KeyMoments = digestContent.KeyMoments     // v2.0 structured format
 		digest.Perspectives = digestContent.Perspectives // v2.0 structured format
 		digest.Metadata.Title = digestContent.Title
 		digest.Metadata.TLDRSummary = digestContent.TLDRSummary
@@ -599,118 +599,6 @@ func (p *Pipeline) generateClusterNarratives(ctx context.Context, clusters []cor
 	return updatedClusters, nil
 }
 
-// categorizeArticles assigns categories to all articles using LLM categorization
-func (p *Pipeline) categorizeArticles(ctx context.Context, articles []core.Article, summaries []core.Summary) ([]core.Article, error) {
-	if p.categorizer == nil {
-		return articles, fmt.Errorf("categorizer not available")
-	}
-
-	// Build a map of article ID to summary for faster lookup
-	summaryMap := summariesToMap(summaries)
-
-	categorizedArticles := make([]core.Article, 0, len(articles))
-	var failedCount int
-
-	for i, article := range articles {
-		fmt.Printf("   [%d/%d] Categorizing: %s\n", i+1, len(articles), article.Title)
-
-		// Get corresponding summary
-		summary, hasSummary := summaryMap[article.ID]
-		var summaryPtr *core.Summary
-		if hasSummary {
-			summaryPtr = &summary
-		}
-
-		// Categorize article
-		category, err := p.categorizer.CategorizeArticle(ctx, &article, summaryPtr)
-		if err != nil {
-			// Log error but continue with default category
-			fmt.Printf("           ✗ Categorization failed: %v (using 'Miscellaneous')\n", err)
-			category = "Miscellaneous"
-			failedCount++
-		} else {
-			fmt.Printf("           ✓ Category: %s\n", category)
-		}
-
-		// Update article with category
-		article.Category = category
-		categorizedArticles = append(categorizedArticles, article)
-	}
-
-	if failedCount > 0 {
-		fmt.Printf("   ⚠️  Warning: %d/%d articles failed to categorize\n", failedCount, len(articles))
-	}
-
-	return categorizedArticles, nil
-}
-
-// buildDigest constructs the final digest structure
-// Groups articles by category first, then by cluster theme within each category
-func (p *Pipeline) buildDigest(clusters []core.TopicCluster, articles []core.Article, summaries []core.Summary, executiveSummary string) *core.Digest {
-	digest := &core.Digest{
-		ID:            generateID(),
-		DigestSummary: executiveSummary,
-		DateGenerated: time.Now(),
-	}
-
-	// Build a map of article IDs to full articles for quick lookup
-	articleMap := articlesToMap(articles)
-
-	// Group articles by category
-	categoryGroups := make(map[string][]core.Article)
-	articleURLs := make([]string, 0, len(articles))
-
-	// First pass: organize articles by category
-	for _, cluster := range clusters {
-		for _, articleID := range cluster.ArticleIDs {
-			if article, found := articleMap[articleID]; found {
-				category := article.Category
-				if category == "" {
-					category = "Miscellaneous"
-				}
-				categoryGroups[category] = append(categoryGroups[category], article)
-				articleURLs = append(articleURLs, article.URL)
-			}
-		}
-	}
-
-	// Build article groups by category
-	articleGroups := make([]core.ArticleGroup, 0, len(categoryGroups))
-	for category, categoryArticles := range categoryGroups {
-		group := core.ArticleGroup{
-			Category: category,
-			Theme:    category, // Use category as theme for now
-			Articles: categoryArticles,
-			Priority: p.getCategoryPriority(category),
-		}
-		articleGroups = append(articleGroups, group)
-	}
-
-	// Sort groups by priority (lower number = higher priority)
-	// This ensures Platform Updates comes before Miscellaneous, etc.
-	for i := 0; i < len(articleGroups); i++ {
-		for j := i + 1; j < len(articleGroups); j++ {
-			if articleGroups[i].Priority > articleGroups[j].Priority {
-				articleGroups[i], articleGroups[j] = articleGroups[j], articleGroups[i]
-			}
-		}
-	}
-
-	digest.ArticleGroups = articleGroups
-	digest.ArticleURLs = articleURLs
-	digest.Summaries = summaries // Store summaries for rendering
-
-	// Set metadata (title and TL;DR will be generated later)
-	digest.Metadata = core.DigestMetadata{
-		Title:         "", // Will be generated by narrative generator
-		TLDRSummary:   "", // Will be generated by narrative generator
-		DateGenerated: time.Now(),
-		ArticleCount:  len(articles),
-	}
-
-	return digest
-}
-
 // buildDigestForCluster builds a digest for a single cluster (v2.0)
 // This method creates one focused digest per topic cluster
 func (p *Pipeline) buildDigestForCluster(cluster core.TopicCluster, articles []core.Article, summaries []core.Summary) *core.Digest {
@@ -750,25 +638,6 @@ func (p *Pipeline) buildDigestForCluster(cluster core.TopicCluster, articles []c
 	}
 
 	return digest
-}
-
-// getCategoryPriority returns the priority of a category for sorting
-// Lower numbers appear first in the digest
-func (p *Pipeline) getCategoryPriority(category string) int {
-	// Map of category to priority (from categorization/categories.go default order)
-	priorities := map[string]int{
-		"Platform Updates": 1,
-		"From the Field":   2,
-		"Research":         3,
-		"Tutorials":        4,
-		"Analysis":         5,
-		"Miscellaneous":    99,
-	}
-
-	if priority, found := priorities[category]; found {
-		return priority
-	}
-	return 50 // Default priority for unknown categories
 }
 
 // generateExecutiveSummaryFromDigest generates executive summary using category-grouped articles

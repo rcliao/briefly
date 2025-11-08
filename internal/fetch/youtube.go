@@ -166,9 +166,9 @@ Key aspects likely covered:
 
 The content is produced by %s, which is known for high-quality technical content. This video would be valuable for developers, engineers, and technical professionals interested in the subject matter indicated by the title.
 
-For the complete content and detailed demonstrations, viewers should watch the full video at the source.`, 
+For the complete content and detailed demonstrations, viewers should watch the full video at the source.`,
 		videoInfo.Title, videoInfo.Channel, videoInfo.Channel, videoInfo.Title, videoInfo.Channel)
-		
+
 	return content
 }
 
@@ -217,4 +217,3 @@ func DetectYouTubeURL(urlStr string) bool {
 
 	return false
 }
-

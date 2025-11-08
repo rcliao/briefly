@@ -83,10 +83,10 @@ func (t *TracedClassifier) ClassifyArticle(ctx context.Context, article core.Art
 		Name: "theme_classification_multi",
 		Tags: []string{"classification", "theme", "multi", "phase1"},
 		Metadata: map[string]string{
-			"article_id":     article.ID,
-			"article_title":  article.Title,
-			"theme_count":    fmt.Sprintf("%d", len(themes)),
-			"min_relevance":  fmt.Sprintf("%.2f", minRelevance),
+			"article_id":    article.ID,
+			"article_title": article.Title,
+			"theme_count":   fmt.Sprintf("%d", len(themes)),
+			"min_relevance": fmt.Sprintf("%.2f", minRelevance),
 		},
 	})
 	if err != nil {
@@ -181,8 +181,8 @@ func (t *TracedClassifier) ClassifyBatch(ctx context.Context, articles []core.Ar
 			span := t.langfuse.CreateSpan(trace, observability.SpanOptions{
 				Name: "article_classification",
 				Metadata: map[string]string{
-					"article_id":    articleID,
-					"match_count":   fmt.Sprintf("%d", len(articleResults)),
+					"article_id":  articleID,
+					"match_count": fmt.Sprintf("%d", len(articleResults)),
 				},
 			})
 

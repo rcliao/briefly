@@ -6,9 +6,10 @@ import (
 
 // SilhouetteScore calculates the silhouette score for a single data point
 // Returns a score between -1 and 1:
-//   -1: Point likely in wrong cluster
-//    0: Point on the border between clusters
-//   +1: Point well matched to its cluster
+//
+//	-1: Point likely in wrong cluster
+//	 0: Point on the border between clusters
+//	+1: Point well matched to its cluster
 func SilhouetteScore(
 	pointIdx int,
 	clusterAssignments []int,
@@ -230,13 +231,13 @@ func EuclideanDistance(a, b []float64) float64 {
 
 // SilhouetteAnalysis provides comprehensive silhouette analysis
 type SilhouetteAnalysis struct {
-	OverallScore      float64            // Average across all points
-	ClusterScores     map[int]float64    // Per-cluster average scores
-	PointScores       []float64          // Individual point scores
-	ClusterAssignments []int             // Cluster labels for each point
-	NumClusters       int                // Total number of clusters
-	NumPoints         int                // Total number of points
-	Quality           string             // Interpretation: Excellent/Good/Fair/Poor
+	OverallScore       float64         // Average across all points
+	ClusterScores      map[int]float64 // Per-cluster average scores
+	PointScores        []float64       // Individual point scores
+	ClusterAssignments []int           // Cluster labels for each point
+	NumClusters        int             // Total number of clusters
+	NumPoints          int             // Total number of points
+	Quality            string          // Interpretation: Excellent/Good/Fair/Poor
 }
 
 // PerformSilhouetteAnalysis performs comprehensive silhouette analysis

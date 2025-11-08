@@ -13,10 +13,10 @@ import (
 // Mock repositories
 
 type MockManualURLRepo struct {
-	urls       []core.ManualURL
-	statusCalls []StatusCall
-	failGetPending bool
-	failUpdate bool
+	urls              []core.ManualURL
+	statusCalls       []StatusCall
+	failGetPending    bool
+	failUpdate        bool
 	failMarkProcessed bool
 }
 
@@ -199,14 +199,14 @@ func (m *MockDatabase) FeedItems() persistence.FeedItemRepository {
 }
 
 // Stub methods
-func (m *MockDatabase) Articles() persistence.ArticleRepository { return nil }
-func (m *MockDatabase) Summaries() persistence.SummaryRepository { return nil }
-func (m *MockDatabase) Feeds() persistence.FeedRepository { return nil }
-func (m *MockDatabase) Digests() persistence.DigestRepository { return nil }
-func (m *MockDatabase) Themes() persistence.ThemeRepository { return nil }
+func (m *MockDatabase) Articles() persistence.ArticleRepository   { return nil }
+func (m *MockDatabase) Summaries() persistence.SummaryRepository  { return nil }
+func (m *MockDatabase) Feeds() persistence.FeedRepository         { return nil }
+func (m *MockDatabase) Digests() persistence.DigestRepository     { return nil }
+func (m *MockDatabase) Themes() persistence.ThemeRepository       { return nil }
 func (m *MockDatabase) Citations() persistence.CitationRepository { return nil }
-func (m *MockDatabase) Close() error { return nil }
-func (m *MockDatabase) Ping(ctx context.Context) error { return nil }
+func (m *MockDatabase) Close() error                              { return nil }
+func (m *MockDatabase) Ping(ctx context.Context) error            { return nil }
 func (m *MockDatabase) BeginTx(ctx context.Context) (persistence.Transaction, error) {
 	return nil, nil
 }

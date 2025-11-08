@@ -52,9 +52,9 @@ func DefaultQualityGateConfig() QualityGateConfig {
 
 // ClusteringQualityGate validates clustering results
 type ClusteringQualityGate struct {
-	config            QualityGateConfig
-	clusters          []core.TopicCluster
-	embeddings        map[string][]float64
+	config             QualityGateConfig
+	clusters           []core.TopicCluster
+	embeddings         map[string][]float64
 	coherenceEvaluator *quality.ClusterCoherenceEvaluator
 }
 
@@ -65,9 +65,9 @@ func NewClusteringQualityGate(
 	embeddings map[string][]float64,
 ) *ClusteringQualityGate {
 	return &ClusteringQualityGate{
-		config:            config,
-		clusters:          clusters,
-		embeddings:        embeddings,
+		config:             config,
+		clusters:           clusters,
+		embeddings:         embeddings,
 		coherenceEvaluator: quality.NewClusterCoherenceEvaluator(),
 	}
 }
@@ -131,9 +131,9 @@ func (g *ClusteringQualityGate) Validate(ctx context.Context) error {
 
 // NarrativeQualityGate validates cluster narratives
 type NarrativeQualityGate struct {
-	config           QualityGateConfig
-	clusters         []core.TopicCluster
-	digestEvaluator  *quality.DigestEvaluator
+	config          QualityGateConfig
+	clusters        []core.TopicCluster
+	digestEvaluator *quality.DigestEvaluator
 }
 
 // NewNarrativeQualityGate creates a new narrative quality gate

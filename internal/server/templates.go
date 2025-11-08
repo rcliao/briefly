@@ -15,9 +15,9 @@ import (
 
 // TemplateRenderer manages HTML templates with hot-reload support
 type TemplateRenderer struct {
-	templates *template.Template
-	mu        sync.RWMutex
-	devMode   bool
+	templates   *template.Template
+	mu          sync.RWMutex
+	devMode     bool
 	templateDir string
 }
 
@@ -46,22 +46,27 @@ func (tr *TemplateRenderer) loadTemplates() error {
 
 	// Custom template functions
 	funcMap := template.FuncMap{
-		"truncate":         truncateString,
-		"formatDate":       formatDate,
-		"formatDateShort":  formatDateShort,
-		"formatTimeAgo":    formatTimeAgo,
-		"readTime":         calculateReadTime,
-		"themeEmoji":       getThemeEmoji,
-		"extractDomain":    extractDomain,
-		"add":              func(a, b int) int { return a + b },
-		"sub":              func(a, b int) int { return a - b },
-		"mul":              func(a, b float64) float64 { return a * b },
-		"div":              func(a, b int) int { if b == 0 { return 0 }; return a / b },
-		"eq":               func(a, b interface{}) bool { return a == b },
-		"ne":               func(a, b interface{}) bool { return a != b },
-		"gt":               func(a, b int) bool { return a > b },
-		"lt":               func(a, b int) bool { return a < b },
-		"len":              func(s interface{}) int {
+		"truncate":        truncateString,
+		"formatDate":      formatDate,
+		"formatDateShort": formatDateShort,
+		"formatTimeAgo":   formatTimeAgo,
+		"readTime":        calculateReadTime,
+		"themeEmoji":      getThemeEmoji,
+		"extractDomain":   extractDomain,
+		"add":             func(a, b int) int { return a + b },
+		"sub":             func(a, b int) int { return a - b },
+		"mul":             func(a, b float64) float64 { return a * b },
+		"div": func(a, b int) int {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+		"eq": func(a, b interface{}) bool { return a == b },
+		"ne": func(a, b interface{}) bool { return a != b },
+		"gt": func(a, b int) bool { return a > b },
+		"lt": func(a, b int) bool { return a < b },
+		"len": func(s interface{}) int {
 			switch v := s.(type) {
 			case []interface{}:
 				return len(v)
@@ -225,32 +230,32 @@ func calculateReadTime(text string) int {
 // getThemeEmoji returns an emoji for a given theme name
 func getThemeEmoji(themeName string) string {
 	emojis := map[string]string{
-		"AI/ML":                    "🤖",
-		"Artificial Intelligence":  "🤖",
-		"Machine Learning":         "🧠",
-		"Cloud Computing":          "☁️",
-		"Cloud":                    "☁️",
-		"DevOps":                   "🚀",
-		"Security":                 "🔒",
-		"Cybersecurity":            "🛡️",
-		"Frontend":                 "🎨",
-		"Backend":                  "⚙️",
-		"Data Science":             "📊",
-		"Data":                     "📊",
-		"Mobile Development":       "📱",
-		"Mobile":                   "📱",
-		"Web Development":          "🌐",
-		"Blockchain":               "⛓️",
-		"IoT":                      "📡",
-		"Quantum Computing":        "⚛️",
-		"Open Source":              "🔓",
-		"Software Engineering":     "💻",
-		"Programming":              "👨‍💻",
-		"Databases":                "🗄️",
-		"Networking":               "🌐",
-		"Infrastructure":           "🏗️",
-		"Containerization":         "🐳",
-		"Microservices":            "🔧",
+		"AI/ML":                   "🤖",
+		"Artificial Intelligence": "🤖",
+		"Machine Learning":        "🧠",
+		"Cloud Computing":         "☁️",
+		"Cloud":                   "☁️",
+		"DevOps":                  "🚀",
+		"Security":                "🔒",
+		"Cybersecurity":           "🛡️",
+		"Frontend":                "🎨",
+		"Backend":                 "⚙️",
+		"Data Science":            "📊",
+		"Data":                    "📊",
+		"Mobile Development":      "📱",
+		"Mobile":                  "📱",
+		"Web Development":         "🌐",
+		"Blockchain":              "⛓️",
+		"IoT":                     "📡",
+		"Quantum Computing":       "⚛️",
+		"Open Source":             "🔓",
+		"Software Engineering":    "💻",
+		"Programming":             "👨‍💻",
+		"Databases":               "🗄️",
+		"Networking":              "🌐",
+		"Infrastructure":          "🏗️",
+		"Containerization":        "🐳",
+		"Microservices":           "🔧",
 	}
 
 	// Try exact match first

@@ -47,9 +47,9 @@ type Client struct {
 
 // TextGenerationOptions contains options for text generation
 type TextGenerationOptions struct {
-	MaxTokens      int32        // Maximum number of tokens to generate
-	Temperature    float32      // Temperature for randomness (0.0 to 1.0)
-	Model          string       // Model to use (optional, defaults to client's model)
+	MaxTokens      int32         // Maximum number of tokens to generate
+	Temperature    float32       // Temperature for randomness (0.0 to 1.0)
+	Model          string        // Model to use (optional, defaults to client's model)
 	ResponseSchema *genai.Schema // Optional: Schema for structured output (Phase 1)
 }
 
@@ -553,7 +553,7 @@ func (c *Client) CategorizeArticle(ctx context.Context, article core.Article, ca
 	// Build category descriptions for the prompt
 	var categoryDescriptions []string
 	for id, category := range categories {
-		categoryDescriptions = append(categoryDescriptions, 
+		categoryDescriptions = append(categoryDescriptions,
 			fmt.Sprintf("%s (%s %s): %s", id, category.Emoji, category.Name, category.Description))
 	}
 
@@ -571,9 +571,9 @@ CATEGORY: [category_id]
 CONFIDENCE: [0.0-1.0]
 REASONING: [brief explanation in one sentence]
 
-Be precise and specific in your categorization.`, 
-		strings.Join(categoryDescriptions, "\n"), 
-		article.Title, 
+Be precise and specific in your categorization.`,
+		strings.Join(categoryDescriptions, "\n"),
+		article.Title,
 		article.CleanedText)
 
 	resp, err := c.genaiModel.GenerateContent(ctx, genai.Text(prompt))
@@ -614,15 +614,15 @@ type CategoryResult struct {
 // parseCategorizeResponse parses LLM response for article categorization
 func parseCategorizeResponse(response string, categories map[string]Category) (CategoryResult, error) {
 	lines := strings.Split(response, "\n")
-	
+
 	var categoryID string
 	var confidence float64
 	var reasoning string
-	
+
 	// Parse each line for the expected format
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		if strings.HasPrefix(line, "CATEGORY:") {
 			categoryID = strings.TrimSpace(strings.TrimPrefix(line, "CATEGORY:"))
 		} else if strings.HasPrefix(line, "CONFIDENCE:") {
@@ -634,7 +634,7 @@ func parseCategorizeResponse(response string, categories map[string]Category) (C
 			reasoning = strings.TrimSpace(strings.TrimPrefix(line, "REASONING:"))
 		}
 	}
-	
+
 	// Validate and get category
 	category, exists := categories[categoryID]
 	if !exists {
@@ -649,18 +649,18 @@ func parseCategorizeResponse(response string, categories map[string]Category) (C
 		confidence = 0.5
 		reasoning = "LLM returned unknown category, using fallback"
 	}
-	
+
 	// Ensure reasonable confidence bounds
 	if confidence < 0.0 {
 		confidence = 0.0
 	} else if confidence > 1.0 {
 		confidence = 1.0
 	}
-	
+
 	if reasoning == "" {
 		reasoning = "LLM-based categorization"
 	}
-	
+
 	return CategoryResult{
 		Category:   category,
 		Confidence: confidence,
@@ -1331,7 +1331,7 @@ func (c *Client) GenerateStructuredDigest(combinedSummaries, format string, aler
 	if len(researchSuggestions) > 0 {
 		researchContext = fmt.Sprintf("\n\nRELATED RESEARCH AREAS:\n%s", strings.Join(researchSuggestions[:3], "; ")) // Top 3 suggestions
 	}
-	
+
 	// Check if articles are categorized by looking for "Category:" in the combined summaries
 	categorizedPrompt := ""
 	if strings.Contains(combinedSummaries, "**Category:") {
@@ -1509,27 +1509,27 @@ type ChatSession struct {
 func (c *Client) StartChatSession(ctx context.Context, initialContext string) (*ChatSession, error) {
 	// Create a new model instance for this chat session
 	model := c.gClient.GenerativeModel(c.modelName)
-	
+
 	// Configure the model for chat
 	model.SetTemperature(0.7)
 	model.SetTopK(40)
 	model.SetTopP(0.95)
 	model.SetMaxOutputTokens(2048)
-	
+
 	// Start the chat session with initial context
 	chatSession := model.StartChat()
-	
+
 	// Send the initial context as a system message
 	resp, err := chatSession.SendMessage(ctx, genai.Text(initialContext))
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize chat session: %w", err)
 	}
-	
+
 	// Verify we got a response
 	if resp == nil || len(resp.Candidates) == 0 {
 		return nil, fmt.Errorf("no response from model during initialization")
 	}
-	
+
 	return &ChatSession{
 		model:   model,
 		session: chatSession,
@@ -1542,18 +1542,18 @@ func (c *Client) SendChatMessage(ctx context.Context, session *ChatSession, mess
 	if session == nil || session.session == nil {
 		return "", fmt.Errorf("invalid chat session")
 	}
-	
+
 	// Send the message
 	resp, err := session.session.SendMessage(ctx, genai.Text(message))
 	if err != nil {
 		return "", fmt.Errorf("failed to send message: %w", err)
 	}
-	
+
 	// Extract response text
 	if resp == nil || len(resp.Candidates) == 0 {
 		return "", fmt.Errorf("no response from model")
 	}
-	
+
 	var responseText string
 	for _, candidate := range resp.Candidates {
 		if candidate.Content != nil {
@@ -1564,10 +1564,10 @@ func (c *Client) SendChatMessage(ctx context.Context, session *ChatSession, mess
 			}
 		}
 	}
-	
+
 	if responseText == "" {
 		return "", fmt.Errorf("empty response from model")
 	}
-	
+
 	return strings.TrimSpace(responseText), nil
 }

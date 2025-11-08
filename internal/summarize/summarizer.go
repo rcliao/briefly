@@ -34,16 +34,16 @@ type Summarizer struct {
 // SummarizerOptions configures the summarizer behavior
 type SummarizerOptions struct {
 	// Default settings for summaries
-	DefaultMaxWords       int
-	DefaultKeyPointCount  int
+	DefaultMaxWords      int
+	DefaultKeyPointCount int
 
 	// Model settings
-	ModelName    string
-	Temperature  float32
+	ModelName   string
+	Temperature float32
 
 	// Retry settings
-	MaxRetries   int
-	RetryDelay   time.Duration
+	MaxRetries int
+	RetryDelay time.Duration
 
 	// Quality control
 	MinSummaryWords int // Minimum words for valid summary
@@ -55,12 +55,12 @@ func DefaultSummarizerOptions() SummarizerOptions {
 	return SummarizerOptions{
 		DefaultMaxWords:      150,
 		DefaultKeyPointCount: 5,
-		ModelName:           "gemini-2.5-flash-preview-05-20",
-		Temperature:         0.3, // Lower temperature for more consistent summaries
-		MaxRetries:          2,
-		RetryDelay:          time.Second,
-		MinSummaryWords:     50,
-		MaxSummaryWords:     300,
+		ModelName:            "gemini-2.5-flash-preview-05-20",
+		Temperature:          0.3, // Lower temperature for more consistent summaries
+		MaxRetries:           2,
+		RetryDelay:           time.Second,
+		MinSummaryWords:      50,
+		MaxSummaryWords:      300,
 	}
 }
 

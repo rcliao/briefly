@@ -14,9 +14,9 @@ type HealthResponse struct {
 
 // Status response
 type StatusResponse struct {
-	Version string            `json:"version"`
-	Uptime  string            `json:"uptime"`
-	Database DatabaseStatus   `json:"database"`
+	Version  string         `json:"version"`
+	Uptime   string         `json:"uptime"`
+	Database DatabaseStatus `json:"database"`
 }
 
 // DatabaseStatus represents database health

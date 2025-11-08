@@ -188,7 +188,7 @@ func generateBasicSummary(article core.Article) string {
 		}
 		return article.CleanedText[:200] + "..."
 	}
-	
+
 	// Fallback to a generic summary
 	return "Article covering developments in the field."
 }
@@ -232,7 +232,7 @@ func enforceWordLimit(content string, maxWords int) string {
 
 	// Truncate at word boundary and add indication
 	truncated := strings.Join(words[:maxWords], " ")
-	
+
 	// Try to end at a natural break (paragraph, sentence)
 	if lastNewline := strings.LastIndex(truncated, "\n\n"); lastNewline > len(truncated)/2 {
 		truncated = truncated[:lastNewline]
@@ -260,7 +260,7 @@ func ConvertLegacyToSignalSources(digest *core.Digest) error {
 		// Extract signal from legacy content (basic implementation)
 		lines := strings.Split(digest.Content, "\n")
 		var signalContent string
-		
+
 		for _, line := range lines {
 			if strings.HasPrefix(line, "## Executive Summary") && len(lines) > 1 {
 				// Take next few lines as signal content

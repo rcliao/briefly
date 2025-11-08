@@ -50,9 +50,9 @@ func (a *narrativeLLMAdapter) GetGenaiModel() *genai.GenerativeModel {
 // NewDigestGenerateCmd creates the digest generate command for database-driven digests
 func NewDigestGenerateCmd() *cobra.Command {
 	var (
-		sinceDay int
+		sinceDay    int
 		themeFilter string
-		outputDir string
+		outputDir   string
 		minArticles int
 	)
 
@@ -604,23 +604,23 @@ func generateDigestsWithClustering(ctx context.Context, db *persistence.Postgres
 
 		// Create digest for this cluster with ALL required fields
 		digest := &core.Digest{
-			ID:            uuid.NewString(),
+			ID: uuid.NewString(),
 
 			// v2.0 fields
 			Title:         digestContent.Title,
 			Summary:       summaryWithCitations,
 			TLDRSummary:   digestContent.TLDRSummary,
-			KeyMoments:    digestContent.KeyMoments,    // FIXED: Now assigned
-			Perspectives:  digestContent.Perspectives,  // FIXED: Now assigned
+			KeyMoments:    digestContent.KeyMoments,   // FIXED: Now assigned
+			Perspectives:  digestContent.Perspectives, // FIXED: Now assigned
 			Articles:      clusterArticles,
 			ClusterID:     &clusterIdx,
 			ProcessedDate: now,
 			ArticleCount:  len(clusterArticles),
 
 			// Legacy fields for backward compatibility
-			ArticleGroups: articleGroups,  // FIXED: Now populated for homepage theme display
+			ArticleGroups: articleGroups, // FIXED: Now populated for homepage theme display
 			DigestSummary: digestContent.ExecutiveSummary,
-			Metadata: core.DigestMetadata{  // FIXED: Now populated for proper display
+			Metadata: core.DigestMetadata{ // FIXED: Now populated for proper display
 				Title:         digestContent.Title,
 				ArticleCount:  len(clusterArticles),
 				DateGenerated: now,

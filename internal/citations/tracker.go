@@ -48,7 +48,7 @@ func (t *Tracker) TrackArticle(ctx context.Context, article *core.Article) (*cor
 		URL:           article.URL,
 		Title:         article.Title,
 		Publisher:     publisher,
-		Author:        "", // Could be extracted from article metadata if available
+		Author:        "",  // Could be extracted from article metadata if available
 		PublishedDate: nil, // Could be extracted from article metadata if available
 		AccessedDate:  article.DateFetched,
 		Metadata:      make(map[string]interface{}),

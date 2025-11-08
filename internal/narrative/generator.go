@@ -35,11 +35,11 @@ func NewGenerator(llmClient LLMClient) *Generator {
 
 // DigestContent contains all generated content for a digest (v2.0 structured format)
 type DigestContent struct {
-	Title            string               `json:"title"`             // Generated title (25-45 chars ideal, 50 max)
-	TLDRSummary      string               `json:"tldr_summary"`      // One-sentence summary (40-80 chars ideal, 100 max)
-	KeyMoments       []core.KeyMoment     `json:"key_moments"`       // 3-5 key developments with structured quotes and citations
-	Perspectives     []core.Perspective   `json:"perspectives"`      // Supporting/opposing viewpoints (optional)
-	ExecutiveSummary string               `json:"executive_summary"` // Full narrative summary with [N] citation placeholders
+	Title            string             `json:"title"`             // Generated title (25-45 chars ideal, 50 max)
+	TLDRSummary      string             `json:"tldr_summary"`      // One-sentence summary (40-80 chars ideal, 100 max)
+	KeyMoments       []core.KeyMoment   `json:"key_moments"`       // 3-5 key developments with structured quotes and citations
+	Perspectives     []core.Perspective `json:"perspectives"`      // Supporting/opposing viewpoints (optional)
+	ExecutiveSummary string             `json:"executive_summary"` // Full narrative summary with [N] citation placeholders
 }
 
 // GenerateClusterSummary generates a comprehensive narrative for a single cluster using ALL articles
@@ -262,18 +262,18 @@ func (g *Generator) GenerateExecutiveSummary(ctx context.Context, clusters []cor
 
 // ClusterInsight represents the key information from a topic cluster
 type ClusterInsight struct {
-	Theme         string
-	TopArticles   []ArticleSummary
-	KeyThemes     []string
-	ArticleCount  int
+	Theme        string
+	TopArticles  []ArticleSummary
+	KeyThemes    []string
+	ArticleCount int
 }
 
 // ArticleSummary contains essential article information for narrative generation
 type ArticleSummary struct {
-	Title      string
-	URL        string
-	Summary    string
-	KeyPoints  []string
+	Title     string
+	URL       string
+	Summary   string
+	KeyPoints []string
 }
 
 // extractClusterInsight extracts the top 3 articles and key information from a cluster
@@ -337,8 +337,8 @@ func (g *Generator) extractKeyPoints(summary core.Summary) []string {
 
 		// Check for bullet points or numbered lists
 		if strings.HasPrefix(line, "-") ||
-		   strings.HasPrefix(line, "•") ||
-		   strings.HasPrefix(line, "*") {
+			strings.HasPrefix(line, "•") ||
+			strings.HasPrefix(line, "*") {
 			point := strings.TrimSpace(line[1:])
 			if point != "" {
 				keyPoints = append(keyPoints, point)
@@ -1116,9 +1116,9 @@ func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestCo
 			CitationNumber int    `json:"citation_number"`
 		} `json:"key_moments"`
 		Perspectives []struct {
-			Type             string `json:"type"`
-			Summary          string `json:"summary"`
-			CitationNumbers  []int  `json:"citation_numbers"`
+			Type            string `json:"type"`
+			Summary         string `json:"summary"`
+			CitationNumbers []int  `json:"citation_numbers"`
 		} `json:"perspectives"`
 	}
 

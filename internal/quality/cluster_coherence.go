@@ -32,11 +32,11 @@ func (e *ClusterCoherenceEvaluator) EvaluateClusterCoherence(
 	embeddings map[string][]float64,
 ) *ClusterCoherenceMetrics {
 	metrics := &ClusterCoherenceMetrics{
-		NumClusters:            len(clusters),
-		NumArticles:            0,
-		ClusterSilhouettes:     make([]float64, 0, len(clusters)),
+		NumClusters:              len(clusters),
+		NumArticles:              0,
+		ClusterSilhouettes:       make([]float64, 0, len(clusters)),
 		IntraClusterSimilarities: make([]float64, 0, len(clusters)),
-		Issues:                 []string{},
+		Issues:                   []string{},
 	}
 
 	// Count total articles

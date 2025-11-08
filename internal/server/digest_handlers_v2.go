@@ -10,14 +10,14 @@ import (
 
 // ArticleWithSummary extends Article with summary text for rendering
 type ArticleWithSummary struct {
-	ID                   string
-	URL                  string
-	Title                string
-	ContentType          string
-	CleanedText          string
-	DatePublished        time.Time
-	ThemeRelevanceScore  *float64
-	Summary              string
+	ID                  string
+	URL                 string
+	Title               string
+	ContentType         string
+	CleanedText         string
+	DatePublished       time.Time
+	ThemeRelevanceScore *float64
+	Summary             string
 }
 
 // handleExpandDigest returns the expanded digest content for HTMX
