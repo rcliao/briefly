@@ -73,6 +73,11 @@ class BasePageNav {
         return
       }
 
+      // Skip keyboard navigation on mobile/touch devices to prevent scroll hijacking
+      if (this.lastInputType === 'touch') {
+        return
+      }
+
       // Handle second key in multi-key shortcuts
       if (this.waitingForSecondKey) {
         clearTimeout(this.secondKeyTimeout)
