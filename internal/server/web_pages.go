@@ -5,17 +5,18 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
+	"briefly/internal/config"
 	"briefly/internal/core"
 	"briefly/internal/persistence"
 )
 
 // getPostHogConfig returns PostHog configuration
 func (s *Server) getPostHogConfig() (apiKey string, host string) {
-	apiKey = os.Getenv("POSTHOG_API_KEY")
-	host = os.Getenv("POSTHOG_HOST")
+	cfg := config.GetPostHogConfig()
+	apiKey = cfg.APIKey
+	host = cfg.Host
 	if host == "" {
 		host = "https://app.posthog.com"
 	}

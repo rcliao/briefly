@@ -227,10 +227,9 @@ func (s *Server) getHomePageData(ctx context.Context, activeThemeID string, page
 		totalArticles += d.Metadata.ArticleCount
 	}
 
-	// PostHog configuration (TODO: add to config struct)
-	postHogEnabled := false
-	postHogAPIKey := ""
-	postHogHost := "https://app.posthog.com"
+	// PostHog configuration
+	postHogAPIKey, postHogHost := s.getPostHogConfig()
+	postHogEnabled := postHogAPIKey != ""
 
 	return &HomePageData{
 		Themes:           themesWithCount,
