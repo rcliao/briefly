@@ -29,8 +29,22 @@ class BasePageNav {
     this.contextIndicator = null
     this.modalKeyHandler = null
 
+    // Detect if this is a mobile device (disable keyboard navigation)
+    this.isMobileDevice = this.detectMobile()
+
     // Initialize
     this.init()
+  }
+
+  // Detect mobile/touch-only devices
+  detectMobile() {
+    // Check for touch-only devices (tablets, phones)
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+    const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    const isSmallScreen = window.matchMedia('(max-width: 768px)').matches
+
+    // Mobile if: touch-capable AND (mobile user agent OR small screen)
+    return hasTouch && (isMobileUserAgent || isSmallScreen)
   }
 
   // Override in subclasses to set default context
@@ -52,7 +66,13 @@ class BasePageNav {
     // Cache DOM references
     this.navLinks = Array.from(document.querySelectorAll('header nav a'))
 
-    // Initialize components
+    // Skip keyboard navigation on mobile devices entirely
+    if (this.isMobileDevice) {
+      console.log('[Keyboard Nav] Mobile device detected - keyboard navigation disabled')
+      return
+    }
+
+    // Initialize components (desktop only)
     this.initGlobalKeys()
     this.initNavContext()
     this.initInputTypeDetection()
@@ -218,6 +238,12 @@ class BasePageNav {
   initInputTypeDetection() {
     // Keyboard input - show context indicator
     document.addEventListener('keydown', (e) => {
+      // Don't switch from touch to keyboard mode on arrow keys (prevents mobile scroll hijacking)
+      const isArrowKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)
+      if (this.lastInputType === 'touch' && isArrowKey) {
+        return // Stay in touch mode
+      }
+
       if (this.lastInputType !== 'keyboard') {
         this.lastInputType = 'keyboard'
         document.body.classList.add('keyboard-mode')
