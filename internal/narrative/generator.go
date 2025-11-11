@@ -1311,6 +1311,14 @@ func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestCo
 	return content, nil
 }
 
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
+}
+
 // generateFallbackContent creates simple content when LLM fails
 func (g *Generator) generateFallbackContent(insights []ClusterInsight) DigestContent {
 	return DigestContent{

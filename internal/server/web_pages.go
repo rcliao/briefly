@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"briefly/internal/config"
@@ -455,10 +457,41 @@ func (s *Server) handleDigestDetailPage(w http.ResponseWriter, r *http.Request) 
 
 // prepareDigestDetailData prepares view model for digest detail page
 func (s *Server) prepareDigestDetailData(ctx context.Context, digest *core.Digest) (*DigestDetailPageData, error) {
-	// v2.0: Render markdown with citation links converted to anchors
+	// v3.0+: Render new scannable bullet format with citations
 	var summaryHTML template.HTML
-	if digest.Summary != "" {
-		// v2.0 field
+	if len(digest.TopDevelopments) > 0 {
+		// NEW v3.0 format: render scannable bullets
+		var sb strings.Builder
+
+		// One sentence executive summary (WhyItMatters)
+		if digest.WhyItMatters != "" {
+			sb.WriteString(string(renderMarkdownWithCitations(digest.WhyItMatters)))
+		}
+
+		// Start bullet list
+		sb.WriteString("<ul class=\"digest-summary-bullets\">\n")
+
+		// Add top developments
+		for _, dev := range digest.TopDevelopments {
+			devHTML := renderMarkdownWithCitations(dev)
+			// Remove wrapping <p> tags from markdown output
+			devHTMLStr := strings.TrimPrefix(string(devHTML), "<p>")
+			devHTMLStr = strings.TrimSuffix(devHTMLStr, "</p>\n")
+			sb.WriteString(fmt.Sprintf("<li>%s</li>\n", devHTMLStr))
+		}
+
+		// Add by the numbers
+		for _, stat := range digest.ByTheNumbers {
+			contextHTML := renderMarkdownWithCitations(stat.Context)
+			contextHTMLStr := strings.TrimPrefix(string(contextHTML), "<p>")
+			contextHTMLStr = strings.TrimSuffix(contextHTMLStr, "</p>\n")
+			sb.WriteString(fmt.Sprintf("<li><strong>%s</strong> - %s</li>\n", stat.Stat, contextHTMLStr))
+		}
+
+		sb.WriteString("</ul>\n")
+		summaryHTML = template.HTML(sb.String())
+	} else if digest.Summary != "" {
+		// v2.0 field fallback
 		summaryHTML = renderMarkdownWithCitations(digest.Summary)
 	} else if digest.DigestSummary != "" {
 		// v1.0 fallback

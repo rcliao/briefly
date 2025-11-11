@@ -574,14 +574,21 @@ func (r *postgresDigestRepo) Create(ctx context.Context, digest *core.Digest) er
 		return fmt.Errorf("failed to marshal perspectives: %w", err)
 	}
 
-	// v2.0: Insert into proper columns
+	// v3.0: Marshal by_the_numbers
+	byTheNumbersJSON, err := json.Marshal(digest.ByTheNumbers)
+	if err != nil {
+		return fmt.Errorf("failed to marshal by_the_numbers: %w", err)
+	}
+
+	// v3.0: Insert into proper columns including new scannable format fields
 	query := `
 		INSERT INTO digests (
 			id, date, content, created_at,
 			title, summary, tldr_summary, key_moments, perspectives,
-			cluster_id, processed_date, article_count
+			cluster_id, processed_date, article_count,
+			top_developments, by_the_numbers, why_it_matters
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		ON CONFLICT (date)
 		DO UPDATE SET
 			id = EXCLUDED.id,
@@ -594,6 +601,9 @@ func (r *postgresDigestRepo) Create(ctx context.Context, digest *core.Digest) er
 			cluster_id = EXCLUDED.cluster_id,
 			processed_date = EXCLUDED.processed_date,
 			article_count = EXCLUDED.article_count,
+			top_developments = EXCLUDED.top_developments,
+			by_the_numbers = EXCLUDED.by_the_numbers,
+			why_it_matters = EXCLUDED.why_it_matters,
 			created_at = EXCLUDED.created_at
 	`
 	_, err = r.query().ExecContext(ctx, query,
@@ -609,6 +619,9 @@ func (r *postgresDigestRepo) Create(ctx context.Context, digest *core.Digest) er
 		digest.ClusterID,
 		digest.ProcessedDate,
 		digest.ArticleCount,
+		pq.Array(digest.TopDevelopments), // $13: v3.0 top_developments
+		byTheNumbersJSON,                  // $14: v3.0 by_the_numbers
+		digest.WhyItMatters,               // $15: v3.0 why_it_matters
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert digest: %w", err)
@@ -667,11 +680,12 @@ func (r *postgresDigestRepo) Create(ctx context.Context, digest *core.Digest) er
 }
 
 func (r *postgresDigestRepo) Get(ctx context.Context, id string) (*core.Digest, error) {
-	// v2.0: Select from proper columns, not just legacy content JSONB
+	// v3.0: Select from proper columns including new scannable format fields
 	query := `
 		SELECT
 			id, content, title, summary, tldr_summary, key_moments, perspectives,
-			cluster_id, processed_date, article_count, created_at, date
+			cluster_id, processed_date, article_count, created_at, date,
+			top_developments, by_the_numbers, why_it_matters
 		FROM digests
 		WHERE id = $1
 	`
@@ -679,9 +693,10 @@ func (r *postgresDigestRepo) Get(ctx context.Context, id string) (*core.Digest, 
 
 	var digest core.Digest
 	var contentJSON []byte
-	var keyMomentsJSON, perspectivesJSON []byte
+	var keyMomentsJSON, perspectivesJSON, byTheNumbersJSON []byte
 	var clusterID sql.NullInt64
 	var processedDate, createdAt, legacyDate sql.NullTime
+	var whyItMatters sql.NullString
 
 	if err := row.Scan(
 		&digest.ID,
@@ -696,6 +711,9 @@ func (r *postgresDigestRepo) Get(ctx context.Context, id string) (*core.Digest, 
 		&digest.ArticleCount,
 		&createdAt,
 		&legacyDate,
+		pq.Array(&digest.TopDevelopments),  // v3.0
+		&byTheNumbersJSON,                   // v3.0
+		&whyItMatters,                       // v3.0
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("digest not found")
@@ -715,6 +733,18 @@ func (r *postgresDigestRepo) Get(ctx context.Context, id string) (*core.Digest, 
 		if err := json.Unmarshal(perspectivesJSON, &digest.Perspectives); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal perspectives: %w", err)
 		}
+	}
+
+	// v3.0: Unmarshal by_the_numbers
+	if len(byTheNumbersJSON) > 0 && string(byTheNumbersJSON) != "null" {
+		if err := json.Unmarshal(byTheNumbersJSON, &digest.ByTheNumbers); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal by_the_numbers: %w", err)
+		}
+	}
+
+	// v3.0: Set why_it_matters
+	if whyItMatters.Valid {
+		digest.WhyItMatters = whyItMatters.String
 	}
 
 	// Handle nullable cluster_id
@@ -835,11 +865,12 @@ func (r *postgresDigestRepo) List(ctx context.Context, opts ListOptions) ([]core
 		limit = 50
 	}
 
-	// v2.0: Select from proper columns and join with digest_themes and themes tables
+	// v3.0: Select from proper columns including new scannable format fields
 	query := `
 		SELECT
 			d.id, d.content, d.title, d.summary, d.tldr_summary, d.key_moments, d.perspectives,
 			d.cluster_id, d.processed_date, d.article_count, d.created_at, d.date,
+			d.top_developments, d.by_the_numbers, d.why_it_matters,
 			COALESCE(
 				(SELECT json_agg(t.name)
 				 FROM digest_themes dt
@@ -861,10 +892,11 @@ func (r *postgresDigestRepo) List(ctx context.Context, opts ListOptions) ([]core
 	for rows.Next() {
 		var digest core.Digest
 		var contentJSON []byte
-		var keyMomentsJSON, perspectivesJSON []byte
+		var keyMomentsJSON, perspectivesJSON, byTheNumbersJSON []byte
 		var themesJSON []byte
 		var clusterID sql.NullInt64
 		var processedDate, createdAt, legacyDate sql.NullTime
+		var whyItMatters sql.NullString
 
 		if err := rows.Scan(
 			&digest.ID,
@@ -879,6 +911,9 @@ func (r *postgresDigestRepo) List(ctx context.Context, opts ListOptions) ([]core
 			&digest.ArticleCount,
 			&createdAt,
 			&legacyDate,
+			pq.Array(&digest.TopDevelopments),  // v3.0
+			&byTheNumbersJSON,                   // v3.0
+			&whyItMatters,                       // v3.0
 			&themesJSON,
 		); err != nil {
 			return nil, err
@@ -896,6 +931,18 @@ func (r *postgresDigestRepo) List(ctx context.Context, opts ListOptions) ([]core
 			if err := json.Unmarshal(perspectivesJSON, &digest.Perspectives); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal perspectives: %w", err)
 			}
+		}
+
+		// v3.0: Unmarshal by_the_numbers
+		if len(byTheNumbersJSON) > 0 && string(byTheNumbersJSON) != "null" {
+			if err := json.Unmarshal(byTheNumbersJSON, &digest.ByTheNumbers); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal by_the_numbers: %w", err)
+			}
+		}
+
+		// v3.0: Set why_it_matters
+		if whyItMatters.Valid {
+			digest.WhyItMatters = whyItMatters.String
 		}
 
 		// Handle nullable cluster_id
@@ -1008,6 +1055,12 @@ func (r *postgresDigestRepo) StoreWithRelationships(ctx context.Context, digest 
 		return fmt.Errorf("failed to marshal perspectives: %w", err)
 	}
 
+	// v3.0: Marshal by_the_numbers
+	byTheNumbersJSON, err := json.Marshal(digest.ByTheNumbers)
+	if err != nil {
+		return fmt.Errorf("failed to marshal by_the_numbers: %w", err)
+	}
+
 	// Build legacy content JSONB for backward compatibility
 	contentJSON := map[string]interface{}{
 		"summary": digest.Summary,
@@ -1028,8 +1081,9 @@ func (r *postgresDigestRepo) StoreWithRelationships(ctx context.Context, digest 
 	query := `
 		INSERT INTO digests (
 			id, date, content, title, summary, tldr_summary, key_moments, perspectives,
-			cluster_id, processed_date, article_count, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			cluster_id, processed_date, article_count, created_at,
+			top_developments, by_the_numbers, why_it_matters
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 	// Use processed_date for both date and processed_date (backward compatibility)
 	dateValue := digest.ProcessedDate
@@ -1039,17 +1093,20 @@ func (r *postgresDigestRepo) StoreWithRelationships(ctx context.Context, digest 
 
 	_, err = tx.ExecContext(ctx, query,
 		digest.ID,
-		dateValue,            // Legacy date column
-		contentJSONBytes,     // Legacy content JSONB column
-		digest.Title,         // Legacy title column
-		digest.Summary,       // v2.0 summary field
-		digest.TLDRSummary,   // v2.0 tldr
-		keyMomentsJSON,       // v2.0
-		perspectivesJSON,     // v2.0
-		digest.ClusterID,     // v2.0
-		digest.ProcessedDate, // v2.0
-		digest.ArticleCount,  // v2.0
+		dateValue,                        // Legacy date column
+		contentJSONBytes,                 // Legacy content JSONB column
+		digest.Title,                     // Legacy title column
+		digest.Summary,                   // v2.0 summary field
+		digest.TLDRSummary,               // v2.0 tldr
+		keyMomentsJSON,                   // v2.0
+		perspectivesJSON,                 // v2.0
+		digest.ClusterID,                 // v2.0
+		digest.ProcessedDate,             // v2.0
+		digest.ArticleCount,              // v2.0
 		time.Now().UTC(),
+		pq.Array(digest.TopDevelopments), // v3.0 top_developments
+		byTheNumbersJSON,                  // v3.0 by_the_numbers
+		digest.WhyItMatters,               // v3.0 why_it_matters
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert digest: %w", err)
