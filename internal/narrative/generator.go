@@ -33,13 +33,22 @@ func NewGenerator(llmClient LLMClient) *Generator {
 	}
 }
 
-// DigestContent contains all generated content for a digest (v2.0 structured format)
+// Statistic represents a key metric or data point for the "By the Numbers" section
+type Statistic struct {
+	Stat    string `json:"stat"`    // The metric value (e.g., "60%", "400 Gbps", "12 articles")
+	Context string `json:"context"` // Brief context explaining the stat with citations (e.g., "Database queries cut by agent-discovered caching pattern [3]")
+}
+
+// DigestContent contains all generated content for a digest (v3.0 scannable format)
 type DigestContent struct {
-	Title            string             `json:"title"`             // Generated title (25-45 chars ideal, 50 max)
-	TLDRSummary      string             `json:"tldr_summary"`      // One-sentence summary (40-80 chars ideal, 100 max)
-	KeyMoments       []core.KeyMoment   `json:"key_moments"`       // 3-5 key developments with structured quotes and citations
-	Perspectives     []core.Perspective `json:"perspectives"`      // Supporting/opposing viewpoints (optional)
-	ExecutiveSummary string             `json:"executive_summary"` // Full narrative summary with [N] citation placeholders
+	Title            string             `json:"title"`              // Generated title (20-40 chars STRICT)
+	TLDRSummary      string             `json:"tldr_summary"`       // One-sentence summary (40-75 chars STRICT)
+	TopDevelopments  []string           `json:"top_developments"`   // 3-5 bullet points with bold lead-ins + citations (NEW v3.0)
+	ByTheNumbers     []Statistic        `json:"by_the_numbers"`     // 3-5 key metrics/stats with context (NEW v3.0)
+	WhyItMatters     string             `json:"why_it_matters"`     // Single sentence connecting to reader impact (NEW v3.0)
+	KeyMoments       []core.KeyMoment   `json:"key_moments"`        // 3-5 key developments with structured quotes and citations
+	Perspectives     []core.Perspective `json:"perspectives"`       // Supporting/opposing viewpoints (optional)
+	ExecutiveSummary string             `json:"executive_summary"`  // DEPRECATED: Legacy paragraph format (use TopDevelopments instead)
 }
 
 // GenerateClusterSummary generates a comprehensive narrative for a single cluster using ALL articles
@@ -724,12 +733,12 @@ func (g *Generator) buildClusterSummaryPrompt(clusterLabel string, articles []Ar
 	}
 
 	prompt.WriteString("\n**TASK:**\n")
-	prompt.WriteString("Synthesize ALL articles above into a cohesive 2-3 paragraph narrative that:\n")
-	prompt.WriteString("1. Identifies the common themes and patterns across articles\n")
-	prompt.WriteString("2. Shows how the articles relate to each other (complementary, contrasting, building on each other)\n")
-	prompt.WriteString("3. Extracts the key insights that matter to technical readers\n")
-	prompt.WriteString("4. Maintains accuracy - don't invent information not in the articles\n")
-	prompt.WriteString("5. Uses SPECIFIC facts, numbers, names, and dates from the articles\n\n")
+	prompt.WriteString("Synthesize ALL articles above into a scannable bullet-based summary:\n")
+	prompt.WriteString("1. ONE SENTENCE summary capturing the cluster's main theme (20-30 words)\n")
+	prompt.WriteString("2. KEY DEVELOPMENTS: 2-4 bullet points with bold lead-ins describing major findings\n")
+	prompt.WriteString("3. KEY STATS: 1-3 quantified metrics from the articles\n")
+	prompt.WriteString("4. Each bullet must cite sources [1], [2], [3]\n")
+	prompt.WriteString("5. Use SPECIFIC facts, numbers, names, and dates from the articles\n\n")
 
 	prompt.WriteString("**CRITICAL SPECIFICITY RULES:**\n")
 	prompt.WriteString("❌ BANNED VAGUE PHRASES - Never use:\n")
@@ -759,10 +768,16 @@ func (g *Generator) buildClusterSummaryPrompt(clusterLabel string, articles []Ar
 
 	prompt.WriteString("**OUTPUT REQUIREMENTS:**\n")
 	prompt.WriteString("- Title: Short, punchy cluster title (5-8 words)\n")
-	prompt.WriteString("- Summary: 2-3 paragraph narrative synthesizing all articles (150-250 words)\n")
-	prompt.WriteString(fmt.Sprintf("  * MUST include specific facts from ALL %d articles\n", len(articles)))
-	prompt.WriteString("  * MUST cite sources: [1], [2], [3] etc.\n")
-	prompt.WriteString("  * NO vague/generic phrases\n")
+	prompt.WriteString("- One Liner: Single sentence naming SPECIFIC companies/products with quantified actions (20-30 words)\n")
+	prompt.WriteString("  * MUST name at least 1-2 specific companies/products\n")
+	prompt.WriteString("  * MUST include quantified results when available (60%, $520K, 1,208 positions, etc.)\n")
+	prompt.WriteString("  * BANNED: Generic terms like \"tools\", \"platforms\", \"systems\", \"companies\", \"developments\"\n")
+	prompt.WriteString("  * Example: \"Hephaestus enables self-discovering workflows achieving 60%% query reduction while OpenPCC provides private inference.\"\n")
+	prompt.WriteString("  * Example: \"Google explores space-based TPU infrastructure as radiology positions reach 1,208 despite automation predictions.\"\n")
+	prompt.WriteString("- Key Developments: 2-4 bullet points in format: **Bold Lead-In** - Description with citations [N]\n")
+	prompt.WriteString(fmt.Sprintf("  * Each bullet MUST cite specific articles from the %d above\n", len(articles)))
+	prompt.WriteString("  * Example: **Agentic frameworks deliver real wins** - Hephaestus spawned tasks that discovered 60%% query reduction [3]\n")
+	prompt.WriteString("- Key Stats: 1-3 key statistics in format: {\"stat\": \"60%%\", \"context\": \"Query reduction from agent-discovered caching pattern [3]\"}\n")
 	prompt.WriteString("- Key Themes: 3-5 main themes from the cluster\n")
 	prompt.WriteString(fmt.Sprintf("- Article Refs: Citation numbers of ALL %d articles (1-based array)\n", len(articles)))
 	prompt.WriteString("- Confidence: How coherent this cluster is (0.0-1.0)\n\n")
@@ -781,9 +796,35 @@ func (g *Generator) buildClusterNarrativeSchema() *genai.Schema {
 				Type:        genai.TypeString,
 				Description: "Short, punchy cluster title (5-8 words)",
 			},
-			"summary": {
+			"one_liner": {
 				Type:        genai.TypeString,
-				Description: "2-3 paragraph narrative synthesizing all articles (150-250 words)",
+				Description: "Single sentence (20-30 words) naming 1-2 SPECIFIC companies/products with quantified results. MUST include company names. BANNED: generic terms like 'tools', 'platforms', 'systems'",
+			},
+			"key_developments": {
+				Type:        genai.TypeArray,
+				Description: "2-4 bullet points with bold lead-ins describing key developments",
+				Items: &genai.Schema{
+					Type:        genai.TypeString,
+					Description: "Bullet in format: **Bold lead-in** - Description with citations [N]",
+				},
+			},
+			"key_stats": {
+				Type:        genai.TypeArray,
+				Description: "1-3 key statistics from the cluster",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"stat": {
+							Type:        genai.TypeString,
+							Description: "Metric value (e.g., '60%', '1,208 positions')",
+						},
+						"context": {
+							Type:        genai.TypeString,
+							Description: "Brief context with citations (8-15 words)",
+						},
+					},
+					Required: []string{"stat", "context"},
+				},
 			},
 			"key_themes": {
 				Type:        genai.TypeArray,
@@ -804,15 +845,21 @@ func (g *Generator) buildClusterNarrativeSchema() *genai.Schema {
 				Description: "Cluster coherence confidence (0.0-1.0)",
 			},
 		},
-		Required: []string{"title", "summary", "key_themes", "article_refs", "confidence"},
+		Required: []string{"title", "one_liner", "key_developments", "key_stats", "key_themes", "article_refs", "confidence"},
 	}
 }
 
 // parseClusterNarrative parses JSON response into ClusterNarrative
 func (g *Generator) parseClusterNarrative(jsonResponse string) (*core.ClusterNarrative, error) {
 	var response struct {
-		Title       string   `json:"title"`
-		Summary     string   `json:"summary"`
+		Title          string   `json:"title"`
+		OneLiner       string   `json:"one_liner"`
+		KeyDevelopments []string `json:"key_developments"`
+		KeyStats       []struct {
+			Stat    string `json:"stat"`
+			Context string `json:"context"`
+		} `json:"key_stats"`
+		Summary     string   `json:"summary"` // Legacy fallback
 		KeyThemes   []string `json:"key_themes"`
 		ArticleRefs []int    `json:"article_refs"`
 		Confidence  float64  `json:"confidence"`
@@ -823,12 +870,24 @@ func (g *Generator) parseClusterNarrative(jsonResponse string) (*core.ClusterNar
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
+	// Convert key stats
+	keyStats := make([]core.Statistic, len(response.KeyStats))
+	for i, stat := range response.KeyStats {
+		keyStats[i] = core.Statistic{
+			Stat:    stat.Stat,
+			Context: stat.Context,
+		}
+	}
+
 	return &core.ClusterNarrative{
-		Title:       response.Title,
-		Summary:     response.Summary,
-		KeyThemes:   response.KeyThemes,
-		ArticleRefs: response.ArticleRefs,
-		Confidence:  response.Confidence,
+		Title:          response.Title,
+		OneLiner:       response.OneLiner,
+		KeyDevelopments: response.KeyDevelopments,
+		KeyStats:       keyStats,
+		Summary:        response.Summary, // Keep for backward compatibility
+		KeyThemes:      response.KeyThemes,
+		ArticleRefs:    response.ArticleRefs,
+		Confidence:     response.Confidence,
 	}, nil
 }
 
@@ -876,38 +935,75 @@ func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluste
 	prompt.WriteString("\n**REQUIREMENTS:**\n\n")
 
 	prompt.WriteString("**Title (20-40 characters STRICT MAXIMUM):**\n")
+	prompt.WriteString("- PURPOSE: Create a UNIFIED headline that synthesizes ALL clusters into ONE compelling statement\n")
 	prompt.WriteString("- MUST use active voice with strong action verbs\n")
-	prompt.WriteString("- REQUIRED: Include specific actor (company/tech/concept)\n")
+	prompt.WriteString("- REQUIRED: Include specific actor (company/tech/concept) + quantified result from PRIMARY cluster\n")
+	prompt.WriteString("- STRATEGY: Pick the most impactful metric/development from the largest or most significant cluster\n")
 	prompt.WriteString("- BANNED generic verbs: \"updates\", \"changes\", \"announces\", \"releases\"\n")
 	prompt.WriteString("- PREFERRED power verbs: \"cuts\", \"hits\", \"beats\", \"breaks\", \"surges\", \"doubles\", \"slashes\"\n")
 	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 40 characters\n")
-	prompt.WriteString("- Examples:\n")
-	prompt.WriteString("  ✓ \"Voice AI Hits 1-Second Latency\" (32 chars) - specific metric\n")
-	prompt.WriteString("  ✓ \"GPT-5 Cuts Inference Cost 60%\" (31 chars) - quantified impact\n")
-	prompt.WriteString("  ✗ \"New AI Model Updates Released\" (31 chars) - generic, passive\n\n")
+	prompt.WriteString("- Examples (combining multiple cluster themes):\n")
+	prompt.WriteString("  ✓ \"Voice AI Hits 1-Second Latency\" (32 chars) - specific metric from main cluster\n")
+	prompt.WriteString("  ✓ \"Agent Frameworks Cut Costs 60%\" (32 chars) - quantified impact spanning clusters\n")
+	prompt.WriteString("  ✓ \"GPT-5 Beats Human Doctors\" (26 chars) - cross-domain comparison\n")
+	prompt.WriteString("  ✗ \"New AI Model Updates Released\" (31 chars) - generic, passive, no synthesis\n\n")
 
 	prompt.WriteString("**TLDR Summary (40-75 characters STRICT MAXIMUM):**\n")
+	prompt.WriteString("- PURPOSE: Expand on title with slightly more context, still ONE unified statement\n")
 	prompt.WriteString("- REQUIRED STRUCTURE: [Subject] + [Action Verb] + [Object] + [Quantified Impact]\n")
-	prompt.WriteString("- Subject: Specific company/technology (e.g., \"OpenAI\", \"Voice AI\")\n")
+	prompt.WriteString("- Subject: Specific company/technology from primary cluster\n")
 	prompt.WriteString("- Action Verb: Strong active verb (e.g., \"cuts\", \"achieves\", \"beats\")\n")
 	prompt.WriteString("- Object: What was changed (e.g., \"inference speed\", \"latency\")\n")
 	prompt.WriteString("- Impact: Numeric result (e.g., \"by 40%\", \"to 1 second\", \"95% accuracy\")\n")
 	prompt.WriteString("- CRITICAL: ABSOLUTE MAXIMUM 75 characters\n")
-	prompt.WriteString("- Examples:\n")
+	prompt.WriteString("- Examples (unified statements):\n")
 	prompt.WriteString("  ✓ \"Perplexity hits 400 Gbps for distributed AI inference\" (56 chars)\n")
 	prompt.WriteString("  ✓ \"Voice AI achieves 1-second latency with open models\" (54 chars)\n")
-	prompt.WriteString("  ✗ \"AI technology sees improvements in performance\" (49 chars) - vague, no metrics\n\n")
+	prompt.WriteString("  ✓ \"GitHub agents serve 3,000 devs across 160+ LLMs\" (51 chars)\n")
+	prompt.WriteString("  ✗ \"AI technology sees improvements in performance\" (49 chars) - vague, no metrics, no unification\n\n")
 
-	prompt.WriteString("**Executive Summary (2-3 paragraphs):**\n")
-	prompt.WriteString("- REQUIRED: Explicitly connect clusters with transition phrases:\n")
-	prompt.WriteString("  \"Building on...\", \"In contrast to...\", \"Supporting this trend...\", \"Meanwhile...\"\n")
-	prompt.WriteString("- Paragraph 1: Main narrative thread connecting 2-3 largest clusters\n")
-	prompt.WriteString("- Paragraph 2: Secondary trends and how they relate to the main thread\n")
-	prompt.WriteString("- Paragraph 3 (optional): Implications or contrasts (e.g., technical vs creative domains)\n")
-	prompt.WriteString("- Include citations using [1], [2], [3] format (CRITICAL: use numbers only)\n")
-	prompt.WriteString("- Focus on 'why it matters' not just 'what happened'\n")
-	prompt.WriteString("- Write for developers, PMs, and technical leaders\n")
-	prompt.WriteString("- 150-200 words total\n\n")
+	prompt.WriteString("**Top Developments (3-5 scannable bullets):**\n")
+	prompt.WriteString("- PURPOSE: Ultra-concise bullets for 30-second scanning by busy tech professionals\n")
+	prompt.WriteString("- TARGET: 75-100 words total across ALL bullets (15-25 words per bullet)\n")
+	prompt.WriteString("- FORMAT: Each bullet MUST start with **Bold Lead-In** followed by concise description\n")
+	prompt.WriteString("- STRUCTURE PER BULLET:\n")
+	prompt.WriteString("  • **Bold 2-4 word lead** - Specific finding/development with exact metrics and citations [N]\n")
+	prompt.WriteString("  • Example: **Agentic frameworks deliver real wins** - Hephaestus spawned tasks that discovered 60% query reduction [3]\n")
+	prompt.WriteString("  • Example: **Infrastructure scales privacy-first** - Perplexity hits 400 Gbps while maintaining privacy controls [1][2]\n")
+	prompt.WriteString("- REQUIREMENTS:\n")
+	prompt.WriteString("  • Each bullet synthesizes ONE major cluster or theme\n")
+	prompt.WriteString("  • MUST include specific numbers/metrics (no vague terms)\n")
+	prompt.WriteString("  • MUST include citations [1][2][3] for EVERY claim\n")
+	prompt.WriteString("  • Focus on impact/results, not announcements\n")
+	prompt.WriteString("  • Active voice with power verbs only\n\n")
+
+	prompt.WriteString("**By the Numbers (3-5 key statistics):**\n")
+	prompt.WriteString("- PURPOSE: Quick-hit quantified highlights for scanners\n")
+	prompt.WriteString("- FORMAT: Each stat has two parts:\n")
+	prompt.WriteString("  • stat: The metric value (e.g., \"60%\", \"400 Gbps\", \"12 articles\")\n")
+	prompt.WriteString("  • context: Brief explanation with citations (e.g., \"Database queries cut by agent-discovered caching pattern [3]\")\n")
+	prompt.WriteString("- REQUIREMENTS:\n")
+	prompt.WriteString("  • Pick the most impressive/surprising numbers from cluster narratives\n")
+	prompt.WriteString("  • Context must be 8-15 words maximum\n")
+	prompt.WriteString("  • Each stat must have citation [N]\n")
+	prompt.WriteString("  • Prioritize: performance metrics > funding amounts > adoption numbers > dates\n")
+	prompt.WriteString("- EXAMPLES:\n")
+	prompt.WriteString("  • {\"stat\": \"60%\", \"context\": \"Query reduction from agent-discovered caching pattern [3]\"}\n")
+	prompt.WriteString("  • {\"stat\": \"400 Gbps\", \"context\": \"Perplexity's distributed inference throughput [1]\"}\n\n")
+
+	prompt.WriteString("**Why It Matters (single sentence):**\n")
+	prompt.WriteString("- PURPOSE: Concise summary highlighting SPECIFIC companies/products and their quantified impact\n")
+	prompt.WriteString("- LENGTH: 20-30 words STRICT (not a paragraph!)\n")
+	prompt.WriteString("- STRUCTURE: [Specific Company/Product] + [Action Verb] + [Quantified Result], [Company 2] + [Action] while [Company 3] + [Action]\n")
+	prompt.WriteString("- REQUIRED: Name at least 2-3 specific companies/products with their concrete achievements\n")
+	prompt.WriteString("- BANNED: Generic terms like \"tools\", \"infrastructure\", \"capabilities\", \"developments\", \"trends\"\n")
+	prompt.WriteString("- REQUIRED: Include at least one quantified metric (60%, $520K, 1,208 positions, etc.)\n")
+	prompt.WriteString("- EXAMPLES:\n")
+	prompt.WriteString("  ✓ \"Hephaestus cuts database queries 60% while GitHub launches Agent HQ and OpenPCC enables private inference.\"\n")
+	prompt.WriteString("  ✓ \"Perplexity hits 400 Gbps inference while Cognition's Windsurf reduces engineer ramp time from 9 months.\"\n")
+	prompt.WriteString("  ✓ \"ServiceStack supports 160+ LLMs as radiology residencies hit record 1,208 positions despite AI predictions.\"\n")
+	prompt.WriteString("  ✗ \"The gap between AI hype and practical adoption is widening, but developer-focused tools are proving their value.\" (too generic)\n")
+	prompt.WriteString("  ✗ \"Infrastructure advances enable production AI deployments while privacy concerns drive architectural decisions.\" (no specific companies)\n\n")
 
 	prompt.WriteString("**CRITICAL SPECIFICITY RULES:**\n")
 	prompt.WriteString("❌ BANNED VAGUE PHRASES - Never use:\n")
@@ -926,16 +1022,18 @@ func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluste
 	prompt.WriteString("2. ✓ Title includes specific actor (company/tech) + quantified result\n")
 	prompt.WriteString("3. ✓ TLDR ≤ 75 characters AND follows [Subject]+[Verb]+[Object]+[Impact] structure\n")
 	prompt.WriteString("4. ✓ TLDR contains at least one specific number/percentage\n")
-	prompt.WriteString(fmt.Sprintf("5. ✓ All %d articles cited at least once in executive summary\n", articleNum-1))
-	prompt.WriteString("6. ✓ Executive summary has clear cluster connections (\"Building on...\", \"Meanwhile...\")\n")
-	prompt.WriteString("7. ✓ No banned vague phrases in executive summary or key moments\n")
-	prompt.WriteString("8. ✓ At least 5 specific facts with citations [1][2][3]\n")
-	prompt.WriteString("9. ✓ At least 3 specific numbers/percentages/metrics\n")
-	prompt.WriteString("10. ✓ At least 5 proper nouns (companies/people/products)\n")
-	prompt.WriteString("11. ✓ Key moments have diversity (at least one from each major cluster)\n\n")
+	prompt.WriteString(fmt.Sprintf("5. ✓ All %d articles cited at least once in top_developments bullets\n", articleNum-1))
+	prompt.WriteString("6. ✓ Top developments: 3-5 bullets, each starting with **Bold Lead-In**\n")
+	prompt.WriteString("7. ✓ Top developments: 75-100 words total (15-25 words per bullet)\n")
+	prompt.WriteString("8. ✓ By the numbers: 3-5 stats with context ≤ 15 words each\n")
+	prompt.WriteString("9. ✓ Why it matters: Single sentence, 20-30 words, specific to tech professionals\n")
+	prompt.WriteString("10. ✓ No banned vague phrases in any section\n")
+	prompt.WriteString("11. ✓ At least 3 specific metrics across all sections\n")
+	prompt.WriteString("12. ✓ At least 5 proper nouns (companies/people/products)\n")
+	prompt.WriteString("13. ✓ Key moments have diversity (at least one from each major cluster)\n\n")
 
 	prompt.WriteString("**IF ANY CHECK FAILS:** Revise the content until ALL checks pass.\n")
-	prompt.WriteString("Do NOT return the JSON until all 11 validation checks are satisfied.\n\n")
+	prompt.WriteString("Do NOT return the JSON until all 13 validation checks are satisfied.\n\n")
 
 	prompt.WriteString("**Key Moments (3-5 structured quotes):**\n")
 	prompt.WriteString("- REQUIRED: At least one quote from each major cluster (clusters with 3+ articles)\n")
@@ -957,7 +1055,16 @@ func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluste
 	prompt.WriteString("  - summary: Summary of this perspective (1-2 sentences)\n")
 	prompt.WriteString("  - citation_numbers: Array of article numbers [1,2,3]\n\n")
 
+	prompt.WriteString("**FINAL INSTRUCTIONS:**\n")
 	prompt.WriteString("Generate the digest content in JSON format matching the schema.\n")
+	prompt.WriteString("CRITICAL: DO NOT generate the \"executive_summary\" field. Leave it empty or omit it entirely.\n")
+	prompt.WriteString("ONLY generate: title, tldr_summary, top_developments, by_the_numbers, why_it_matters, key_moments, perspectives.\n\n")
+
+	prompt.WriteString("**CRITICAL FOR WHY_IT_MATTERS:**\n")
+	prompt.WriteString("The why_it_matters field MUST name specific companies/products, NOT generic terms.\n")
+	prompt.WriteString("✓ CORRECT: \"Hephaestus cuts queries 60% while GitHub launches Agent HQ and OpenPCC enables private inference.\"\n")
+	prompt.WriteString("✗ WRONG: \"The rapid evolution signals a shift toward complex AI deployment.\" (no company names!)\n")
+	prompt.WriteString("✗ WRONG: \"Tools and infrastructure enable scalable deployment.\" (generic!)\n\n")
 
 	return prompt.String()
 }
@@ -1039,22 +1146,52 @@ func (g *Generator) buildStructuredNarrativePrompt(insights []ClusterInsight) st
 	return prompt.String()
 }
 
-// buildDigestContentSchema defines the Gemini JSON schema for digest content
+// buildDigestContentSchema defines the Gemini JSON schema for digest content (v3.0 scannable format)
 func (g *Generator) buildDigestContentSchema() *genai.Schema {
 	return &genai.Schema{
 		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
 			"title": {
 				Type:        genai.TypeString,
-				Description: "Catchy headline (25-45 chars MAXIMUM - hard limit 50)",
+				Description: "Catchy headline (20-40 chars STRICT MAXIMUM)",
 			},
 			"tldr_summary": {
 				Type:        genai.TypeString,
-				Description: "One-sentence summary (40-80 chars MAXIMUM - hard limit 100)",
+				Description: "One-sentence summary (40-75 chars STRICT MAXIMUM)",
+			},
+			"top_developments": {
+				Type:        genai.TypeArray,
+				Description: "3-5 bullet points with bold lead-ins + citations. Each bullet should start with **bold text** followed by description and citations [1][2]",
+				Items: &genai.Schema{
+					Type:        genai.TypeString,
+					Description: "Single bullet point in format: **Bold lead-in** - Description with specific details and citations [N]",
+				},
+			},
+			"by_the_numbers": {
+				Type:        genai.TypeArray,
+				Description: "3-5 key metrics/statistics from the articles",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"stat": {
+							Type:        genai.TypeString,
+							Description: "The metric value (e.g., '60%', '400 Gbps', '12 articles')",
+						},
+						"context": {
+							Type:        genai.TypeString,
+							Description: "Brief context explaining the stat with citations (e.g., 'Database queries cut by agent-discovered caching pattern [3]')",
+						},
+					},
+					Required: []string{"stat", "context"},
+				},
+			},
+			"why_it_matters": {
+				Type:        genai.TypeString,
+				Description: "Single sentence (20-30 words) naming 2-3 SPECIFIC companies/products with quantified results. MUST include company names and at least one metric. BANNED: generic terms like 'tools', 'infrastructure', 'developments'",
 			},
 			"executive_summary": {
 				Type:        genai.TypeString,
-				Description: "2-3 paragraph story with [1][2][3] citations (150-200 words)",
+				Description: "DEPRECATED: Leave this field EMPTY. Do not generate. Use top_developments, by_the_numbers, and why_it_matters instead.",
 			},
 			"key_moments": {
 				Type:        genai.TypeArray,
@@ -1100,17 +1237,23 @@ func (g *Generator) buildDigestContentSchema() *genai.Schema {
 				},
 			},
 		},
-		Required: []string{"title", "tldr_summary", "executive_summary", "key_moments"},
+		Required: []string{"title", "tldr_summary", "top_developments", "by_the_numbers", "why_it_matters", "key_moments"},
 	}
 }
 
-// parseStructuredDigestContent parses JSON response from LLM into DigestContent
+// parseStructuredDigestContent parses JSON response from LLM into DigestContent (v3.0 scannable format)
 func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestContent, error) {
 	// Define a temporary struct matching the JSON schema
 	var response struct {
-		Title            string `json:"title"`
-		TLDRSummary      string `json:"tldr_summary"`
-		ExecutiveSummary string `json:"executive_summary"`
+		Title            string   `json:"title"`
+		TLDRSummary      string   `json:"tldr_summary"`
+		TopDevelopments  []string `json:"top_developments"`
+		ByTheNumbers     []struct {
+			Stat    string `json:"stat"`
+			Context string `json:"context"`
+		} `json:"by_the_numbers"`
+		WhyItMatters     string `json:"why_it_matters"`
+		ExecutiveSummary string `json:"executive_summary"` // DEPRECATED but kept for backward compatibility
 		KeyMoments       []struct {
 			Quote          string `json:"quote"`
 			CitationNumber int    `json:"citation_number"`
@@ -1132,9 +1275,20 @@ func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestCo
 	content := &DigestContent{
 		Title:            response.Title,
 		TLDRSummary:      response.TLDRSummary,
-		ExecutiveSummary: response.ExecutiveSummary,
+		TopDevelopments:  response.TopDevelopments,
+		ByTheNumbers:     make([]Statistic, 0, len(response.ByTheNumbers)),
+		WhyItMatters:     response.WhyItMatters,
+		ExecutiveSummary: response.ExecutiveSummary, // Keep for backward compatibility
 		KeyMoments:       make([]core.KeyMoment, 0, len(response.KeyMoments)),
 		Perspectives:     make([]core.Perspective, 0, len(response.Perspectives)),
+	}
+
+	// Convert by the numbers
+	for _, stat := range response.ByTheNumbers {
+		content.ByTheNumbers = append(content.ByTheNumbers, Statistic{
+			Stat:    stat.Stat,
+			Context: stat.Context,
+		})
 	}
 
 	// Convert key moments

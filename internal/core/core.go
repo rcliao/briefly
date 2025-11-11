@@ -118,6 +118,11 @@ type Digest struct {
 	Themes        []Theme       `json:"themes,omitempty"`       // Associated themes (many-to-many) - v2.0
 	Articles      []Article     `json:"articles,omitempty"`     // Associated articles (for API responses) - v2.0
 
+	// v3.0 scannable format fields (NEW)
+	TopDevelopments []string    `json:"top_developments,omitempty"` // 3-5 bullet points with bold lead-ins + citations
+	ByTheNumbers    []Statistic `json:"by_the_numbers,omitempty"`   // 3-5 key metrics/statistics
+	WhyItMatters    string      `json:"why_it_matters,omitempty"`   // Single sentence connecting to reader impact
+
 	// v3.0 new structure (legacy, being phased out)
 	Signal        Signal         `json:"signal,omitempty"`         // Primary insight
 	ArticleGroups []ArticleGroup `json:"article_groups,omitempty"` // Clustered articles
@@ -160,6 +165,12 @@ type Perspective struct {
 	ArticleIDs      []string `json:"article_ids,omitempty"` // Optional: Direct article references
 }
 
+// Statistic represents a key metric or data point for scannable digest format (v3.0)
+type Statistic struct {
+	Stat    string `json:"stat"`    // The metric value (e.g., "60%", "400 Gbps", "12 articles")
+	Context string `json:"context"` // Brief context explaining the stat with citations
+}
+
 // Prompt represents a generic prompt that can be used for various LLM interactions.
 type Prompt struct {
 	ID           string    `json:"id"`             // Unique identifier for the prompt
@@ -200,11 +211,14 @@ type FeedItem struct {
 
 // ClusterNarrative represents a generated summary narrative for a topic cluster
 type ClusterNarrative struct {
-	Title       string   `json:"title"`        // Short, punchy cluster title (5-8 words)
-	Summary     string   `json:"summary"`      // 2-3 paragraph narrative synthesizing all articles
-	KeyThemes   []string `json:"key_themes"`   // 3-5 main themes from the cluster
-	ArticleRefs []int    `json:"article_refs"` // Citation numbers of articles included
-	Confidence  float64  `json:"confidence"`   // Confidence in cluster coherence (0-1)
+	Title          string      `json:"title"`            // Short, punchy cluster title (5-8 words)
+	Summary        string      `json:"summary"`          // LEGACY: 2-3 paragraph narrative (deprecated - use OneLiner + KeyDevelopments)
+	OneLiner       string      `json:"one_liner"`        // NEW v3.1: Single sentence summary
+	KeyDevelopments []string    `json:"key_developments"` // NEW v3.1: 2-4 bullet points for this cluster
+	KeyStats       []Statistic `json:"key_stats"`        // NEW v3.1: 1-3 key metrics for this cluster
+	KeyThemes      []string    `json:"key_themes"`       // 3-5 main themes from the cluster
+	ArticleRefs    []int       `json:"article_refs"`     // Citation numbers of articles included
+	Confidence     float64     `json:"confidence"`       // Confidence in cluster coherence (0-1)
 }
 
 // TopicCluster represents a cluster of articles with similar topics.
@@ -323,11 +337,12 @@ type Signal struct {
 
 // ArticleGroup represents a cluster of related articles (v3.0)
 type ArticleGroup struct {
-	Category string    `json:"category"` // "Breaking", "Tools", "Analysis"
-	Theme    string    `json:"theme"`    // "AI Context Scaling", "Cost Optimization"
-	Articles []Article `json:"articles"`
-	Summary  string    `json:"summary"`  // Group-level insight (50 words max)
-	Priority int       `json:"priority"` // 1-5 for ordering
+	Category         string            `json:"category"`          // "Breaking", "Tools", "Analysis"
+	Theme            string            `json:"theme"`             // "AI Context Scaling", "Cost Optimization"
+	Articles         []Article         `json:"articles"`
+	Summary          string            `json:"summary"`           // LEGACY: Group-level insight (50 words max) - deprecated
+	ClusterNarrative *ClusterNarrative `json:"cluster_narrative"` // NEW v3.1: Bullet-based cluster summary
+	Priority         int               `json:"priority"`          // 1-5 for ordering
 }
 
 // DigestMetadata contains digest processing information (v3.0)

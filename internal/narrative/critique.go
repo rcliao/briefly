@@ -254,19 +254,45 @@ func (g *Generator) buildCritiqueSchema() *genai.Schema {
 			},
 			"improved_digest": {
 				Type:        genai.TypeObject,
-				Description: "Improved version fixing all issues",
+				Description: "Improved version fixing all issues (v3.0 scannable format)",
 				Properties: map[string]*genai.Schema{
 					"title": {
 						Type:        genai.TypeString,
-						Description: "Improved title (≤40 chars)",
+						Description: "Improved title (20-40 chars STRICT)",
 					},
 					"tldr_summary": {
 						Type:        genai.TypeString,
-						Description: "Improved TLDR (≤75 chars)",
+						Description: "Improved TLDR (40-75 chars STRICT)",
 					},
-					"executive_summary": {
+					"top_developments": {
+						Type:        genai.TypeArray,
+						Description: "3-5 bullet points with bold lead-ins + citations",
+						Items: &genai.Schema{
+							Type:        genai.TypeString,
+							Description: "Bullet in format: **Bold lead-in** - Description with citations [N]",
+						},
+					},
+					"by_the_numbers": {
+						Type:        genai.TypeArray,
+						Description: "3-5 key statistics",
+						Items: &genai.Schema{
+							Type: genai.TypeObject,
+							Properties: map[string]*genai.Schema{
+								"stat": {
+									Type:        genai.TypeString,
+									Description: "Metric value (e.g., '60%', '400 Gbps')",
+								},
+								"context": {
+									Type:        genai.TypeString,
+									Description: "Brief context with citations (8-15 words)",
+								},
+							},
+							Required: []string{"stat", "context"},
+						},
+					},
+					"why_it_matters": {
 						Type:        genai.TypeString,
-						Description: "Improved executive summary (150-200 words, all articles cited)",
+						Description: "Single sentence (20-30 words) connecting to reader impact",
 					},
 					"key_moments": {
 						Type:        genai.TypeArray,
@@ -283,6 +309,7 @@ func (g *Generator) buildCritiqueSchema() *genai.Schema {
 									Description: "Article citation number",
 								},
 							},
+							Required: []string{"quote", "citation_number"},
 						},
 					},
 					"perspectives": {
@@ -306,9 +333,11 @@ func (g *Generator) buildCritiqueSchema() *genai.Schema {
 									},
 								},
 							},
+							Required: []string{"type", "summary", "citation_numbers"},
 						},
 					},
 				},
+				Required: []string{"title", "tldr_summary", "top_developments", "by_the_numbers", "why_it_matters", "key_moments"},
 			},
 			"quality_improved": {
 				Type:        genai.TypeBoolean,

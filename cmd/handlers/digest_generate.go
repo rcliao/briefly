@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -580,19 +582,21 @@ func generateDigestsWithClustering(ctx context.Context, db *persistence.Postgres
 		if len(themeNames) > 0 {
 			for _, theme := range themeNames {
 				articleGroups = append(articleGroups, core.ArticleGroup{
-					Theme:    theme,
-					Articles: clusterArticles,
-					Summary:  digestContent.TLDRSummary,
-					Category: theme,
+					Theme:            theme,
+					Articles:         clusterArticles,
+					Summary:          digestContent.TLDRSummary,
+					ClusterNarrative: cluster.Narrative, // NEW v3.1: Include cluster narrative for bullet rendering
+					Category:         theme,
 				})
 			}
 		} else {
 			// Fallback to cluster label if no themes
 			articleGroups = append(articleGroups, core.ArticleGroup{
-				Theme:    themeName,
-				Articles: clusterArticles,
-				Summary:  digestContent.TLDRSummary,
-				Category: themeName,
+				Theme:            themeName,
+				Articles:         clusterArticles,
+				Summary:          digestContent.TLDRSummary,
+				ClusterNarrative: cluster.Narrative, // NEW v3.1: Include cluster narrative for bullet rendering
+				Category:         themeName,
 			})
 		}
 
@@ -616,6 +620,11 @@ func generateDigestsWithClustering(ctx context.Context, db *persistence.Postgres
 			ClusterID:     &clusterIdx,
 			ProcessedDate: now,
 			ArticleCount:  len(clusterArticles),
+
+			// v3.0 scannable format fields (NEW)
+			TopDevelopments: digestContent.TopDevelopments,
+			ByTheNumbers:    convertStatistics(digestContent.ByTheNumbers),
+			WhyItMatters:    digestContent.WhyItMatters,
 
 			// Legacy fields for backward compatibility
 			ArticleGroups: articleGroups, // FIXED: Now populated for homepage theme display
@@ -678,6 +687,18 @@ func generateFallbackExecutiveSummary(articleGroups []core.ArticleGroup) string 
 	return summary.String()
 }
 
+// convertStatistics converts narrative.Statistic to core.Statistic
+func convertStatistics(narrativeStats []narrative.Statistic) []core.Statistic {
+	coreStats := make([]core.Statistic, len(narrativeStats))
+	for i, stat := range narrativeStats {
+		coreStats[i] = core.Statistic{
+			Stat:    stat.Stat,
+			Context: stat.Context,
+		}
+	}
+	return coreStats
+}
+
 // saveDigestMarkdown renders digest to LinkedIn-ready markdown file
 func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 	// Create output directory if needed
@@ -693,19 +714,60 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 	// Render markdown
 	var content strings.Builder
 
-	// Header with emoji
-	content.WriteString("# 🗞️ Weekly Tech Digest\n\n")
+	// Header with generated title (from LLM)
+	digestTitle := digest.Title
+	if digestTitle == "" {
+		digestTitle = digest.Metadata.Title
+	}
+	if digestTitle == "" {
+		digestTitle = "Weekly Tech Digest"
+	}
+
+	// Clean up title: remove character count artifacts like "(39 chars)"
+	digestTitle = strings.TrimSpace(digestTitle)
+	if idx := strings.Index(digestTitle, "("); idx > 0 {
+		// Remove anything in parentheses at the end (likely char count)
+		potentialCount := digestTitle[idx:]
+		if strings.Contains(potentialCount, "char") {
+			digestTitle = strings.TrimSpace(digestTitle[:idx])
+		}
+	}
+
+	content.WriteString(fmt.Sprintf("# 🗞️ %s\n\n", digestTitle))
 	content.WriteString(fmt.Sprintf("*%d Articles Across %d Themes*\n\n",
 		digest.Metadata.ArticleCount,
 		len(digest.ArticleGroups)))
 	content.WriteString("---\n\n")
 
-	// Executive Summary
-	if digest.DigestSummary != "" {
+	// Quick Scan Section (v3.0 scannable format) or Executive Summary (legacy)
+	if len(digest.TopDevelopments) > 0 {
+		// NEW v3.0 scannable format - simplified single list
+		content.WriteString("## 🎯 Quick Scan\n\n")
+
+		// One sentence executive summary (why it matters)
+		if digest.WhyItMatters != "" {
+			content.WriteString(fmt.Sprintf("%s\n\n", digest.WhyItMatters))
+		}
+
+		// Merged bullet list: developments + numbers
+		for _, dev := range digest.TopDevelopments {
+			content.WriteString(fmt.Sprintf("• %s\n", dev))
+		}
+
+		for _, stat := range digest.ByTheNumbers {
+			content.WriteString(fmt.Sprintf("• **%s** - %s\n", stat.Stat, stat.Context))
+		}
+
+		content.WriteString("\n---\n\n")
+	} else if digest.DigestSummary != "" {
+		// LEGACY paragraph format fallback
 		content.WriteString("## 🎯 Executive Summary\n\n")
 		content.WriteString(digest.DigestSummary)
 		content.WriteString("\n\n---\n\n")
 	}
+
+	// Track article numbering across all clusters
+	articleNum := 1
 
 	// Theme sections
 	for _, group := range digest.ArticleGroups {
@@ -713,14 +775,46 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 		emoji := getThemeEmoji(group.Theme)
 		content.WriteString(fmt.Sprintf("## %s %s\n\n", emoji, group.Theme))
 
-		// Theme summary if available
-		if group.Summary != "" && !strings.Contains(group.Summary, "covering:") {
+		// Build citation number mapping (cluster-relative → digest-global)
+		// This is needed because cluster narratives use [1], [2], [3] for articles in the cluster,
+		// but the final digest numbers articles sequentially across all clusters
+		citationMap := make(map[int]int)
+		if group.ClusterNarrative != nil {
+			for i, refNum := range group.ClusterNarrative.ArticleRefs {
+				citationMap[refNum] = articleNum + i
+			}
+		}
+
+		// Theme summary - check for new bullet format first, then fallback to legacy paragraph
+		if group.ClusterNarrative != nil && len(group.ClusterNarrative.KeyDevelopments) > 0 {
+			// NEW v3.1: Bullet-based cluster summary with remapped citations
+			if group.ClusterNarrative.OneLiner != "" {
+				remappedOneLiner := remapCitations(group.ClusterNarrative.OneLiner, citationMap)
+				content.WriteString(fmt.Sprintf("%s\n\n", remappedOneLiner))
+			}
+
+			// Key developments bullets
+			for _, dev := range group.ClusterNarrative.KeyDevelopments {
+				remappedDev := remapCitations(dev, citationMap)
+				content.WriteString(fmt.Sprintf("• %s\n", remappedDev))
+			}
+
+			// Key stats bullets
+			for _, stat := range group.ClusterNarrative.KeyStats {
+				remappedContext := remapCitations(stat.Context, citationMap)
+				content.WriteString(fmt.Sprintf("• **%s** - %s\n", stat.Stat, remappedContext))
+			}
+
+			content.WriteString("\n")
+		} else if group.Summary != "" && !strings.Contains(group.Summary, "covering:") {
+			// LEGACY: Paragraph format fallback
 			content.WriteString(fmt.Sprintf("*%s*\n\n", group.Summary))
 		}
 
-		// Articles in this theme
+		// Articles in this theme (with sequential numbering)
 		for _, article := range group.Articles {
-			content.WriteString(fmt.Sprintf("### %s\n\n", article.Title))
+			// Use numbered format instead of header
+			content.WriteString(fmt.Sprintf("**%d. %s**\n\n", articleNum, article.Title))
 			content.WriteString(fmt.Sprintf("🔗 [Read Article](%s)\n\n", article.URL))
 
 			// Find summary
@@ -747,6 +841,7 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 			}
 
 			content.WriteString("---\n\n")
+			articleNum++
 		}
 	}
 
@@ -760,6 +855,32 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 	}
 
 	return outputPath, nil
+}
+
+// remapCitations remaps citation numbers in text from cluster-relative to digest-global
+// e.g., "[1]" in cluster might need to become "[4]" in the full digest
+func remapCitations(text string, citationMap map[int]int) string {
+	// Use regex to find all citation patterns like [1], [2], [3]
+	re := regexp.MustCompile(`\[(\d+)\]`)
+
+	result := re.ReplaceAllStringFunc(text, func(match string) string {
+		// Extract the number from [N]
+		numStr := match[1 : len(match)-1] // Remove [ and ]
+		num, err := strconv.Atoi(numStr)
+		if err != nil {
+			return match // Keep original if parsing fails
+		}
+
+		// Look up the remapped number
+		if newNum, found := citationMap[num]; found {
+			return fmt.Sprintf("[%d]", newNum)
+		}
+
+		// If not in map, keep original
+		return match
+	})
+
+	return result
 }
 
 // getThemeEmoji returns an emoji for a theme name

@@ -70,8 +70,14 @@ briefly aggregate --since 24 --themes
 # Generate LinkedIn-ready digest from classified articles (database-driven)
 briefly digest generate --since 7
 
+# Generate digest from curated markdown file (NEW - file-based, lightweight)
+briefly digest from-file input/weekly.md
+
 # Generate with specific output directory
-briefly digest generate --since 7 --output digests
+briefly digest from-file input/weekly.md --output digests
+
+# Disable caching for fresh fetch
+briefly digest from-file input/weekly.md --no-cache
 
 # List recent digests
 briefly digest list --limit 20
@@ -452,7 +458,71 @@ go test ./internal/summarize
 go test -race ./...
 ```
 
-### Development Patterns
+### New Feature: `digest from-file` (File-Based Digest Generation)
+
+**Overview:** Lightweight command for generating digests from curated markdown files without database persistence.
+
+**Use Case:** Perfect for weekly digests where you manually curate URLs throughout the week and want to generate a digest without running the full aggregation pipeline.
+
+**Command:**
+```bash
+briefly digest from-file <input.md> [flags]
+```
+
+**Flags:**
+- `--output DIR` - Output directory (default: "digests")
+- `--clusters INT` - Number of clusters (0 = auto)
+- `--no-cache` - Disable caching (fresh fetch)
+- `--theme-threshold FLOAT` - Min theme relevance (default: 0.4)
+
+**How It Works:**
+1. **Parse URLs** - Extract URLs from markdown file
+2. **Fetch Articles** - Retrieve content (HTML, PDF, YouTube)
+3. **Generate Summaries** - Create AI summaries with caching
+4. **Classify Themes** - Auto-classify using LLM (5 default themes)
+5. **Generate Embeddings** - Create 768-dim vectors
+6. **Cluster Articles** - Group by topic similarity (K-means++)
+7. **Generate Narratives** - Create cluster narratives from ALL articles
+8. **Executive Summary** - Synthesize cluster narratives
+9. **Render Markdown** - LinkedIn-ready output
+
+**Example Workflow:**
+```bash
+# 1. Create/update your curated list throughout the week
+echo "https://example.com/article1" >> input/weekly.md
+echo "https://example.com/article2" >> input/weekly.md
+
+# 2. Generate digest at end of week
+briefly digest from-file input/weekly.md
+
+# 3. Review and share
+open digests/digest_2025-11-10.md
+```
+
+**Key Differences from `digest generate`:**
+- ✅ **No database required** - Pure file-based processing
+- ✅ **Lightweight** - In-memory pipeline
+- ✅ **Fast iteration** - Edit markdown, regenerate instantly
+- ✅ **Optional caching** - SQLite file cache for summaries/articles
+- ❌ **No persistence** - Digests not saved to database
+- ❌ **Hardcoded themes** - Uses 5 default themes (not from database)
+
+**Performance:**
+- ~26 seconds for 3 articles
+- ~2-3 minutes for 13 articles (estimate)
+- Cache improves performance on re-runs
+
+**Input File Format:**
+Simple markdown file with URLs (one per line or in markdown links):
+```markdown
+# Weekly Reading List
+
+https://example.com/article1
+https://example.com/article2
+- [Optional Title](https://example.com/article3)
+```
+
+## Development Patterns
 
 **Pipeline Construction:**
 ```go
@@ -730,6 +800,9 @@ go test ./...
 
 # Generate digest (database-driven with hierarchical summarization)
 ./briefly digest generate --since 7
+
+# Generate digest from curated markdown file (NEW - lightweight)
+./briefly digest from-file input/weekly.md
 
 # List recent digests
 ./briefly digest list --limit 20
