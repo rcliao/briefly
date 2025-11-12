@@ -23,6 +23,7 @@ type PostgresDB struct {
 	themes     ThemeRepository     // Phase 0
 	manualURLs ManualURLRepository // Phase 0
 	citations  CitationRepository  // Phase 1
+	tags       TagRepository       // Phase 1
 }
 
 // NewPostgresDB creates a new PostgreSQL database connection
@@ -53,6 +54,7 @@ func NewPostgresDB(connectionString string) (*PostgresDB, error) {
 	pgDB.themes = &postgresThemeRepo{db: db}         // Phase 0
 	pgDB.manualURLs = &postgresManualURLRepo{db: db} // Phase 0
 	pgDB.citations = &postgresCitationRepo{db: db}   // Phase 1
+	pgDB.tags = &postgresTagRepo{db: db}             // Phase 1
 
 	return pgDB, nil
 }
@@ -65,6 +67,7 @@ func (p *PostgresDB) Digests() DigestRepository       { return p.digests }
 func (p *PostgresDB) Themes() ThemeRepository         { return p.themes }     // Phase 0
 func (p *PostgresDB) ManualURLs() ManualURLRepository { return p.manualURLs } // Phase 0
 func (p *PostgresDB) Citations() CitationRepository   { return p.citations }  // Phase 1
+func (p *PostgresDB) Tags() TagRepository             { return p.tags }       // Phase 1
 
 func (p *PostgresDB) Close() error {
 	return p.db.Close()
@@ -89,6 +92,7 @@ func (p *PostgresDB) BeginTx(ctx context.Context) (Transaction, error) {
 		themes:     &postgresThemeRepo{db: p.db, tx: tx},     // Phase 0
 		manualURLs: &postgresManualURLRepo{db: p.db, tx: tx}, // Phase 0
 		citations:  &postgresCitationRepo{db: p.db, tx: tx},  // Phase 1
+		tags:       &postgresTagRepo{db: p.db, tx: tx},       // Phase 1
 	}, nil
 }
 
@@ -103,6 +107,7 @@ type postgresTx struct {
 	themes     ThemeRepository     // Phase 0
 	manualURLs ManualURLRepository // Phase 0
 	citations  CitationRepository  // Phase 1
+	tags       TagRepository       // Phase 1
 }
 
 func (t *postgresTx) Commit() error                   { return t.tx.Commit() }
@@ -115,6 +120,7 @@ func (t *postgresTx) Digests() DigestRepository       { return t.digests }
 func (t *postgresTx) Themes() ThemeRepository         { return t.themes }     // Phase 0
 func (t *postgresTx) ManualURLs() ManualURLRepository { return t.manualURLs } // Phase 0
 func (t *postgresTx) Citations() CitationRepository   { return t.citations }  // Phase 1
+func (t *postgresTx) Tags() TagRepository             { return t.tags }       // Phase 1
 
 // postgresArticleRepo implements ArticleRepository for PostgreSQL
 type postgresArticleRepo struct {
@@ -239,6 +245,19 @@ func (r *postgresArticleRepo) Delete(ctx context.Context, id string) error {
 	query := `DELETE FROM articles WHERE id = $1`
 	_, err := r.query().ExecContext(ctx, query, id)
 	return err
+}
+
+func (r *postgresArticleRepo) UpdateClusterAssignment(ctx context.Context, articleID string, clusterLabel string, confidence float64) error {
+	query := `
+		UPDATE articles
+		SET topic_cluster = $2, cluster_confidence = $3
+		WHERE id = $1
+	`
+	_, err := r.query().ExecContext(ctx, query, articleID, clusterLabel, confidence)
+	if err != nil {
+		return fmt.Errorf("failed to update cluster assignment for article %s: %w", articleID, err)
+	}
+	return nil
 }
 
 func (r *postgresArticleRepo) GetRecent(ctx context.Context, since time.Time, limit int) ([]core.Article, error) {

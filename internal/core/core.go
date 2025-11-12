@@ -429,6 +429,29 @@ type Theme struct {
 	UpdatedAt   time.Time `json:"updated_at"`  // Last update timestamp
 }
 
+// Tag represents a granular topic tag for fine-grained article classification (Phase 1)
+// Tags are internal classification labels for clustering, while Themes are user-facing categories
+// Architecture: 5 top-level themes (user UI) + 50+ tags (internal clustering)
+type Tag struct {
+	ID          string    `json:"id"`          // Unique identifier (e.g., "tag-llm", "tag-rag")
+	Name        string    `json:"name"`        // Tag name (e.g., "Large Language Models", "RAG & Retrieval")
+	Description string    `json:"description"` // Optional description
+	Keywords    []string  `json:"keywords"`    // Keywords for LLM classification
+	ThemeID     *string   `json:"theme_id"`    // Optional parent theme (for grouping)
+	Enabled     bool      `json:"enabled"`     // Whether this tag is active
+	CreatedAt   time.Time `json:"created_at"`  // Creation timestamp
+	UpdatedAt   time.Time `json:"updated_at"`  // Last update timestamp
+}
+
+// ArticleTag represents the many-to-many relationship between articles and tags
+// with LLM-assigned relevance scores for multi-label classification
+type ArticleTag struct {
+	ArticleID      string    `json:"article_id"`      // Reference to article
+	TagID          string    `json:"tag_id"`          // Reference to tag
+	RelevanceScore float64   `json:"relevance_score"` // LLM confidence score (0.0-1.0)
+	AssignedAt     time.Time `json:"assigned_at"`     // When tag was assigned
+}
+
 // ManualURL represents a user-submitted URL for processing (Phase 0)
 type ManualURL struct {
 	ID           string     `json:"id"`                      // Unique identifier

@@ -7,6 +7,7 @@ import (
 	"briefly/internal/observability"
 	"briefly/internal/persistence"
 	"briefly/internal/summarize"
+	"briefly/internal/tags" // Phase 1: For tag classification
 	"context"
 	"fmt"
 
@@ -183,6 +184,21 @@ func (b *Builder) Build() (*Pipeline, error) {
 		citationTracker = NewCitationTrackerAdapter(b.db)
 	}
 
+	// Phase 1: Create article repository for cluster persistence
+	var articleRepo ArticleRepository
+	if b.db != nil {
+		articleRepo = b.db.Articles()
+	}
+
+	// Phase 1: Create tag classifier and repository for hierarchical clustering
+	var tagClassifier TagClassifier
+	var tagRepo TagRepository
+	if b.db != nil && b.tracedClient != nil {
+		fmt.Println("🏷️  Tag classification enabled")
+		tagClassifier = NewTagClassifierAdapter(b.tracedClient, b.posthog)
+		tagRepo = b.db.Tags()
+	}
+
 	// Build pipeline
 	pipeline := NewPipeline(
 		parser,
@@ -197,7 +213,10 @@ func (b *Builder) Build() (*Pipeline, error) {
 		cache,
 		banner,
 		citationTracker,
-		nil, // digestRepo: Optional, will be wired up when needed (v2.0)
+		nil,             // digestRepo: Optional, will be wired up when needed (v2.0)
+		articleRepo,     // Phase 1: For persisting cluster assignments
+		tagClassifier,   // Phase 1: For multi-label tag classification
+		tagRepo,         // Phase 1: For tag persistence
 		b.config,
 	)
 
@@ -251,4 +270,95 @@ func (l *LLMClientForSummarize) GenerateText(ctx context.Context, prompt string,
 	}
 
 	return l.client.GenerateText(ctx, prompt, llmOptions)
+}
+
+// TagClassifierAdapter adapts internal/tags.Classifier to implement pipeline.TagClassifier
+type TagClassifierAdapter struct {
+	classifier *tags.Classifier
+}
+
+// NewTagClassifierAdapter creates a new tag classifier adapter
+func NewTagClassifierAdapter(tracedClient *llm.TracedClient, posthog *observability.PostHogClient) *TagClassifierAdapter {
+	classifier := tags.NewClassifierWithClients(tracedClient, posthog)
+	return &TagClassifierAdapter{classifier: classifier}
+}
+
+func (t *TagClassifierAdapter) ClassifyArticle(ctx context.Context, article core.Article, summary *core.Summary, tagList []core.Tag, minRelevance float64) (*TagClassificationResult, error) {
+	result, err := t.classifier.ClassifyArticle(ctx, article, summary, tagList, minRelevance)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert tags.ClassificationResult to pipeline.TagClassificationResult
+	pipelineResult := &TagClassificationResult{
+		ArticleID: result.ArticleID,
+		ThemeID:   result.ThemeID,
+		Tags:      make([]TagClassificationResultItem, len(result.Tags)),
+	}
+
+	for i, tag := range result.Tags {
+		pipelineResult.Tags[i] = TagClassificationResultItem{
+			TagID:          tag.TagID,
+			TagName:        tag.TagName,
+			RelevanceScore: tag.RelevanceScore,
+			Reasoning:      tag.Reasoning,
+		}
+	}
+
+	return pipelineResult, nil
+}
+
+func (t *TagClassifierAdapter) ClassifyWithinTheme(ctx context.Context, article core.Article, summary *core.Summary, themeID string, allTags []core.Tag, minRelevance float64) (*TagClassificationResult, error) {
+	result, err := t.classifier.ClassifyWithinTheme(ctx, article, summary, themeID, allTags, minRelevance)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert tags.ClassificationResult to pipeline.TagClassificationResult
+	pipelineResult := &TagClassificationResult{
+		ArticleID: result.ArticleID,
+		ThemeID:   result.ThemeID,
+		Tags:      make([]TagClassificationResultItem, len(result.Tags)),
+	}
+
+	for i, tag := range result.Tags {
+		pipelineResult.Tags[i] = TagClassificationResultItem{
+			TagID:          tag.TagID,
+			TagName:        tag.TagName,
+			RelevanceScore: tag.RelevanceScore,
+			Reasoning:      tag.Reasoning,
+		}
+	}
+
+	return pipelineResult, nil
+}
+
+func (t *TagClassifierAdapter) ClassifyBatch(ctx context.Context, articles []core.Article, summaries map[string]*core.Summary, tagList []core.Tag, minRelevance float64) (map[string]*TagClassificationResult, error) {
+	results, err := t.classifier.ClassifyBatch(ctx, articles, summaries, tagList, minRelevance)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert map[string]*tags.ClassificationResult to map[string]*pipeline.TagClassificationResult
+	pipelineResults := make(map[string]*TagClassificationResult)
+	for articleID, result := range results {
+		pipelineResult := &TagClassificationResult{
+			ArticleID: result.ArticleID,
+			ThemeID:   result.ThemeID,
+			Tags:      make([]TagClassificationResultItem, len(result.Tags)),
+		}
+
+		for i, tag := range result.Tags {
+			pipelineResult.Tags[i] = TagClassificationResultItem{
+				TagID:          tag.TagID,
+				TagName:        tag.TagName,
+				RelevanceScore: tag.RelevanceScore,
+				Reasoning:      tag.Reasoning,
+			}
+		}
+
+		pipelineResults[articleID] = pipelineResult
+	}
+
+	return pipelineResults, nil
 }

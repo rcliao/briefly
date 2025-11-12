@@ -1699,3 +1699,279 @@ func (r *postgresManualURLRepo) scanManualURLRow(rows *sql.Rows) (*core.ManualUR
 	}
 	return &manualURL, nil
 }
+
+// postgresTagRepo implements TagRepository for PostgreSQL (Phase 1)
+type postgresTagRepo struct {
+	db *sql.DB
+	tx *sql.Tx
+}
+
+func (r *postgresTagRepo) query() interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+} {
+	if r.tx != nil {
+		return r.tx
+	}
+	return r.db
+}
+
+func (r *postgresTagRepo) Create(ctx context.Context, tag *core.Tag) error {
+	query := `
+		INSERT INTO tags (id, name, description, keywords, theme_id, enabled, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	now := time.Now().UTC()
+	_, err := r.query().ExecContext(ctx, query,
+		tag.ID,
+		tag.Name,
+		tag.Description,
+		pq.Array(tag.Keywords), // PostgreSQL text[] array
+		tag.ThemeID,
+		tag.Enabled,
+		now,
+		now,
+	)
+	return err
+}
+
+func (r *postgresTagRepo) Get(ctx context.Context, id string) (*core.Tag, error) {
+	query := `SELECT id, name, description, keywords, theme_id, enabled, created_at, updated_at FROM tags WHERE id = $1`
+	row := r.query().QueryRowContext(ctx, query, id)
+	return r.scanTag(row)
+}
+
+func (r *postgresTagRepo) GetByName(ctx context.Context, name string) (*core.Tag, error) {
+	query := `SELECT id, name, description, keywords, theme_id, enabled, created_at, updated_at FROM tags WHERE name = $1`
+	row := r.query().QueryRowContext(ctx, query, name)
+	return r.scanTag(row)
+}
+
+func (r *postgresTagRepo) List(ctx context.Context, enabledOnly bool) ([]core.Tag, error) {
+	var query string
+	var rows *sql.Rows
+	var err error
+
+	if enabledOnly {
+		query = `SELECT id, name, description, keywords, theme_id, enabled, created_at, updated_at FROM tags WHERE enabled = true ORDER BY name ASC`
+		rows, err = r.query().QueryContext(ctx, query)
+	} else {
+		query = `SELECT id, name, description, keywords, theme_id, enabled, created_at, updated_at FROM tags ORDER BY name ASC`
+		rows, err = r.query().QueryContext(ctx, query)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tags []core.Tag
+	for rows.Next() {
+		tag, err := r.scanTagRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		tags = append(tags, *tag)
+	}
+	return tags, rows.Err()
+}
+
+func (r *postgresTagRepo) ListByTheme(ctx context.Context, themeID string, enabledOnly bool) ([]core.Tag, error) {
+	var query string
+	var rows *sql.Rows
+	var err error
+
+	if enabledOnly {
+		query = `SELECT id, name, description, keywords, theme_id, enabled, created_at, updated_at
+			FROM tags WHERE theme_id = $1 AND enabled = true ORDER BY name ASC`
+		rows, err = r.query().QueryContext(ctx, query, themeID)
+	} else {
+		query = `SELECT id, name, description, keywords, theme_id, enabled, created_at, updated_at
+			FROM tags WHERE theme_id = $1 ORDER BY name ASC`
+		rows, err = r.query().QueryContext(ctx, query, themeID)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tags []core.Tag
+	for rows.Next() {
+		tag, err := r.scanTagRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		tags = append(tags, *tag)
+	}
+	return tags, rows.Err()
+}
+
+func (r *postgresTagRepo) ListEnabled(ctx context.Context) ([]core.Tag, error) {
+	return r.List(ctx, true)
+}
+
+func (r *postgresTagRepo) Update(ctx context.Context, tag *core.Tag) error {
+	query := `
+		UPDATE tags
+		SET name = $2, description = $3, keywords = $4, theme_id = $5, enabled = $6, updated_at = $7
+		WHERE id = $1
+	`
+	_, err := r.query().ExecContext(ctx, query,
+		tag.ID,
+		tag.Name,
+		tag.Description,
+		pq.Array(tag.Keywords),
+		tag.ThemeID,
+		tag.Enabled,
+		time.Now().UTC(),
+	)
+	return err
+}
+
+func (r *postgresTagRepo) Delete(ctx context.Context, id string) error {
+	query := `DELETE FROM tags WHERE id = $1`
+	_, err := r.query().ExecContext(ctx, query, id)
+	return err
+}
+
+func (r *postgresTagRepo) AssignTagToArticle(ctx context.Context, articleID string, tagID string, relevanceScore float64) error {
+	query := `
+		INSERT INTO article_tags (article_id, tag_id, relevance_score, assigned_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (article_id, tag_id) DO UPDATE
+		SET relevance_score = EXCLUDED.relevance_score, assigned_at = EXCLUDED.assigned_at
+	`
+	_, err := r.query().ExecContext(ctx, query, articleID, tagID, relevanceScore, time.Now().UTC())
+	return err
+}
+
+func (r *postgresTagRepo) AssignTagsToArticle(ctx context.Context, articleID string, tags map[string]float64) error {
+	// Batch insert using transaction
+	for tagID, relevance := range tags {
+		if err := r.AssignTagToArticle(ctx, articleID, tagID, relevance); err != nil {
+			return fmt.Errorf("failed to assign tag %s: %w", tagID, err)
+		}
+	}
+	return nil
+}
+
+func (r *postgresTagRepo) GetArticleTags(ctx context.Context, articleID string) ([]core.Tag, map[string]float64, error) {
+	query := `
+		SELECT t.id, t.name, t.description, t.keywords, t.theme_id, t.enabled, t.created_at, t.updated_at, at.relevance_score
+		FROM tags t
+		JOIN article_tags at ON t.id = at.tag_id
+		WHERE at.article_id = $1
+		ORDER BY at.relevance_score DESC
+	`
+	rows, err := r.query().QueryContext(ctx, query, articleID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	var tags []core.Tag
+	relevanceScores := make(map[string]float64)
+
+	for rows.Next() {
+		var tag core.Tag
+		var relevance float64
+		err := rows.Scan(
+			&tag.ID,
+			&tag.Name,
+			&tag.Description,
+			pq.Array(&tag.Keywords),
+			&tag.ThemeID,
+			&tag.Enabled,
+			&tag.CreatedAt,
+			&tag.UpdatedAt,
+			&relevance,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		tags = append(tags, tag)
+		relevanceScores[tag.ID] = relevance
+	}
+	return tags, relevanceScores, rows.Err()
+}
+
+func (r *postgresTagRepo) GetTagArticles(ctx context.Context, tagID string, minRelevance float64) ([]string, map[string]float64, error) {
+	query := `
+		SELECT article_id, relevance_score
+		FROM article_tags
+		WHERE tag_id = $1 AND relevance_score >= $2
+		ORDER BY relevance_score DESC
+	`
+	rows, err := r.query().QueryContext(ctx, query, tagID, minRelevance)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	var articleIDs []string
+	relevanceScores := make(map[string]float64)
+
+	for rows.Next() {
+		var articleID string
+		var relevance float64
+		if err := rows.Scan(&articleID, &relevance); err != nil {
+			return nil, nil, err
+		}
+		articleIDs = append(articleIDs, articleID)
+		relevanceScores[articleID] = relevance
+	}
+	return articleIDs, relevanceScores, rows.Err()
+}
+
+func (r *postgresTagRepo) RemoveTagFromArticle(ctx context.Context, articleID string, tagID string) error {
+	query := `DELETE FROM article_tags WHERE article_id = $1 AND tag_id = $2`
+	_, err := r.query().ExecContext(ctx, query, articleID, tagID)
+	return err
+}
+
+func (r *postgresTagRepo) RemoveAllTagsFromArticle(ctx context.Context, articleID string) error {
+	query := `DELETE FROM article_tags WHERE article_id = $1`
+	_, err := r.query().ExecContext(ctx, query, articleID)
+	return err
+}
+
+func (r *postgresTagRepo) scanTag(row *sql.Row) (*core.Tag, error) {
+	var tag core.Tag
+	err := row.Scan(
+		&tag.ID,
+		&tag.Name,
+		&tag.Description,
+		pq.Array(&tag.Keywords),
+		&tag.ThemeID,
+		&tag.Enabled,
+		&tag.CreatedAt,
+		&tag.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("tag not found")
+		}
+		return nil, err
+	}
+	return &tag, nil
+}
+
+func (r *postgresTagRepo) scanTagRow(rows *sql.Rows) (*core.Tag, error) {
+	var tag core.Tag
+	err := rows.Scan(
+		&tag.ID,
+		&tag.Name,
+		&tag.Description,
+		pq.Array(&tag.Keywords),
+		&tag.ThemeID,
+		&tag.Enabled,
+		&tag.CreatedAt,
+		&tag.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &tag, nil
+}

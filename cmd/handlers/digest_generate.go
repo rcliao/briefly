@@ -9,6 +9,7 @@ import (
 	"briefly/internal/markdown"
 	"briefly/internal/narrative"
 	"briefly/internal/persistence"
+	"briefly/internal/pipeline"
 	"briefly/internal/quality"
 	"briefly/internal/summarize"
 	"context"
@@ -192,17 +193,76 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 	}
 	defer llmClient.Close()
 
-	// Generate digests with clustering (v2.0 architecture)
-	fmt.Println("\n🤖 Generating summaries and clustering articles...")
-	digests, err := generateDigestsWithClustering(ctx, db, llmClient, articles, since, themeFilter)
+	// Load or generate summaries for all articles
+	fmt.Println("\n📝 Loading/generating article summaries...")
+	summaries := make([]core.Summary, 0, len(articles))
+	adapter := &llmClientAdapter{client: llmClient}
+	summarizer := summarize.NewSummarizerWithDefaults(adapter)
+
+	for i, article := range articles {
+		fmt.Printf("   [%d/%d] Processing: %s\n", i+1, len(articles), article.Title)
+
+		// Try to fetch existing summary from database
+		existingSummary, err := db.Summaries().Get(ctx, article.ID)
+		if err == nil && existingSummary != nil {
+			summaries = append(summaries, *existingSummary)
+			log.Info("Using existing summary", "article_id", article.ID)
+			continue
+		}
+
+		// Generate new summary
+		summary, err := summarizer.SummarizeArticle(ctx, &article)
+		if err != nil {
+			log.Warn("Failed to generate summary", "article_id", article.ID, "error", err)
+			// Create fallback summary
+			summary = &core.Summary{
+				ID:          uuid.NewString(),
+				ArticleIDs:  []string{article.ID},
+				SummaryText: fmt.Sprintf("Summary for: %s", article.Title),
+				ModelUsed:   "fallback",
+			}
+		}
+
+		// Store summary in database
+		if err := db.Summaries().Create(ctx, summary); err != nil {
+			log.Warn("Failed to save summary to database", "error", err)
+		}
+
+		summaries = append(summaries, *summary)
+	}
+	fmt.Printf("   ✓ Loaded/generated %d summaries\n\n", len(summaries))
+
+	// Build Pipeline with all Phase 1 enhancements (tag classification, better embeddings, cluster persistence)
+	fmt.Println("🔧 Initializing Pipeline with Phase 1 enhancements...")
+	pipelineBuilder := pipeline.NewBuilder().
+		WithDatabase(db).
+		WithLLMClient(llmClient).
+		WithCacheDir(".briefly-cache")
+
+	pipe, err := pipelineBuilder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build pipeline: %w", err)
+	}
+
+	// Generate digests using Pipeline (applies tag classification, embeddings from summaries, cluster persistence)
+	fmt.Println("\n🚀 Generating digests with Pipeline (Phase 1: Tag-based hierarchical clustering)...")
+	result, err := pipe.GenerateDigestsFromDatabase(ctx, pipeline.DatabaseDigestOptions{
+		Articles:       articles,
+		Summaries:      summaries,
+		NumClusters:    0, // Auto-determine
+		GenerateBanner: false,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to generate digests: %w", err)
 	}
 
+	digests := result.Digests
 	if len(digests) == 0 {
 		fmt.Println("⚠️  No digests generated (clustering found no valid clusters)")
 		return nil
 	}
+
+	fmt.Printf("\n✨ Generated %d digests in %s\n", len(digests), result.ProcessingTime.Round(time.Second))
 
 	// Save each digest to database
 	fmt.Printf("\n💾 Saving %d digests to database...\n", len(digests))

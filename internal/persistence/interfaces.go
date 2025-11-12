@@ -32,6 +32,10 @@ type ArticleRepository interface {
 
 	// GetByCluster retrieves articles belonging to a specific cluster
 	GetByCluster(ctx context.Context, clusterLabel string, limit int) ([]core.Article, error)
+
+	// UpdateClusterAssignment updates the cluster assignment for an article (Phase 1)
+	// This is called after clustering to persist cluster labels and confidence scores
+	UpdateClusterAssignment(ctx context.Context, articleID string, clusterLabel string, confidence float64) error
 }
 
 // SummaryRepository handles summary persistence operations
@@ -228,6 +232,51 @@ type ManualURLRepository interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// TagRepository handles tag persistence operations (Phase 1)
+type TagRepository interface {
+	// Create inserts a new tag
+	Create(ctx context.Context, tag *core.Tag) error
+
+	// Get retrieves a tag by ID
+	Get(ctx context.Context, id string) (*core.Tag, error)
+
+	// GetByName retrieves a tag by its name
+	GetByName(ctx context.Context, name string) (*core.Tag, error)
+
+	// List retrieves all tags with optional enabled filter
+	List(ctx context.Context, enabledOnly bool) ([]core.Tag, error)
+
+	// ListByTheme retrieves tags for a specific theme
+	ListByTheme(ctx context.Context, themeID string, enabledOnly bool) ([]core.Tag, error)
+
+	// Update updates an existing tag
+	Update(ctx context.Context, tag *core.Tag) error
+
+	// Delete removes a tag by ID
+	Delete(ctx context.Context, id string) error
+
+	// ListEnabled retrieves all enabled tags
+	ListEnabled(ctx context.Context) ([]core.Tag, error)
+
+	// AssignTagToArticle assigns a tag to an article with relevance score
+	AssignTagToArticle(ctx context.Context, articleID string, tagID string, relevanceScore float64) error
+
+	// AssignTagsToArticle assigns multiple tags to an article (batch operation)
+	AssignTagsToArticle(ctx context.Context, articleID string, tags map[string]float64) error
+
+	// GetArticleTags retrieves all tags assigned to an article (with relevance scores)
+	GetArticleTags(ctx context.Context, articleID string) ([]core.Tag, map[string]float64, error)
+
+	// GetTagArticles retrieves all articles assigned to a tag (with relevance scores)
+	GetTagArticles(ctx context.Context, tagID string, minRelevance float64) ([]string, map[string]float64, error)
+
+	// RemoveTagFromArticle removes a tag assignment from an article
+	RemoveTagFromArticle(ctx context.Context, articleID string, tagID string) error
+
+	// RemoveAllTagsFromArticle removes all tag assignments from an article
+	RemoveAllTagsFromArticle(ctx context.Context, articleID string) error
+}
+
 // CitationRepository handles citation persistence operations (Phase 1)
 // Updated in v2.0 to support both article metadata citations AND digest inline citations
 type CitationRepository interface {
@@ -302,6 +351,9 @@ type Database interface {
 	// Citations returns the citation repository (Phase 1)
 	Citations() CitationRepository
 
+	// Tags returns the tag repository (Phase 1)
+	Tags() TagRepository
+
 	// Close closes the database connection
 	Close() error
 
@@ -340,4 +392,7 @@ type Transaction interface {
 
 	// ManualURLs returns the manual URL repository within this transaction (Phase 0)
 	ManualURLs() ManualURLRepository
+
+	// Tags returns the tag repository within this transaction (Phase 1)
+	Tags() TagRepository
 }

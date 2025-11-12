@@ -149,3 +149,48 @@ type DigestRepository interface {
 	// Performs all operations in a transaction for atomicity
 	StoreWithRelationships(ctx context.Context, digest *core.Digest, articleIDs []string, themeIDs []string) error
 }
+
+// ArticleRepository provides persistence for articles (Phase 1)
+type ArticleRepository interface {
+	// UpdateClusterAssignment updates cluster assignment for an article
+	UpdateClusterAssignment(ctx context.Context, articleID string, clusterLabel string, confidence float64) error
+}
+
+// TagClassifier assigns multiple tags to articles (Phase 1)
+type TagClassifier interface {
+	// ClassifyArticle assigns 3-5 most relevant tags to an article
+	ClassifyArticle(ctx context.Context, article core.Article, summary *core.Summary, tags []core.Tag, minRelevance float64) (*TagClassificationResult, error)
+
+	// ClassifyWithinTheme classifies an article using only tags from a specific theme
+	ClassifyWithinTheme(ctx context.Context, article core.Article, summary *core.Summary, themeID string, allTags []core.Tag, minRelevance float64) (*TagClassificationResult, error)
+
+	// ClassifyBatch classifies multiple articles in batch
+	ClassifyBatch(ctx context.Context, articles []core.Article, summaries map[string]*core.Summary, tags []core.Tag, minRelevance float64) (map[string]*TagClassificationResult, error)
+}
+
+// TagClassificationResult contains all tag classifications for an article
+type TagClassificationResult struct {
+	ArticleID string                        // Article being classified
+	Tags      []TagClassificationResultItem // Assigned tags (3-5 recommended)
+	ThemeID   string                        // Parent theme (for filtering)
+}
+
+// TagClassificationResultItem contains a single tag classification
+type TagClassificationResultItem struct {
+	TagID          string  // ID of the matched tag (e.g., "tag-llm")
+	TagName        string  // Name of the matched tag (e.g., "Large Language Models")
+	RelevanceScore float64 // Relevance score (0.0-1.0)
+	Reasoning      string  // Why this tag was chosen
+}
+
+// TagRepository handles tag persistence operations (Phase 1)
+type TagRepository interface {
+	// ListEnabled retrieves all enabled tags
+	ListEnabled(ctx context.Context) ([]core.Tag, error)
+
+	// AssignTagsToArticle assigns multiple tags to an article (batch operation)
+	AssignTagsToArticle(ctx context.Context, articleID string, tags map[string]float64) error
+
+	// GetArticleTags retrieves all tags assigned to an article (with relevance scores)
+	GetArticleTags(ctx context.Context, articleID string) ([]core.Tag, map[string]float64, error)
+}

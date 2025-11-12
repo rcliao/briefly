@@ -6,6 +6,7 @@ import (
 	"briefly/internal/quality"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -23,9 +24,12 @@ type Pipeline struct {
 	narrative       NarrativeGenerator
 	renderer        MarkdownRenderer
 	cache           CacheManager
-	banner          BannerGenerator  // Optional
-	citationTracker CitationTracker  // Phase 1: Track citations for articles
-	digestRepo      DigestRepository // Optional: For storing digests in database (v2.0)
+	banner          BannerGenerator   // Optional
+	citationTracker CitationTracker   // Phase 1: Track citations for articles
+	digestRepo      DigestRepository  // Optional: For storing digests in database (v2.0)
+	articleRepo     ArticleRepository // Phase 1: For persisting cluster assignments
+	tagClassifier   TagClassifier     // Phase 1: For multi-label tag classification
+	tagRepo         TagRepository     // Phase 1: For tag persistence
 
 	// Configuration
 	config *Config
@@ -86,7 +90,10 @@ func NewPipeline(
 	cache CacheManager,
 	banner BannerGenerator,
 	citationTracker CitationTracker,
-	digestRepo DigestRepository, // v2.0: Optional digest repository for database storage
+	digestRepo DigestRepository,   // v2.0: Optional digest repository for database storage
+	articleRepo ArticleRepository,  // Phase 1: For persisting cluster assignments
+	tagClassifier TagClassifier,    // Phase 1: For multi-label tag classification
+	tagRepo TagRepository,          // Phase 1: For tag persistence
 	config *Config,
 ) *Pipeline {
 	if config == nil {
@@ -107,6 +114,9 @@ func NewPipeline(
 		banner:          banner,
 		citationTracker: citationTracker,
 		digestRepo:      digestRepo,
+		articleRepo:     articleRepo,
+		tagClassifier:   tagClassifier,
+		tagRepo:         tagRepo,
 		config:          config,
 	}
 }
@@ -178,6 +188,20 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 	fmt.Printf("   ✓ Successfully processed %d/%d articles\n", stats.SuccessfulArticles, stats.TotalURLs)
 	fmt.Printf("   • Cache hits: %d, Cache misses: %d\n\n", stats.CacheHits, stats.CacheMisses)
 
+	// Step 2.5: Classify articles into tags (Phase 1)
+	if p.tagClassifier != nil && p.tagRepo != nil {
+		fmt.Printf("🏷️  Step 2.5/9: Classifying articles into tags...\n")
+		tagClassifications, err := p.classifyArticlesIntoTags(ctx, articles, summaries)
+		if err != nil {
+			// Non-fatal: log warning but continue
+			fmt.Printf("   ⚠️  Tag classification failed: %v\n", err)
+		} else {
+			fmt.Printf("   ✓ Classified %d articles with tags\n\n", len(tagClassifications))
+		}
+	} else {
+		fmt.Printf("   ⚠️  Tag classification skipped (classifier or repository not configured)\n\n")
+	}
+
 	// Step 3: Generate embeddings for clustering
 	fmt.Printf("🧠 Step 3/9: Generating embeddings for clustering...\n")
 	embeddings, err := p.generateEmbeddings(ctx, articles, summaries)
@@ -194,7 +218,39 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 	}
 
 	stats.ClustersGenerated = len(clusters)
-	fmt.Printf("   ✓ Created %d topic clusters\n\n", stats.ClustersGenerated)
+	fmt.Printf("   ✓ Created %d topic clusters\n", stats.ClustersGenerated)
+
+	// Persist cluster assignments to database (Phase 1 fix)
+	if p.articleRepo != nil {
+		fmt.Printf("   • Persisting cluster assignments to database...\n")
+		persistedCount := 0
+		articleMap := articlesToMap(articles)
+		for _, cluster := range clusters {
+			for _, articleID := range cluster.ArticleIDs {
+				// Verify article exists
+				if _, found := articleMap[articleID]; !found {
+					continue
+				}
+
+				// Calculate confidence as similarity to cluster centroid
+				confidence := 0.5 // Default confidence if we can't calculate
+				if embedding, hasEmbedding := embeddings[articleID]; hasEmbedding {
+					distance := euclideanDistance(embedding, cluster.Centroid)
+					confidence = 1.0 / (1.0 + distance)
+				}
+
+				// Persist to database
+				if err := p.articleRepo.UpdateClusterAssignment(ctx, articleID, cluster.Label, confidence); err != nil {
+					fmt.Printf("   ⚠️  Failed to persist cluster for article %s: %v\n", articleID, err)
+				} else {
+					persistedCount++
+				}
+			}
+		}
+		fmt.Printf("   ✓ Persisted %d cluster assignments\n\n", persistedCount)
+	} else {
+		fmt.Printf("   ⚠️  No article repository configured - cluster assignments not persisted\n\n")
+	}
 
 	// Quality Gate: Validate clustering quality
 	clusteringGate := NewClusteringQualityGate(
@@ -354,6 +410,195 @@ type QuickReadOptions struct {
 	URL string
 }
 
+// DatabaseDigestOptions configures database-driven digest generation
+type DatabaseDigestOptions struct {
+	Articles      []core.Article
+	Summaries     []core.Summary
+	NumClusters   int  // 0 = auto-determine
+	GenerateBanner bool
+}
+
+// DatabaseDigestResult contains digests generated from database articles
+type DatabaseDigestResult struct {
+	Digests          []*core.Digest
+	Clusters         []core.TopicCluster
+	ProcessingTime   time.Duration
+}
+
+// GenerateDigestsFromDatabase generates multiple digests from pre-loaded database articles
+// This method is designed for the 'digest generate' command which loads articles from PostgreSQL
+// It runs the full pipeline: tag classification → embeddings → clustering → narratives → digests
+func (p *Pipeline) GenerateDigestsFromDatabase(ctx context.Context, opts DatabaseDigestOptions) (*DatabaseDigestResult, error) {
+	startTime := time.Now()
+
+	articles := opts.Articles
+	summaries := opts.Summaries
+
+	if len(articles) == 0 {
+		return nil, fmt.Errorf("no articles provided")
+	}
+
+	fmt.Printf("🔄 Processing %d articles from database...\n\n", len(articles))
+
+	// Step 1: Tag Classification (Phase 1)
+	if p.tagClassifier != nil && p.tagRepo != nil {
+		fmt.Printf("🏷️  Step 1/6: Classifying articles into tags...\n")
+		tagClassifications, err := p.classifyArticlesIntoTags(ctx, articles, summaries)
+		if err != nil {
+			// Non-fatal: log warning but continue
+			fmt.Printf("   ⚠️  Tag classification failed: %v\n", err)
+		} else {
+			fmt.Printf("   ✓ Classified %d articles with tags\n\n", len(tagClassifications))
+		}
+	} else {
+		fmt.Printf("   ⚠️  Tag classification skipped (not configured)\n\n")
+	}
+
+	// Step 2: Generate embeddings from summaries (Phase 1 fix)
+	fmt.Printf("🧠 Step 2/6: Generating embeddings from summaries...\n")
+	embeddings, err := p.generateEmbeddings(ctx, articles, summaries)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate embeddings: %w", err)
+	}
+	fmt.Printf("   ✓ Generated %d embeddings\n\n", len(embeddings))
+
+	// Step 3: Cluster articles by topic
+	fmt.Printf("🔗 Step 3/6: Clustering articles by topic...\n")
+	clusters, err := p.clusterer.ClusterArticles(ctx, articles, summaries, embeddings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to cluster articles: %w", err)
+	}
+	fmt.Printf("   ✓ Created %d topic clusters\n", len(clusters))
+
+	// Persist cluster assignments to database (Phase 1 fix)
+	if p.articleRepo != nil {
+		fmt.Printf("   • Persisting cluster assignments to database...\n")
+		persistedCount := 0
+		articleMap := articlesToMap(articles)
+		for _, cluster := range clusters {
+			for _, articleID := range cluster.ArticleIDs {
+				// Verify article exists
+				if _, found := articleMap[articleID]; !found {
+					continue
+				}
+
+				// Calculate confidence as similarity to cluster centroid
+				confidence := 0.5 // Default confidence if we can't calculate
+				if embedding, hasEmbedding := embeddings[articleID]; hasEmbedding {
+					distance := euclideanDistance(embedding, cluster.Centroid)
+					confidence = 1.0 / (1.0 + distance)
+				}
+
+				// Persist to database
+				if err := p.articleRepo.UpdateClusterAssignment(ctx, articleID, cluster.Label, confidence); err != nil {
+					fmt.Printf("   ⚠️  Failed to persist cluster for article %s: %v\n", articleID, err)
+				} else {
+					persistedCount++
+				}
+			}
+		}
+		fmt.Printf("   ✓ Persisted %d cluster assignments\n\n", persistedCount)
+	}
+
+	// Step 4: Generate cluster narratives (hierarchical summarization)
+	fmt.Printf("📖 Step 4/6: Generating cluster narratives from ALL articles...\n")
+	clustersWithNarratives, err := p.generateClusterNarratives(ctx, clusters, articles, summaries)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate cluster narratives: %w", err)
+	}
+	fmt.Printf("   ✓ Generated narratives for %d clusters\n\n", len(clustersWithNarratives))
+
+	// Step 5: Generate digest for each cluster
+	fmt.Printf("✨ Step 5/6: Generating digest for each cluster...\n")
+	digests := make([]*core.Digest, 0, len(clustersWithNarratives))
+
+	for i, cluster := range clustersWithNarratives {
+		fmt.Printf("   [%d/%d] Cluster: %s (%d articles)\n", i+1, len(clustersWithNarratives), cluster.Label, len(cluster.ArticleIDs))
+
+		// Build article and summary maps for this cluster
+		clusterArticles := make([]core.Article, 0, len(cluster.ArticleIDs))
+		for _, article := range articles {
+			for _, id := range cluster.ArticleIDs {
+				if article.ID == id {
+					clusterArticles = append(clusterArticles, article)
+					break
+				}
+			}
+		}
+
+		// Generate digest content using hierarchical summarization
+		digestContent, err := p.generateDigestContentWithNarratives(ctx, []core.TopicCluster{cluster}, clusterArticles, summaries)
+		if err != nil {
+			fmt.Printf("   ⚠️  Failed to generate digest: %v\n", err)
+			continue
+		}
+
+		// Convert narrative.Statistic to core.Statistic
+		statistics := make([]core.Statistic, len(digestContent.ByTheNumbers))
+		for j, stat := range digestContent.ByTheNumbers {
+			statistics[j] = core.Statistic{
+				Stat:    stat.Stat,
+				Context: stat.Context,
+			}
+		}
+
+		// Build Summary from v3.0 structured fields if ExecutiveSummary is empty
+		// This ensures quality metrics have content to evaluate
+		summary := digestContent.ExecutiveSummary
+		fmt.Printf("   • ExecutiveSummary length: %d, TopDevelopments count: %d\n", len(summary), len(digestContent.TopDevelopments))
+		if summary == "" && len(digestContent.TopDevelopments) > 0 {
+			// Construct markdown summary from structured fields
+			var summaryBuilder strings.Builder
+			if digestContent.TLDRSummary != "" {
+				summaryBuilder.WriteString(digestContent.TLDRSummary)
+				summaryBuilder.WriteString("\n\n")
+			}
+			for _, dev := range digestContent.TopDevelopments {
+				summaryBuilder.WriteString("- ")
+				summaryBuilder.WriteString(dev)
+				summaryBuilder.WriteString("\n")
+			}
+			summary = summaryBuilder.String()
+			fmt.Printf("   • Built summary from TopDevelopments: %d words\n", len(strings.Fields(summary)))
+		} else if summary == "" {
+			fmt.Printf("   ⚠️  Both ExecutiveSummary and TopDevelopments are empty!\n")
+		}
+
+		// Build digest structure
+		clusterIDVal := i
+		digest := &core.Digest{
+			ID:              fmt.Sprintf("digest-%s", cluster.Label),
+			ClusterID:       &clusterIDVal,
+			ProcessedDate:   time.Now().UTC(),
+			Title:           digestContent.Title,            // v3.0 generated title
+			TLDRSummary:     digestContent.TLDRSummary,      // v3.0 one-sentence summary
+			TopDevelopments: digestContent.TopDevelopments,  // v3.0 bullet points
+			ByTheNumbers:    statistics,                     // v3.0 statistics (converted)
+			WhyItMatters:    digestContent.WhyItMatters,     // v3.0 impact
+			Summary:         summary,                        // Built from v3.0 fields if needed
+			Articles:        clusterArticles,
+			KeyMoments:      digestContent.KeyMoments,
+			Perspectives:    digestContent.Perspectives,
+			ArticleCount:    len(clusterArticles),
+		}
+
+		// Store quality metrics
+		if err := p.storeQualityMetrics(ctx, digest, clusterArticles); err != nil {
+			fmt.Printf("   ⚠️  Failed to store quality metrics: %v\n", err)
+		}
+
+		digests = append(digests, digest)
+	}
+
+	fmt.Printf("   ✓ Generated %d digests\n\n", len(digests))
+
+	return &DatabaseDigestResult{
+		Digests:        digests,
+		Clusters:       clustersWithNarratives,
+		ProcessingTime: time.Since(startTime),
+	}, nil
+}
+
 // QuickReadResult contains the output of quick read
 type QuickReadResult struct {
 	Article     *core.Article
@@ -500,26 +745,24 @@ func (p *Pipeline) generateEmbeddings(ctx context.Context, articles []core.Artic
 	for i, summary := range summaries {
 		fmt.Printf("   [%d/%d] Generating embedding for article %s\n", i+1, len(summaries), summary.ID)
 
-		// Get corresponding article
-		article, found := articleMap[summary.ArticleIDs[0]] // Summary.ArticleIDs[0] is the article ID
+		// Get corresponding article for validation
+		_, found := articleMap[summary.ArticleIDs[0]] // Summary.ArticleIDs[0] is the article ID
 		if !found {
 			fmt.Printf("           ✗ Article not found for summary %s\n", summary.ID)
 			failedCount++
 			continue
 		}
 
-		// Use first 2000 words of article content for richer semantics
-		// This provides much better clustering than using just 150-word summaries
-		embeddingText := article.CleanedText
-		maxChars := 2000 * 5 // ~2000 words (assuming avg 5 chars/word)
-		if len(embeddingText) > maxChars {
-			embeddingText = embeddingText[:maxChars]
-		}
+		// Phase 1 Fix: Use summaries for embeddings (better signal-to-noise ratio)
+		// Summaries are already distilled by LLM and contain the key semantic content
+		// This leads to better clustering quality than using raw article content
+		embeddingText := summary.SummaryText
 
-		// Fallback to summary if article content is too short
-		if len(embeddingText) < 200 {
-			fmt.Printf("           ⚠️  Article content too short (%d chars), using summary\n", len(embeddingText))
-			embeddingText = summary.SummaryText
+		// Skip if summary is too short (likely an error)
+		if len(embeddingText) < 50 {
+			fmt.Printf("           ✗ Summary too short (%d chars), skipping\n", len(embeddingText))
+			failedCount++
+			continue
 		}
 
 		embedding, err := p.embedder.GenerateEmbedding(ctx, embeddingText)
@@ -737,6 +980,19 @@ func generateID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
+// euclideanDistance calculates the Euclidean distance between two embedding vectors
+func euclideanDistance(a, b []float64) float64 {
+	if len(a) != len(b) {
+		return 0.0
+	}
+	var sum float64
+	for i := range a {
+		diff := a[i] - b[i]
+		sum += diff * diff
+	}
+	return sum // Return squared distance (no sqrt for performance)
+}
+
 // storeQualityMetrics calculates and stores quality metrics for a digest
 func (p *Pipeline) storeQualityMetrics(ctx context.Context, digest *core.Digest, articles []core.Article) error {
 	// Create quality evaluator
@@ -769,4 +1025,98 @@ func (p *Pipeline) storeQualityMetrics(ctx context.Context, digest *core.Digest,
 	// For now, metrics are logged to console for visibility
 
 	return nil
+}
+
+// classifyArticlesIntoTags classifies articles with multi-label tags and persists assignments
+// This implements Phase 1 hierarchical clustering: theme → tag → semantic clustering
+func (p *Pipeline) classifyArticlesIntoTags(ctx context.Context, articles []core.Article, summaries []core.Summary) (map[string]*TagClassificationResult, error) {
+	// Load all enabled tags from database
+	tags, err := p.tagRepo.ListEnabled(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load tags: %w", err)
+	}
+
+	if len(tags) == 0 {
+		fmt.Printf("   ⚠️  No enabled tags found in database\n")
+		return nil, nil
+	}
+
+	fmt.Printf("   • Loaded %d enabled tags from database\n", len(tags))
+
+	// Build summary map for quick lookup
+	summaryMap := summariesToMap(summaries)
+
+	// Classify each article with 3-5 most relevant tags
+	results := make(map[string]*TagClassificationResult)
+	successCount := 0
+	failCount := 0
+	minRelevance := 0.4 // Minimum tag relevance score (40%)
+
+	for i, article := range articles {
+		fmt.Printf("   [%d/%d] Classifying article: %s\n", i+1, len(articles), article.Title)
+
+		summary := summaryMap[article.ID]
+		if summary.SummaryText == "" {
+			fmt.Printf("           ⚠️  No summary found, skipping\n")
+			failCount++
+			continue
+		}
+
+		// Classify article into tags
+		classification, err := p.tagClassifier.ClassifyArticle(ctx, article, &summary, tags, minRelevance)
+		if err != nil {
+			fmt.Printf("           ✗ Classification failed: %v\n", err)
+			failCount++
+			continue
+		}
+
+		if len(classification.Tags) == 0 {
+			fmt.Printf("           ⚠️  No tags assigned (below threshold)\n")
+			failCount++
+			continue
+		}
+
+		// Convert tags.TagClassificationResult to pipeline.TagClassificationResult
+		pipelineResult := &TagClassificationResult{
+			ArticleID: classification.ArticleID,
+			ThemeID:   classification.ThemeID,
+			Tags:      make([]TagClassificationResultItem, len(classification.Tags)),
+		}
+
+		for j, tag := range classification.Tags {
+			pipelineResult.Tags[j] = TagClassificationResultItem{
+				TagID:          tag.TagID,
+				TagName:        tag.TagName,
+				RelevanceScore: tag.RelevanceScore,
+				Reasoning:      tag.Reasoning,
+			}
+		}
+
+		// Store tag assignments in database
+		tagMap := make(map[string]float64)
+		for _, tag := range pipelineResult.Tags {
+			tagMap[tag.TagID] = tag.RelevanceScore
+		}
+
+		if err := p.tagRepo.AssignTagsToArticle(ctx, article.ID, tagMap); err != nil {
+			fmt.Printf("           ⚠️  Failed to persist tags: %v\n", err)
+			// Continue anyway - classification succeeded
+		}
+
+		// Log assigned tags
+		tagNames := make([]string, len(pipelineResult.Tags))
+		for i, tag := range pipelineResult.Tags {
+			tagNames[i] = fmt.Sprintf("%s (%.2f)", tag.TagName, tag.RelevanceScore)
+		}
+		fmt.Printf("           ✓ Assigned %d tags: %s\n", len(pipelineResult.Tags), tagNames)
+
+		results[article.ID] = pipelineResult
+		successCount++
+	}
+
+	if failCount > 0 {
+		fmt.Printf("   ⚠️  %d/%d articles failed classification\n", failCount, len(articles))
+	}
+
+	return results, nil
 }

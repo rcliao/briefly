@@ -209,6 +209,11 @@ func (a *NarrativeAdapter) SelectTopArticles(cluster core.TopicCluster, articles
 	return a.generator.SelectTopArticles(cluster, articles, n)
 }
 
+// GenerateClusterSummary generates a comprehensive narrative for a single cluster using ALL articles
+func (a *NarrativeAdapter) GenerateClusterSummary(ctx context.Context, cluster core.TopicCluster, articles map[string]core.Article, summaries map[string]core.Summary) (*core.ClusterNarrative, error) {
+	return a.generator.GenerateClusterSummary(ctx, cluster, articles, summaries)
+}
+
 // RendererAdapter wraps internal/render and templates
 type RendererAdapter struct {
 	// Will use existing render/templates packages

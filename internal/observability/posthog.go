@@ -178,6 +178,12 @@ func (p *PostHogClient) TrackLLMCall(ctx context.Context, model string, operatio
 	})
 }
 
+// TrackEvent tracks a generic event with custom properties (Phase 1)
+// This method provides a generic interface for tracking arbitrary events
+func (p *PostHogClient) TrackEvent(ctx context.Context, event string, properties map[string]interface{}) error {
+	return p.Capture(ctx, "system", event, properties)
+}
+
 // Flush ensures all pending events are sent to PostHog
 func (p *PostHogClient) Flush() error {
 	if !p.enabled {
