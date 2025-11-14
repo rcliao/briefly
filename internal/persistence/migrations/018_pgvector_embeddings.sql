@@ -2,6 +2,10 @@
 -- Description: Convert article embeddings from JSONB to pgvector VECTOR(768) for better performance
 -- Created: 2025-11-06
 --
+-- ⚠️ IMPORTANT NOTE:
+-- This migration was executed before pgvector was installed, so the vector column
+-- creation was skipped. See migration 024 for the actual JSONB → VECTOR conversion.
+--
 -- Changes:
 -- - Enable pgvector extension IF AVAILABLE (gracefully skip if not)
 -- - Add new embedding_vector column with VECTOR(768) type (only if pgvector available)

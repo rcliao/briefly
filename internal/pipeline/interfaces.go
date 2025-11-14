@@ -154,6 +154,10 @@ type DigestRepository interface {
 type ArticleRepository interface {
 	// UpdateClusterAssignment updates cluster assignment for an article
 	UpdateClusterAssignment(ctx context.Context, articleID string, clusterLabel string, confidence float64) error
+
+	// UpdateEmbedding updates the embedding vector for an article
+	// This is called after generating embeddings to persist them for semantic search
+	UpdateEmbedding(ctx context.Context, articleID string, embedding []float64) error
 }
 
 // TagClassifier assigns multiple tags to articles (Phase 1)
@@ -193,4 +197,56 @@ type TagRepository interface {
 
 	// GetArticleTags retrieves all tags assigned to an article (with relevance scores)
 	GetArticleTags(ctx context.Context, articleID string) ([]core.Tag, map[string]float64, error)
+}
+
+// VectorStore provides semantic search operations for article embeddings (Phase 2)
+// Using pgvector for production-scale similarity search with cosine distance
+type VectorStore interface {
+	// Store saves or updates an embedding for an article
+	Store(ctx context.Context, articleID string, embedding []float64) error
+
+	// Search finds articles similar to the query embedding
+	Search(ctx context.Context, query VectorSearchQuery) ([]VectorSearchResult, error)
+
+	// SearchByTag performs semantic search within a specific tag (KEY for tag-aware clustering)
+	SearchByTag(ctx context.Context, query VectorSearchQuery, tagID string) ([]VectorSearchResult, error)
+
+	// SearchByTags searches across multiple tags (OR operation)
+	SearchByTags(ctx context.Context, query VectorSearchQuery, tagIDs []string) ([]VectorSearchResult, error)
+
+	// Delete removes an embedding
+	Delete(ctx context.Context, articleID string) error
+
+	// CreateIndex creates pgvector indexes for performance
+	CreateIndex(ctx context.Context) error
+
+	// GetStats returns statistics about the vector store
+	GetStats(ctx context.Context) (*VectorStoreStats, error)
+}
+
+// VectorSearchQuery configures semantic search parameters (Phase 2)
+type VectorSearchQuery struct {
+	Embedding           []float64 // Query vector (768-dim for Gemini)
+	Limit               int       // Max results (default: 10)
+	SimilarityThreshold float64   // Min cosine similarity (default: 0.7)
+	IncludeArticle      bool      // Populate full article data
+	ExcludeIDs          []string  // Filter out specific articles
+}
+
+// VectorSearchResult contains a similar article and its similarity score (Phase 2)
+type VectorSearchResult struct {
+	ArticleID  string        // Article ID
+	Similarity float64       // Cosine similarity (0.0-1.0)
+	Article    *core.Article // Full article data (if IncludeArticle=true)
+	TagIDs     []string      // Assigned tags
+	Distance   float64       // Raw cosine distance
+}
+
+// VectorStoreStats provides metrics about the vector store (Phase 2)
+type VectorStoreStats struct {
+	TotalEmbeddings   int64   // Count of stored embeddings
+	EmbeddingDimensions int     // Vector size (768 for Gemini)
+	IndexType         string  // pgvector index type (ivfflat, hnsw)
+	IndexSize         int64   // Disk space used by indexes
+	AvgSearchLatency  float64 // Average search query time (ms)
 }

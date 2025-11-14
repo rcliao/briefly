@@ -148,24 +148,47 @@ func (r *postgresArticleRepo) Create(ctx context.Context, article *core.Article)
 	query := `
 		INSERT INTO articles (
 			id, url, title, content_type, cleaned_text, raw_content,
-			topic_cluster, cluster_confidence, embedding, date_fetched, date_added,
+			topic_cluster, cluster_confidence, embedding, embedding_vector, date_fetched, date_added,
 			theme_id, theme_relevance_score
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CAST($10 AS VECTOR(768)), $11, $12, $13, $14)
 		ON CONFLICT (url) DO UPDATE SET
 			title = EXCLUDED.title,
 			content_type = EXCLUDED.content_type,
 			cleaned_text = EXCLUDED.cleaned_text,
+			embedding = EXCLUDED.embedding,
+			embedding_vector = CAST(EXCLUDED.embedding_vector AS TEXT)::VECTOR(768),
 			theme_id = EXCLUDED.theme_id,
 			theme_relevance_score = EXCLUDED.theme_relevance_score,
 			date_fetched = EXCLUDED.date_fetched
 	`
+
+	// Convert embedding to VECTOR format for pgvector
+	// Format: '[1.0,2.0,3.0,...]' - pgvector can parse this format
+	var embeddingVector interface{}
+	if len(article.Embedding) == 768 {
+		// Build comma-separated string for VECTOR type
+		embeddingStr := "["
+		for i, val := range article.Embedding {
+			if i > 0 {
+				embeddingStr += ","
+			}
+			embeddingStr += fmt.Sprintf("%f", val)
+		}
+		embeddingStr += "]"
+		embeddingVector = embeddingStr
+	}
+
 	_, err = r.query().ExecContext(ctx, query,
 		article.ID, article.URL, article.Title, article.ContentType,
 		article.CleanedText, article.RawContent, article.TopicCluster,
-		article.ClusterConfidence, embeddingJSON, article.DateFetched, time.Now().UTC(),
+		article.ClusterConfidence, embeddingJSON, embeddingVector, article.DateFetched, time.Now().UTC(),
 		article.ThemeID, article.ThemeRelevanceScore,
 	)
-	return err
+
+	if err != nil {
+		return fmt.Errorf("failed to insert/update article: %w", err)
+	}
+	return nil
 }
 
 func (r *postgresArticleRepo) Get(ctx context.Context, id string) (*core.Article, error) {
@@ -361,4 +384,51 @@ func (r *postgresArticleRepo) scanArticleRow(rows *sql.Rows) (*core.Article, err
 	}
 
 	return &article, nil
+}
+
+func (r *postgresArticleRepo) UpdateEmbedding(ctx context.Context, articleID string, embedding []float64) error {
+	// Validate embedding dimensions
+	if len(embedding) != 768 {
+		return fmt.Errorf("invalid embedding dimensions: expected 768, got %d", len(embedding))
+	}
+
+	// Marshal to JSONB format
+	embeddingJSON, err := json.Marshal(embedding)
+	if err != nil {
+		return fmt.Errorf("failed to marshal embedding to JSON: %w", err)
+	}
+
+	// Convert to VECTOR format for pgvector: '[1.0,2.0,3.0,...]'
+	embeddingStr := "["
+	for i, val := range embedding {
+		if i > 0 {
+			embeddingStr += ","
+		}
+		embeddingStr += fmt.Sprintf("%f", val)
+	}
+	embeddingStr += "]"
+
+	// Update both embedding (JSONB) and embedding_vector (VECTOR) columns
+	query := `
+		UPDATE articles
+		SET embedding = $2,
+		    embedding_vector = CAST($3 AS VECTOR(768))
+		WHERE id = $1
+	`
+
+	result, err := r.query().ExecContext(ctx, query, articleID, embeddingJSON, embeddingStr)
+	if err != nil {
+		return fmt.Errorf("failed to update embedding for article %s: %w", articleID, err)
+	}
+
+	// Check if article was found
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("article %s not found", articleID)
+	}
+
+	return nil
 }

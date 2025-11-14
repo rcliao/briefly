@@ -36,6 +36,10 @@ type ArticleRepository interface {
 	// UpdateClusterAssignment updates the cluster assignment for an article (Phase 1)
 	// This is called after clustering to persist cluster labels and confidence scores
 	UpdateClusterAssignment(ctx context.Context, articleID string, clusterLabel string, confidence float64) error
+
+	// UpdateEmbedding updates the embedding vector for an article
+	// This is called after generating embeddings to persist them for semantic search
+	UpdateEmbedding(ctx context.Context, articleID string, embedding []float64) error
 }
 
 // SummaryRepository handles summary persistence operations

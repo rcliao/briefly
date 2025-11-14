@@ -26,6 +26,7 @@ type Builder struct {
 	skipCache      bool
 	skipBanner     bool
 	useThemeSystem bool // Enable theme-based categorization
+	vectorStore    VectorStore // Phase 2: Optional vector store for semantic search
 }
 
 // NewBuilder creates a new pipeline builder with default settings
@@ -104,6 +105,12 @@ func (b *Builder) WithObservability(langfuse *observability.LangFuseClient, post
 // WithoutThemes disables theme-based categorization (use legacy categories)
 func (b *Builder) WithoutThemes() *Builder {
 	b.useThemeSystem = false
+	return b
+}
+
+// WithVectorStore sets the vector store for semantic search (Phase 2)
+func (b *Builder) WithVectorStore(store VectorStore) *Builder {
+	b.vectorStore = store
 	return b
 }
 
@@ -217,6 +224,7 @@ func (b *Builder) Build() (*Pipeline, error) {
 		articleRepo,     // Phase 1: For persisting cluster assignments
 		tagClassifier,   // Phase 1: For multi-label tag classification
 		tagRepo,         // Phase 1: For tag persistence
+		b.vectorStore,   // Phase 2: Vector store for semantic search
 		b.config,
 	)
 

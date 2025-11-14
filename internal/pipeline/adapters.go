@@ -11,6 +11,7 @@ import (
 	"briefly/internal/persistence"
 	"briefly/internal/render"
 	"briefly/internal/store"
+	"briefly/internal/vectorstore"
 	"context"
 	"fmt"
 	"strings"
@@ -552,4 +553,111 @@ func (a *CitationTrackerAdapter) TrackBatch(ctx context.Context, articles []core
 
 func (a *CitationTrackerAdapter) GetCitation(ctx context.Context, articleID string) (*core.Citation, error) {
 	return a.tracker.GetCitation(ctx, articleID)
+}
+
+// VectorStoreAdapter wraps internal/vectorstore to implement pipeline.VectorStore
+// Provides type conversion between vectorstore and pipeline types
+type VectorStoreAdapter struct {
+	store vectorstore.VectorStore
+}
+
+// NewVectorStoreAdapter creates a new vector store adapter
+func NewVectorStoreAdapter(store vectorstore.VectorStore) *VectorStoreAdapter {
+	return &VectorStoreAdapter{store: store}
+}
+
+func (a *VectorStoreAdapter) Store(ctx context.Context, articleID string, embedding []float64) error {
+	return a.store.Store(ctx, articleID, embedding)
+}
+
+func (a *VectorStoreAdapter) Search(ctx context.Context, query VectorSearchQuery) ([]VectorSearchResult, error) {
+	// Convert pipeline query to vectorstore query
+	vsQuery := vectorstore.SearchQuery{
+		Embedding:           query.Embedding,
+		Limit:               query.Limit,
+		SimilarityThreshold: query.SimilarityThreshold,
+		IncludeArticle:      query.IncludeArticle,
+		ExcludeIDs:          query.ExcludeIDs,
+	}
+
+	results, err := a.store.Search(ctx, vsQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert vectorstore results to pipeline results
+	return a.convertResults(results), nil
+}
+
+func (a *VectorStoreAdapter) SearchByTag(ctx context.Context, query VectorSearchQuery, tagID string) ([]VectorSearchResult, error) {
+	vsQuery := vectorstore.SearchQuery{
+		Embedding:           query.Embedding,
+		Limit:               query.Limit,
+		SimilarityThreshold: query.SimilarityThreshold,
+		IncludeArticle:      query.IncludeArticle,
+		ExcludeIDs:          query.ExcludeIDs,
+	}
+
+	results, err := a.store.SearchByTag(ctx, vsQuery, tagID)
+	if err != nil {
+		return nil, err
+	}
+
+	return a.convertResults(results), nil
+}
+
+func (a *VectorStoreAdapter) SearchByTags(ctx context.Context, query VectorSearchQuery, tagIDs []string) ([]VectorSearchResult, error) {
+	vsQuery := vectorstore.SearchQuery{
+		Embedding:           query.Embedding,
+		Limit:               query.Limit,
+		SimilarityThreshold: query.SimilarityThreshold,
+		IncludeArticle:      query.IncludeArticle,
+		ExcludeIDs:          query.ExcludeIDs,
+	}
+
+	results, err := a.store.SearchByTags(ctx, vsQuery, tagIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return a.convertResults(results), nil
+}
+
+func (a *VectorStoreAdapter) Delete(ctx context.Context, articleID string) error {
+	return a.store.Delete(ctx, articleID)
+}
+
+func (a *VectorStoreAdapter) CreateIndex(ctx context.Context) error {
+	return a.store.CreateIndex(ctx)
+}
+
+func (a *VectorStoreAdapter) GetStats(ctx context.Context) (*VectorStoreStats, error) {
+	stats, err := a.store.GetStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert vectorstore stats to pipeline stats
+	return &VectorStoreStats{
+		TotalEmbeddings:     stats.TotalEmbeddings,
+		EmbeddingDimensions: stats.EmbeddingDimensions,
+		IndexType:           stats.IndexType,
+		IndexSize:           stats.IndexSize,
+		AvgSearchLatency:    stats.AvgSearchLatency,
+	}, nil
+}
+
+// convertResults converts vectorstore.SearchResult to pipeline.VectorSearchResult
+func (a *VectorStoreAdapter) convertResults(vsResults []vectorstore.SearchResult) []VectorSearchResult {
+	results := make([]VectorSearchResult, len(vsResults))
+	for i, vsr := range vsResults {
+		results[i] = VectorSearchResult{
+			ArticleID:  vsr.ArticleID,
+			Similarity: vsr.Similarity,
+			Article:    vsr.Article,
+			TagIDs:     vsr.TagIDs,
+			Distance:   vsr.Distance,
+		}
+	}
+	return results
 }

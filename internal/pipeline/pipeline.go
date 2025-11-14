@@ -30,6 +30,7 @@ type Pipeline struct {
 	articleRepo     ArticleRepository // Phase 1: For persisting cluster assignments
 	tagClassifier   TagClassifier     // Phase 1: For multi-label tag classification
 	tagRepo         TagRepository     // Phase 1: For tag persistence
+	vectorStore     VectorStore       // Phase 2: For semantic search with pgvector
 
 	// Configuration
 	config *Config
@@ -94,6 +95,7 @@ func NewPipeline(
 	articleRepo ArticleRepository,  // Phase 1: For persisting cluster assignments
 	tagClassifier TagClassifier,    // Phase 1: For multi-label tag classification
 	tagRepo TagRepository,          // Phase 1: For tag persistence
+	vectorStore VectorStore,        // Phase 2: For semantic search with pgvector
 	config *Config,
 ) *Pipeline {
 	if config == nil {
@@ -117,6 +119,7 @@ func NewPipeline(
 		articleRepo:     articleRepo,
 		tagClassifier:   tagClassifier,
 		tagRepo:         tagRepo,
+		vectorStore:     vectorStore,
 		config:          config,
 	}
 }
@@ -460,7 +463,23 @@ func (p *Pipeline) GenerateDigestsFromDatabase(ctx context.Context, opts Databas
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embeddings: %w", err)
 	}
-	fmt.Printf("   ✓ Generated %d embeddings\n\n", len(embeddings))
+	fmt.Printf("   ✓ Generated %d embeddings\n", len(embeddings))
+
+	// Persist embeddings to database
+	if p.articleRepo != nil {
+		fmt.Printf("   • Persisting embeddings to database...\n")
+		persistedCount := 0
+		for articleID, embedding := range embeddings {
+			if err := p.articleRepo.UpdateEmbedding(ctx, articleID, embedding); err != nil {
+				fmt.Printf("   ⚠️  Failed to persist embedding for article %s: %v\n", articleID, err)
+			} else {
+				persistedCount++
+			}
+		}
+		fmt.Printf("   ✓ Persisted %d embeddings\n\n", persistedCount)
+	} else {
+		fmt.Printf("   ⚠️  No article repository configured - embeddings not persisted\n\n")
+	}
 
 	// Step 3: Cluster articles by topic
 	fmt.Printf("🔗 Step 3/6: Clustering articles by topic...\n")
@@ -743,12 +762,20 @@ func (p *Pipeline) generateEmbeddings(ctx context.Context, articles []core.Artic
 	}
 
 	for i, summary := range summaries {
-		fmt.Printf("   [%d/%d] Generating embedding for article %s\n", i+1, len(summaries), summary.ID)
+		// Get article ID from summary
+		if len(summary.ArticleIDs) == 0 {
+			fmt.Printf("   [%d/%d] ✗ Summary %s has no article IDs, skipping\n", i+1, len(summaries), summary.ID)
+			failedCount++
+			continue
+		}
+		articleID := summary.ArticleIDs[0]
+
+		fmt.Printf("   [%d/%d] Generating embedding for article %s\n", i+1, len(summaries), articleID)
 
 		// Get corresponding article for validation
-		_, found := articleMap[summary.ArticleIDs[0]] // Summary.ArticleIDs[0] is the article ID
+		_, found := articleMap[articleID]
 		if !found {
-			fmt.Printf("           ✗ Article not found for summary %s\n", summary.ID)
+			fmt.Printf("           ✗ Article not found for article ID %s\n", articleID)
 			failedCount++
 			continue
 		}
@@ -773,7 +800,7 @@ func (p *Pipeline) generateEmbeddings(ctx context.Context, articles []core.Artic
 			continue
 		}
 
-		embeddings[summary.ID] = embedding
+		embeddings[articleID] = embedding
 		fmt.Printf("           ✓ Embedding generated (%d dimensions, %d chars)\n", len(embedding), len(embeddingText))
 	}
 
