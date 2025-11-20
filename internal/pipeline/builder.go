@@ -125,7 +125,17 @@ func (b *Builder) Build() (*Pipeline, error) {
 	parser := NewParserAdapter()
 	fetcher := NewFetcherAdapter()
 	embedder := NewLLMAdapter(b.llmClient)
-	clusterer := NewClustererAdapter()
+
+	// Phase 2: Use semantic clustering if vector store is available, otherwise K-means
+	var clusterer TopicClusterer
+	if b.vectorStore != nil {
+		fmt.Println("🔍 Using semantic clustering with pgvector HNSW index")
+		clusterer = NewSemanticClustererAdapter(b.vectorStore)
+	} else {
+		fmt.Println("📊 Using K-means clustering (legacy)")
+		clusterer = NewClustererAdapter()
+	}
+
 	orderer := NewOrdererAdapter()
 	renderer := NewRendererAdapter()
 

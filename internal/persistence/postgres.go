@@ -77,6 +77,11 @@ func (p *PostgresDB) Ping(ctx context.Context) error {
 	return p.db.PingContext(ctx)
 }
 
+// GetDB returns the underlying *sql.DB for advanced operations (e.g., pgvector)
+func (p *PostgresDB) GetDB() *sql.DB {
+	return p.db
+}
+
 func (p *PostgresDB) BeginTx(ctx context.Context) (Transaction, error) {
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {

@@ -139,6 +139,72 @@ func (a *ClustererAdapter) CalculateSimilarity(embedding1, embedding2 []float64)
 	return llm.CosineSimilarity(embedding1, embedding2)
 }
 
+// SemanticClustererAdapter wraps internal/clustering/semantic (Phase 2)
+// Uses pgvector HNSW index for fast similarity-based clustering
+type SemanticClustererAdapter struct {
+	clusterer *clustering.SemanticClusterer
+}
+
+// vectorSearcherWrapper wraps VectorStore to implement clustering.VectorSearcher
+type vectorSearcherWrapper struct {
+	store VectorStore
+}
+
+func (w *vectorSearcherWrapper) SearchSimilar(ctx context.Context, embedding []float64, limit int, threshold float64, excludeIDs []string) ([]clustering.SearchResult, error) {
+	// Lower the threshold slightly to allow more connections
+	// News articles are diverse, 0.5 (50%) similarity is reasonable
+	adjustedThreshold := 0.5
+
+	query := VectorSearchQuery{
+		Embedding:           embedding,
+		Limit:               limit,
+		SimilarityThreshold: adjustedThreshold,
+		IncludeArticle:      false,
+		ExcludeIDs:          excludeIDs,
+	}
+
+	results, err := w.store.Search(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to clustering.SearchResult
+	searchResults := make([]clustering.SearchResult, len(results))
+	for i, r := range results {
+		searchResults[i] = clustering.SearchResult{
+			ArticleID:  r.ArticleID,
+			Similarity: r.Similarity,
+		}
+	}
+
+	return searchResults, nil
+}
+
+func NewSemanticClustererAdapter(vectorStore VectorStore) *SemanticClustererAdapter {
+	searcher := &vectorSearcherWrapper{store: vectorStore}
+	return &SemanticClustererAdapter{
+		clusterer: clustering.NewSemanticClusterer(searcher),
+	}
+}
+
+func (a *SemanticClustererAdapter) ClusterArticles(ctx context.Context, articles []core.Article, summaries []core.Summary, embeddings map[string][]float64) ([]core.TopicCluster, error) {
+	if len(articles) == 0 {
+		return nil, fmt.Errorf("no articles to cluster")
+	}
+
+	if len(embeddings) == 0 {
+		return nil, fmt.Errorf("no embeddings provided")
+	}
+
+	// Use semantic clustering (graph-based, no need to pre-determine k)
+	return a.clusterer.ClusterArticles(ctx, articles, embeddings)
+}
+
+func (a *SemanticClustererAdapter) CalculateSimilarity(embedding1, embedding2 []float64) float64 {
+	// Use cosine similarity from LLM package
+	return llm.CosineSimilarity(embedding1, embedding2)
+}
+
 // Helper functions for min/max
 func min(a, b int) int {
 	if a < b {

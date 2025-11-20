@@ -52,74 +52,74 @@ COMMENT ON COLUMN article_tags.relevance_score IS 'LLM confidence score (0-1) fr
 -- SEED TAGS (50+ tags across 5 themes)
 -- ============================================================================
 
--- GENAI THEME TAGS (theme-genai)
+-- AI & ML THEME TAGS (theme-ai-ml)
 INSERT INTO tags (id, name, description, keywords, theme_id) VALUES
-('tag-llm', 'Large Language Models', 'LLM training, fine-tuning, inference, model architectures', ARRAY['llm', 'gpt', 'claude', 'language model', 'transformer'], 'theme-genai'),
-('tag-rag', 'RAG & Retrieval', 'Retrieval-Augmented Generation, vector search, semantic search', ARRAY['rag', 'retrieval', 'vector search', 'semantic search', 'embeddings'], 'theme-genai'),
-('tag-vector-db', 'Vector Databases', 'Vector databases, embeddings storage, similarity search', ARRAY['vector database', 'pinecone', 'chroma', 'pgvector', 'weaviate'], 'theme-genai'),
-('tag-fine-tuning', 'Fine-Tuning', 'Model fine-tuning, PEFT, LoRA, instruction tuning', ARRAY['fine-tuning', 'lora', 'peft', 'instruction tuning', 'qlora'], 'theme-genai'),
-('tag-prompt-engineering', 'Prompt Engineering', 'Prompting techniques, chain-of-thought, few-shot learning', ARRAY['prompt engineering', 'prompting', 'chain-of-thought', 'few-shot', 'zero-shot'], 'theme-genai'),
-('tag-ai-agents', 'AI Agents', 'Autonomous agents, agentic workflows, tool use', ARRAY['ai agents', 'autonomous agents', 'tool use', 'agentic', 'langchain'], 'theme-genai'),
-('tag-multimodal', 'Multimodal AI', 'Vision-language models, image generation, speech', ARRAY['multimodal', 'vision', 'image generation', 'dalle', 'stable diffusion'], 'theme-genai'),
-('tag-embedding', 'Embeddings', 'Text embeddings, embedding models, semantic similarity', ARRAY['embeddings', 'text embeddings', 'sentence transformers', 'cohere'], 'theme-genai'),
-('tag-evaluation', 'AI Evaluation', 'LLM evaluation, benchmarking, EVAL frameworks', ARRAY['evaluation', 'benchmarking', 'eval', 'testing', 'metrics'], 'theme-genai'),
-('tag-ai-infra', 'AI Infrastructure', 'ML infrastructure, serving, scaling, orchestration', ARRAY['ml infrastructure', 'mlops', 'ai infrastructure', 'serving', 'deployment'], 'theme-genai'),
-('tag-reasoning', 'AI Reasoning', 'Chain-of-thought, reasoning, planning, problem-solving', ARRAY['reasoning', 'planning', 'problem-solving', 'chain-of-thought'], 'theme-genai'),
-('tag-ai-safety', 'AI Safety & Alignment', 'AI safety, alignment, RLHF, red teaming', ARRAY['ai safety', 'alignment', 'rlhf', 'red teaming', 'constitutional ai'], 'theme-genai')
+('tag-llm', 'Large Language Models', 'LLM training, fine-tuning, inference, model architectures', ARRAY['llm', 'gpt', 'claude', 'language model', 'transformer'], 'theme-ai-ml'),
+('tag-rag', 'RAG & Retrieval', 'Retrieval-Augmented Generation, vector search, semantic search', ARRAY['rag', 'retrieval', 'vector search', 'semantic search', 'embeddings'], 'theme-ai-ml'),
+('tag-vector-db', 'Vector Databases', 'Vector databases, embeddings storage, similarity search', ARRAY['vector database', 'pinecone', 'chroma', 'pgvector', 'weaviate'], 'theme-data-engineering'),
+('tag-fine-tuning', 'Fine-Tuning', 'Model fine-tuning, PEFT, LoRA, instruction tuning', ARRAY['fine-tuning', 'lora', 'peft', 'instruction tuning', 'qlora'], 'theme-ai-ml'),
+('tag-prompt-engineering', 'Prompt Engineering', 'Prompting techniques, chain-of-thought, few-shot learning', ARRAY['prompt engineering', 'prompting', 'chain-of-thought', 'few-shot', 'zero-shot'], 'theme-ai-ml'),
+('tag-ai-agents', 'AI Agents', 'Autonomous agents, agentic workflows, tool use', ARRAY['ai agents', 'autonomous agents', 'tool use', 'agentic', 'langchain'], 'theme-ai-ml'),
+('tag-multimodal', 'Multimodal AI', 'Vision-language models, image generation, speech', ARRAY['multimodal', 'vision', 'image generation', 'dalle', 'stable diffusion'], 'theme-ai-ml'),
+('tag-embedding', 'Embeddings', 'Text embeddings, embedding models, semantic similarity', ARRAY['embeddings', 'text embeddings', 'sentence transformers', 'cohere'], 'theme-ai-ml'),
+('tag-evaluation', 'AI Evaluation', 'LLM evaluation, benchmarking, EVAL frameworks', ARRAY['evaluation', 'benchmarking', 'eval', 'testing', 'metrics'], 'theme-ai-ml'),
+('tag-ai-infra', 'AI Infrastructure', 'ML infrastructure, serving, scaling, orchestration', ARRAY['ml infrastructure', 'mlops', 'ai infrastructure', 'serving', 'deployment'], 'theme-cloud-devops'),
+('tag-reasoning', 'AI Reasoning', 'Chain-of-thought, reasoning, planning, problem-solving', ARRAY['reasoning', 'planning', 'problem-solving', 'chain-of-thought'], 'theme-ai-ml'),
+('tag-ai-safety', 'AI Safety & Alignment', 'AI safety, alignment, RLHF, red teaming', ARRAY['ai safety', 'alignment', 'rlhf', 'red teaming', 'constitutional ai'], 'theme-ai-ml')
 ON CONFLICT (id) DO NOTHING;
 
--- TECHNOLOGY THEME TAGS (theme-technology)
+-- TECHNOLOGY THEME TAGS (split across existing themes)
 INSERT INTO tags (id, name, description, keywords, theme_id) VALUES
-('tag-database', 'Databases', 'Database systems, SQL, NoSQL, performance optimization', ARRAY['database', 'sql', 'postgres', 'mysql', 'mongodb'], 'theme-technology'),
-('tag-devops', 'DevOps', 'CI/CD, automation, infrastructure as code, monitoring', ARRAY['devops', 'ci/cd', 'automation', 'jenkins', 'github actions'], 'theme-technology'),
-('tag-cloud', 'Cloud Platforms', 'AWS, Azure, GCP, cloud architecture, serverless', ARRAY['cloud', 'aws', 'azure', 'gcp', 'serverless'], 'theme-technology'),
-('tag-kubernetes', 'Kubernetes', 'Container orchestration, K8s, deployment, scaling', ARRAY['kubernetes', 'k8s', 'container', 'orchestration', 'helm'], 'theme-technology'),
-('tag-security', 'Security', 'Cybersecurity, authentication, encryption, vulnerabilities', ARRAY['security', 'cybersecurity', 'auth', 'encryption', 'vulnerabilities'], 'theme-technology'),
-('tag-monitoring', 'Monitoring & Observability', 'Logging, metrics, tracing, APM, alerting', ARRAY['monitoring', 'observability', 'logging', 'metrics', 'tracing'], 'theme-technology'),
-('tag-backend', 'Backend Development', 'APIs, microservices, server-side development', ARRAY['backend', 'api', 'microservices', 'rest', 'graphql'], 'theme-technology'),
-('tag-frontend', 'Frontend Development', 'React, Vue, Angular, JavaScript, UI/UX', ARRAY['frontend', 'react', 'vue', 'javascript', 'typescript'], 'theme-technology'),
-('tag-mobile', 'Mobile Development', 'iOS, Android, React Native, mobile apps', ARRAY['mobile', 'ios', 'android', 'react native', 'flutter'], 'theme-technology'),
-('tag-golang', 'Go Programming', 'Golang, Go standard library, concurrency', ARRAY['go', 'golang', 'goroutines', 'concurrency'], 'theme-technology'),
-('tag-python', 'Python Programming', 'Python, libraries, frameworks, data science', ARRAY['python', 'django', 'flask', 'pandas', 'numpy'], 'theme-technology'),
-('tag-rust', 'Rust Programming', 'Rust, systems programming, memory safety', ARRAY['rust', 'systems programming', 'memory safety', 'cargo'], 'theme-technology'),
-('tag-performance', 'Performance Optimization', 'Performance tuning, profiling, benchmarking', ARRAY['performance', 'optimization', 'profiling', 'benchmarking'], 'theme-technology'),
-('tag-architecture', 'Software Architecture', 'System design, design patterns, scalability', ARRAY['architecture', 'system design', 'design patterns', 'scalability'], 'theme-technology'),
-('tag-networking', 'Networking', 'Network protocols, TCP/IP, HTTP, DNS', ARRAY['networking', 'tcp/ip', 'http', 'dns', 'protocols'], 'theme-technology')
+('tag-database', 'Databases', 'Database systems, SQL, NoSQL, performance optimization', ARRAY['database', 'sql', 'postgres', 'mysql', 'mongodb'], 'theme-data-engineering'),
+('tag-devops', 'DevOps', 'CI/CD, automation, infrastructure as code, monitoring', ARRAY['devops', 'ci/cd', 'automation', 'jenkins', 'github actions'], 'theme-cloud-devops'),
+('tag-cloud', 'Cloud Platforms', 'AWS, Azure, GCP, cloud architecture, serverless', ARRAY['cloud', 'aws', 'azure', 'gcp', 'serverless'], 'theme-cloud-devops'),
+('tag-kubernetes', 'Kubernetes', 'Container orchestration, K8s, deployment, scaling', ARRAY['kubernetes', 'k8s', 'container', 'orchestration', 'helm'], 'theme-cloud-devops'),
+('tag-security', 'Security', 'Cybersecurity, authentication, encryption, vulnerabilities', ARRAY['security', 'cybersecurity', 'auth', 'encryption', 'vulnerabilities'], 'theme-security'),
+('tag-monitoring', 'Monitoring & Observability', 'Logging, metrics, tracing, APM, alerting', ARRAY['monitoring', 'observability', 'logging', 'metrics', 'tracing'], 'theme-cloud-devops'),
+('tag-backend', 'Backend Development', 'APIs, microservices, server-side development', ARRAY['backend', 'api', 'microservices', 'rest', 'graphql'], 'theme-software-engineering'),
+('tag-frontend', 'Frontend Development', 'React, Vue, Angular, JavaScript, UI/UX', ARRAY['frontend', 'react', 'vue', 'javascript', 'typescript'], 'theme-web-frontend'),
+('tag-mobile', 'Mobile Development', 'iOS, Android, React Native, mobile apps', ARRAY['mobile', 'ios', 'android', 'react native', 'flutter'], 'theme-mobile'),
+('tag-golang', 'Go Programming', 'Golang, Go standard library, concurrency', ARRAY['go', 'golang', 'goroutines', 'concurrency'], 'theme-programming-languages'),
+('tag-python', 'Python Programming', 'Python, libraries, frameworks, data science', ARRAY['python', 'django', 'flask', 'pandas', 'numpy'], 'theme-programming-languages'),
+('tag-rust', 'Rust Programming', 'Rust, systems programming, memory safety', ARRAY['rust', 'systems programming', 'memory safety', 'cargo'], 'theme-programming-languages'),
+('tag-performance', 'Performance Optimization', 'Performance tuning, profiling, benchmarking', ARRAY['performance', 'optimization', 'profiling', 'benchmarking'], 'theme-software-engineering'),
+('tag-architecture', 'Software Architecture', 'System design, design patterns, scalability', ARRAY['architecture', 'system design', 'design patterns', 'scalability'], 'theme-software-engineering'),
+('tag-networking', 'Networking', 'Network protocols, TCP/IP, HTTP, DNS', ARRAY['networking', 'tcp/ip', 'http', 'dns', 'protocols'], 'theme-software-engineering')
 ON CONFLICT (id) DO NOTHING;
 
--- GAMING THEME TAGS (theme-gaming)
+-- GAMING THEME TAGS (no specific theme - using NULL or open-source)
 INSERT INTO tags (id, name, description, keywords, theme_id) VALUES
-('tag-game-dev', 'Game Development', 'Game engines, game design, development tools', ARRAY['game development', 'game design', 'gamedev', 'game engine'], 'theme-gaming'),
-('tag-unity', 'Unity', 'Unity engine, Unity development, C# for games', ARRAY['unity', 'unity3d', 'unity engine'], 'theme-gaming'),
-('tag-unreal', 'Unreal Engine', 'Unreal Engine, UE5, C++ for games', ARRAY['unreal', 'unreal engine', 'ue5', 'ue4'], 'theme-gaming'),
-('tag-indie', 'Indie Games', 'Independent game development, indie studios', ARRAY['indie', 'indie games', 'independent', 'indie dev'], 'theme-gaming'),
-('tag-esports', 'Esports', 'Competitive gaming, esports industry, tournaments', ARRAY['esports', 'competitive gaming', 'tournaments', 'professional gaming'], 'theme-gaming'),
-('tag-vr', 'Virtual Reality', 'VR gaming, VR development, immersive experiences', ARRAY['vr', 'virtual reality', 'oculus', 'meta quest'], 'theme-gaming'),
-('tag-ar', 'Augmented Reality', 'AR gaming, AR development, mixed reality', ARRAY['ar', 'augmented reality', 'mixed reality', 'arkit'], 'theme-gaming'),
-('tag-game-design', 'Game Design', 'Gameplay mechanics, level design, UX for games', ARRAY['game design', 'gameplay', 'level design', 'game mechanics'], 'theme-gaming'),
-('tag-game-graphics', 'Game Graphics', 'Rendering, shaders, graphics programming', ARRAY['game graphics', 'rendering', 'shaders', 'graphics programming'], 'theme-gaming')
+('tag-game-dev', 'Game Development', 'Game engines, game design, development tools', ARRAY['game development', 'game design', 'gamedev', 'game engine'], NULL),
+('tag-unity', 'Unity', 'Unity engine, Unity development, C# for games', ARRAY['unity', 'unity3d', 'unity engine'], NULL),
+('tag-unreal', 'Unreal Engine', 'Unreal Engine, UE5, C++ for games', ARRAY['unreal', 'unreal engine', 'ue5', 'ue4'], NULL),
+('tag-indie', 'Indie Games', 'Independent game development, indie studios', ARRAY['indie', 'indie games', 'independent', 'indie dev'], 'theme-product-startup'),
+('tag-esports', 'Esports', 'Competitive gaming, esports industry, tournaments', ARRAY['esports', 'competitive gaming', 'tournaments', 'professional gaming'], NULL),
+('tag-vr', 'Virtual Reality', 'VR gaming, VR development, immersive experiences', ARRAY['vr', 'virtual reality', 'oculus', 'meta quest'], NULL),
+('tag-ar', 'Augmented Reality', 'AR gaming, AR development, mixed reality', ARRAY['ar', 'augmented reality', 'mixed reality', 'arkit'], NULL),
+('tag-game-design', 'Game Design', 'Gameplay mechanics, level design, UX for games', ARRAY['game design', 'gameplay', 'level design', 'game mechanics'], NULL),
+('tag-game-graphics', 'Game Graphics', 'Rendering, shaders, graphics programming', ARRAY['game graphics', 'rendering', 'shaders', 'graphics programming'], NULL)
 ON CONFLICT (id) DO NOTHING;
 
--- HEALTHCARE THEME TAGS (theme-healthcare)
+-- HEALTHCARE THEME TAGS (no specific theme - using NULL)
 INSERT INTO tags (id, name, description, keywords, theme_id) VALUES
-('tag-health-tech', 'Health Technology', 'Healthcare technology, digital health, health IT', ARRAY['health tech', 'healthcare technology', 'digital health', 'health it'], 'theme-healthcare'),
-('tag-telemedicine', 'Telemedicine', 'Remote healthcare, telehealth, virtual care', ARRAY['telemedicine', 'telehealth', 'remote healthcare', 'virtual care'], 'theme-healthcare'),
-('tag-medical-ai', 'Medical AI', 'AI in healthcare, diagnostics, medical imaging', ARRAY['medical ai', 'healthcare ai', 'medical imaging', 'diagnostics'], 'theme-healthcare'),
-('tag-biotech', 'Biotechnology', 'Biotech, genomics, drug discovery, life sciences', ARRAY['biotech', 'biotechnology', 'genomics', 'drug discovery'], 'theme-healthcare'),
-('tag-wearables', 'Health Wearables', 'Wearable devices, fitness trackers, health monitoring', ARRAY['wearables', 'fitness trackers', 'health monitoring', 'smartwatch'], 'theme-healthcare'),
-('tag-ehr', 'Electronic Health Records', 'EHR systems, medical records, health data', ARRAY['ehr', 'electronic health records', 'medical records', 'health data'], 'theme-healthcare')
+('tag-health-tech', 'Health Technology', 'Healthcare technology, digital health, health IT', ARRAY['health tech', 'healthcare technology', 'digital health', 'health it'], NULL),
+('tag-telemedicine', 'Telemedicine', 'Remote healthcare, telehealth, virtual care', ARRAY['telemedicine', 'telehealth', 'remote healthcare', 'virtual care'], NULL),
+('tag-medical-ai', 'Medical AI', 'AI in healthcare, diagnostics, medical imaging', ARRAY['medical ai', 'healthcare ai', 'medical imaging', 'diagnostics'], 'theme-ai-ml'),
+('tag-biotech', 'Biotechnology', 'Biotech, genomics, drug discovery, life sciences', ARRAY['biotech', 'biotechnology', 'genomics', 'drug discovery'], NULL),
+('tag-wearables', 'Health Wearables', 'Wearable devices, fitness trackers, health monitoring', ARRAY['wearables', 'fitness trackers', 'health monitoring', 'smartwatch'], NULL),
+('tag-ehr', 'Electronic Health Records', 'EHR systems, medical records, health data', ARRAY['ehr', 'electronic health records', 'medical records', 'health data'], NULL)
 ON CONFLICT (id) DO NOTHING;
 
--- FINANCE THEME TAGS (theme-business)
+-- FINANCE & BUSINESS THEME TAGS (mapped to theme-product-startup)
 INSERT INTO tags (id, name, description, keywords, theme_id) VALUES
-('tag-fintech', 'Financial Technology', 'Fintech, digital banking, financial services', ARRAY['fintech', 'financial technology', 'digital banking', 'neobank'], 'theme-business'),
-('tag-crypto', 'Cryptocurrency', 'Crypto, digital assets, DeFi, web3', ARRAY['crypto', 'cryptocurrency', 'bitcoin', 'ethereum', 'defi'], 'theme-business'),
-('tag-blockchain', 'Blockchain', 'Blockchain technology, distributed ledger, smart contracts', ARRAY['blockchain', 'distributed ledger', 'smart contracts', 'web3'], 'theme-business'),
-('tag-trading', 'Trading & Markets', 'Stock trading, algorithms, market analysis', ARRAY['trading', 'stock market', 'algorithmic trading', 'quant'], 'theme-business'),
-('tag-payments', 'Payments', 'Payment processing, digital wallets, payment tech', ARRAY['payments', 'payment processing', 'digital wallet', 'stripe'], 'theme-business'),
-('tag-investing', 'Investing', 'Investment strategies, portfolio management, wealth tech', ARRAY['investing', 'investment', 'portfolio', 'wealth management'], 'theme-business'),
-('tag-startup', 'Startups & Business', 'Startup ecosystem, fundraising, entrepreneurship', ARRAY['startup', 'startups', 'entrepreneurship', 'funding', 'venture capital'], 'theme-business'),
-('tag-saas', 'SaaS', 'Software as a Service, SaaS business models', ARRAY['saas', 'software as a service', 'b2b', 'enterprise software'], 'theme-business')
+('tag-fintech', 'Financial Technology', 'Fintech, digital banking, financial services', ARRAY['fintech', 'financial technology', 'digital banking', 'neobank'], 'theme-product-startup'),
+('tag-crypto', 'Cryptocurrency', 'Crypto, digital assets, DeFi, web3', ARRAY['crypto', 'cryptocurrency', 'bitcoin', 'ethereum', 'defi'], NULL),
+('tag-blockchain', 'Blockchain', 'Blockchain technology, distributed ledger, smart contracts', ARRAY['blockchain', 'distributed ledger', 'smart contracts', 'web3'], NULL),
+('tag-trading', 'Trading & Markets', 'Stock trading, algorithms, market analysis', ARRAY['trading', 'stock market', 'algorithmic trading', 'quant'], 'theme-product-startup'),
+('tag-payments', 'Payments', 'Payment processing, digital wallets, payment tech', ARRAY['payments', 'payment processing', 'digital wallet', 'stripe'], 'theme-product-startup'),
+('tag-investing', 'Investing', 'Investment strategies, portfolio management, wealth tech', ARRAY['investing', 'investment', 'portfolio', 'wealth management'], 'theme-product-startup'),
+('tag-startup', 'Startups & Business', 'Startup ecosystem, fundraising, entrepreneurship', ARRAY['startup', 'startups', 'entrepreneurship', 'funding', 'venture capital'], 'theme-product-startup'),
+('tag-saas', 'SaaS', 'Software as a Service, SaaS business models', ARRAY['saas', 'software as a service', 'b2b', 'enterprise software'], 'theme-product-startup')
 ON CONFLICT (id) DO NOTHING;
 
 -- Record this migration

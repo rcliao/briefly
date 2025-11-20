@@ -12,6 +12,7 @@ import (
 	"briefly/internal/pipeline"
 	"briefly/internal/quality"
 	"briefly/internal/summarize"
+	"briefly/internal/vectorstore"
 	"context"
 	"fmt"
 	"os"
@@ -232,11 +233,16 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 	}
 	fmt.Printf("   ✓ Loaded/generated %d summaries\n\n", len(summaries))
 
-	// Build Pipeline with all Phase 1 enhancements (tag classification, better embeddings, cluster persistence)
-	fmt.Println("🔧 Initializing Pipeline with Phase 1 enhancements...")
+	// Build Pipeline with all Phase 1+2 enhancements (tag classification, embeddings, semantic clustering)
+	fmt.Println("🔧 Initializing Pipeline with Phase 2 semantic clustering...")
+
+	// Phase 2: Initialize vector store for semantic clustering
+	vectorStore := vectorstore.NewPgVectorAdapter(db.GetDB())
+
 	pipelineBuilder := pipeline.NewBuilder().
 		WithDatabase(db).
 		WithLLMClient(llmClient).
+		WithVectorStore(pipeline.NewVectorStoreAdapter(vectorStore)).
 		WithCacheDir(".briefly-cache")
 
 	pipe, err := pipelineBuilder.Build()

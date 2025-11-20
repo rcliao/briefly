@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  # PostgreSQL database for briefly news aggregator
+  # PostgreSQL database with pgvector for briefly news aggregator
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: briefly-postgres
     restart: unless-stopped
     environment:

@@ -1,5 +1,12 @@
 -- Migration 022: Remap old theme IDs to new focused themes
--- Migrates articles and digests from old theme associations to new single-word themes
+-- Migrates articles, digests, and tags from old theme associations to new single-word themes
+--
+-- Order of operations (IMPORTANT):
+-- 1. Remap articles to new theme IDs
+-- 2. Remap digests to new theme IDs
+-- 3. Remap tags to new theme IDs (MUST happen before deleting old themes!)
+-- 4. Delete old themes (only after all foreign key references are updated)
+-- 5. Verify final state
 
 -- ==============================================================================
 -- PART 1: Remap article themes
@@ -97,7 +104,75 @@ SET theme_id = 'theme-business'
 WHERE theme_id IN ('theme-fintech', 'theme-cryptocurrency', 'theme-business', 'theme-startup');
 
 -- ==============================================================================
--- PART 3: Clean up old themes
+-- PART 3: Remap tags to new theme IDs
+-- ==============================================================================
+
+-- Remap AI-related tags to 'GenAI'
+UPDATE tags
+SET theme_id = 'theme-genai'
+WHERE theme_id IN (
+    'theme-ai-applications',
+    'theme-ai-dev-tools',
+    'theme-llm-research',
+    'theme-ai-ml'
+);
+
+-- Remap gaming tags to 'Gaming'
+UPDATE tags
+SET theme_id = 'theme-gaming'
+WHERE theme_id IN (
+    'theme-gaming',
+    'theme-video-games',
+    'theme-esports'
+);
+
+-- Remap tech tags to 'Technology'
+UPDATE tags
+SET theme_id = 'theme-technology'
+WHERE theme_id IN (
+    'theme-software-engineering',
+    'theme-cloud-devops',
+    'theme-web-development',
+    'theme-web-frontend',
+    'theme-programming',
+    'theme-programming-languages',
+    'theme-open-source',
+    'theme-cybersecurity',
+    'theme-security'
+);
+
+-- Remap healthcare/biotech tags to 'Healthcare'
+UPDATE tags
+SET theme_id = 'theme-healthcare'
+WHERE theme_id IN (
+    'theme-healthcare',
+    'theme-biotech',
+    'theme-medical-tech'
+);
+
+-- Remap business/finance tags to 'Finance'
+UPDATE tags
+SET theme_id = 'theme-business'
+WHERE theme_id IN (
+    'theme-fintech',
+    'theme-cryptocurrency',
+    'theme-business',
+    'theme-startup',
+    'theme-product-startup'
+);
+
+-- Remap mobile tags to 'Technology'
+UPDATE tags
+SET theme_id = 'theme-technology'
+WHERE theme_id = 'theme-mobile';
+
+-- Remap data engineering tags to 'Technology'
+UPDATE tags
+SET theme_id = 'theme-technology'
+WHERE theme_id = 'theme-data-engineering';
+
+-- ==============================================================================
+-- PART 4: Clean up old themes
 -- ==============================================================================
 
 -- Delete old disabled themes (keep only the 5 new ones)
@@ -111,7 +186,7 @@ WHERE id NOT IN (
 );
 
 -- ==============================================================================
--- PART 4: Verification
+-- PART 5: Verification
 -- ==============================================================================
 
 -- Verify article mapping

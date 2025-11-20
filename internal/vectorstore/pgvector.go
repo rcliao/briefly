@@ -67,7 +67,7 @@ func (p *PgVectorAdapter) Search(ctx context.Context, query SearchQuery) ([]Sear
 	excludeClause := ""
 	args := []interface{}{vectorStr, query.SimilarityThreshold, query.Limit}
 	if len(query.ExcludeIDs) > 0 {
-		excludeClause = "AND a.id NOT IN (SELECT unnest($4::uuid[]))"
+		excludeClause = "AND a.id NOT IN (SELECT unnest($4::text[]))"
 		args = append(args, pq.Array(query.ExcludeIDs))
 	}
 
@@ -136,7 +136,7 @@ func (p *PgVectorAdapter) SearchByTag(ctx context.Context, query SearchQuery, ta
 	excludeClause := ""
 	args := []interface{}{vectorStr, query.SimilarityThreshold, query.Limit, tagID}
 	if len(query.ExcludeIDs) > 0 {
-		excludeClause = "AND a.id NOT IN (SELECT unnest($5::uuid[]))"
+		excludeClause = "AND a.id NOT IN (SELECT unnest($5::text[]))"
 		args = append(args, pq.Array(query.ExcludeIDs))
 	}
 
@@ -210,7 +210,7 @@ func (p *PgVectorAdapter) SearchByTags(ctx context.Context, query SearchQuery, t
 	excludeClause := ""
 	args := []interface{}{vectorStr, query.SimilarityThreshold, query.Limit, pq.Array(tagIDs)}
 	if len(query.ExcludeIDs) > 0 {
-		excludeClause = "AND a.id NOT IN (SELECT unnest($5::uuid[]))"
+		excludeClause = "AND a.id NOT IN (SELECT unnest($5::text[]))"
 		args = append(args, pq.Array(query.ExcludeIDs))
 	}
 
@@ -221,7 +221,7 @@ func (p *PgVectorAdapter) SearchByTags(ctx context.Context, query SearchQuery, t
 			a.embedding_vector <=> $1::vector as distance
 		FROM articles a
 		INNER JOIN article_tags at ON a.id = at.article_id
-		WHERE at.tag_id = ANY($4::uuid[])
+		WHERE at.tag_id = ANY($4::text[])
 		  AND a.embedding IS NOT NULL
 		  AND 1 - (a.embedding_vector <=> $1::vector) >= $2
 		  %s
@@ -395,7 +395,7 @@ func (p *PgVectorAdapter) populateArticles(ctx context.Context, results []Search
 		SELECT id, url, title, content_type, cleaned_text,
 		       date_fetched, topic_cluster, cluster_confidence
 		FROM articles
-		WHERE id = ANY($1::uuid[])
+		WHERE id = ANY($1::text[])
 	`
 
 	rows, err := p.db.QueryContext(ctx, query, pq.Array(articleIDs))
@@ -448,7 +448,7 @@ func (p *PgVectorAdapter) populateTags(ctx context.Context, results []SearchResu
 	query := `
 		SELECT article_id, tag_id
 		FROM article_tags
-		WHERE article_id = ANY($1::uuid[])
+		WHERE article_id = ANY($1::text[])
 	`
 
 	rows, err := p.db.QueryContext(ctx, query, pq.Array(articleIDs))
