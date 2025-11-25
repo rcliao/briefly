@@ -78,6 +78,11 @@ func (s *SemanticClusterer) ClusterArticles(ctx context.Context, articles []core
 		return nil, fmt.Errorf("no articles to cluster")
 	}
 
+	// If tag-aware mode is enabled, cluster within theme boundaries
+	if s.tagAware {
+		return s.clusterByTheme(ctx, articles, embeddings)
+	}
+
 	// Filter articles that have embeddings
 	var articlesWithEmbeddings []core.Article
 	for _, article := range articles {
@@ -309,4 +314,107 @@ func (s *SemanticClusterer) filterAndMergeClusters(clusters []core.TopicCluster,
 	}
 
 	return validClusters
+}
+
+// clusterByTheme performs tag-aware semantic clustering
+// Groups articles by theme, clusters each theme separately, then combines results
+func (s *SemanticClusterer) clusterByTheme(ctx context.Context, articles []core.Article, embeddings map[string][]float64) ([]core.TopicCluster, error) {
+	fmt.Println("   🏷️  Tag-aware clustering enabled: clustering within theme boundaries")
+
+	// Group articles by ThemeID
+	themeGroups := make(map[string][]core.Article)
+	var untaggedArticles []core.Article
+
+	for _, article := range articles {
+		if article.ThemeID != nil && *article.ThemeID != "" {
+			themeGroups[*article.ThemeID] = append(themeGroups[*article.ThemeID], article)
+		} else {
+			untaggedArticles = append(untaggedArticles, article)
+		}
+	}
+
+	fmt.Printf("   📊 Grouped into %d themes (+ %d untagged articles)\n", len(themeGroups), len(untaggedArticles))
+
+	// Cluster each theme group separately
+	var allClusters []core.TopicCluster
+	clusterIndex := 0
+
+	for themeID, themeArticles := range themeGroups {
+		if len(themeArticles) == 0 {
+			continue
+		}
+
+		fmt.Printf("   🎯 Clustering theme '%s': %d articles\n", themeID, len(themeArticles))
+
+		// Filter articles that have embeddings
+		var articlesWithEmbeddings []core.Article
+		for _, article := range themeArticles {
+			if _, hasEmbedding := embeddings[article.ID]; hasEmbedding {
+				articlesWithEmbeddings = append(articlesWithEmbeddings, article)
+			}
+		}
+
+		if len(articlesWithEmbeddings) == 0 {
+			fmt.Printf("      ⚠️  No embeddings found for theme '%s', skipping\n", themeID)
+			continue
+		}
+
+		// Build similarity graph for this theme
+		similarityGraph, err := s.buildSimilarityGraph(ctx, articlesWithEmbeddings, embeddings)
+		if err != nil {
+			fmt.Printf("      ⚠️  Failed to build similarity graph for theme '%s': %v\n", themeID, err)
+			continue
+		}
+
+		// Find connected components
+		clusterAssignments := s.findConnectedComponents(similarityGraph, len(articlesWithEmbeddings))
+
+		// Build clusters with theme-aware naming
+		themeClusters := s.buildClusters(articlesWithEmbeddings, clusterAssignments, embeddings)
+
+		// Prefix cluster labels with theme name
+		for i := range themeClusters {
+			themeClusters[i].ID = fmt.Sprintf("theme_%s_cluster_%d", themeID, clusterIndex)
+			themeClusters[i].Label = fmt.Sprintf("%s - %s", themeID, themeClusters[i].Label)
+			clusterIndex++
+		}
+
+		allClusters = append(allClusters, themeClusters...)
+		fmt.Printf("      ✓ Created %d clusters for theme '%s'\n", len(themeClusters), themeID)
+	}
+
+	// Handle untagged articles separately
+	if len(untaggedArticles) > 0 {
+		fmt.Printf("   📝 Clustering %d untagged articles\n", len(untaggedArticles))
+
+		var articlesWithEmbeddings []core.Article
+		for _, article := range untaggedArticles {
+			if _, hasEmbedding := embeddings[article.ID]; hasEmbedding {
+				articlesWithEmbeddings = append(articlesWithEmbeddings, article)
+			}
+		}
+
+		if len(articlesWithEmbeddings) > 0 {
+			similarityGraph, err := s.buildSimilarityGraph(ctx, articlesWithEmbeddings, embeddings)
+			if err == nil {
+				clusterAssignments := s.findConnectedComponents(similarityGraph, len(articlesWithEmbeddings))
+				untaggedClusters := s.buildClusters(articlesWithEmbeddings, clusterAssignments, embeddings)
+
+				for i := range untaggedClusters {
+					untaggedClusters[i].ID = fmt.Sprintf("untagged_cluster_%d", clusterIndex)
+					untaggedClusters[i].Label = fmt.Sprintf("Untagged - %s", untaggedClusters[i].Label)
+					clusterIndex++
+				}
+
+				allClusters = append(allClusters, untaggedClusters...)
+				fmt.Printf("      ✓ Created %d clusters for untagged articles\n", len(untaggedClusters))
+			}
+		}
+	}
+
+	// Apply filtering and merging
+	finalClusters := s.filterAndMergeClusters(allClusters, articles)
+
+	fmt.Printf("   ✓ Tag-aware clustering complete: %d final clusters\n", len(finalClusters))
+	return finalClusters, nil
 }

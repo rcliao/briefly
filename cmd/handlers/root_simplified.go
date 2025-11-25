@@ -71,6 +71,7 @@ Examples:
 	rootCmd.AddCommand(NewDigestCmd())         // Digest commands (file-based and database-based)
 	rootCmd.AddCommand(NewReadSimplifiedCmd()) // Existing: Quick read
 	rootCmd.AddCommand(NewCacheCmd())          // Existing: Cache management
+	rootCmd.AddCommand(NewSearchCmd())         // NEW: Semantic search (Phase 2)
 
 	// Initialize config before running any command
 	cobra.OnInitialize(initSimplifiedConfig)

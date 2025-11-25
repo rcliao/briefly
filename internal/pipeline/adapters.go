@@ -182,8 +182,10 @@ func (w *vectorSearcherWrapper) SearchSimilar(ctx context.Context, embedding []f
 
 func NewSemanticClustererAdapter(vectorStore VectorStore) *SemanticClustererAdapter {
 	searcher := &vectorSearcherWrapper{store: vectorStore}
+	// Enable tag-aware clustering for better digest quality
+	clusterer := clustering.NewSemanticClusterer(searcher).WithTagAware(true)
 	return &SemanticClustererAdapter{
-		clusterer: clustering.NewSemanticClusterer(searcher),
+		clusterer: clusterer,
 	}
 }
 
