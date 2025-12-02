@@ -33,9 +33,6 @@ func TestNewClient_Success(t *testing.T) {
 	if client.gClient == nil {
 		t.Error("Client gClient should not be nil")
 	}
-	if client.genaiModel == nil {
-		t.Error("Client genaiModel should not be nil")
-	}
 }
 
 func TestNewClient_NoAPIKey(t *testing.T) {
@@ -456,24 +453,6 @@ func TestClientClose(t *testing.T) {
 	client.Close()
 	// Should be safe to call multiple times
 	client.Close()
-}
-
-func TestGetGenaiModel(t *testing.T) {
-	// Skip if no API key available
-	if os.Getenv("GEMINI_API_KEY") == "" {
-		t.Skip("GEMINI_API_KEY not set, skipping integration test")
-	}
-
-	client, err := NewClient("")
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer client.Close()
-
-	model := client.GetGenaiModel()
-	if model == nil {
-		t.Error("GetGenaiModel should not return nil")
-	}
 }
 
 // Mock tests for functions that require API calls

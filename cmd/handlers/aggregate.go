@@ -145,7 +145,7 @@ func runAggregateWithClassification(ctx context.Context, maxArticles, concurrenc
 	// Initialize LLM client for classification
 	modelName := cfg.AI.Gemini.Model
 	if modelName == "" {
-		modelName = "gemini-2.5-flash-preview-05-20"
+		modelName = "gemini-flash-lite-latest"
 	}
 
 	llmClient, err := llm.NewClient(modelName)

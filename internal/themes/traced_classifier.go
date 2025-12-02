@@ -62,7 +62,7 @@ func (t *TracedClassifier) GetBestMatch(ctx context.Context, article core.Articl
 		}
 
 		_ = t.langfuse.TrackGeneration(trace, observability.GenerationOptions{
-			Model:      "gemini-2.5-flash-preview-05-20", // Default model
+			Model:      "gemini-flash-lite-latest",
 			Prompt:     fmt.Sprintf("Classify article: %s", article.Title),
 			Completion: completionText,
 			LatencyMs:  latency,
@@ -107,7 +107,7 @@ func (t *TracedClassifier) ClassifyArticle(ctx context.Context, article core.Art
 		completionText := fmt.Sprintf("Matched %d themes: %v", len(results), matchedThemes)
 
 		_ = t.langfuse.TrackGeneration(trace, observability.GenerationOptions{
-			Model:      "gemini-2.5-flash-preview-05-20",
+			Model:      "gemini-flash-lite-latest",
 			Prompt:     fmt.Sprintf("Classify article: %s", article.Title),
 			Completion: completionText,
 			LatencyMs:  latency,
@@ -170,7 +170,7 @@ func (t *TracedClassifier) ClassifyBatch(ctx context.Context, articles []core.Ar
 			len(results), totalMatches, avgLatency)
 
 		_ = t.langfuse.TrackGeneration(trace, observability.GenerationOptions{
-			Model:      "gemini-2.5-flash-preview-05-20",
+			Model:      "gemini-flash-lite-latest",
 			Prompt:     fmt.Sprintf("Classify %d articles", len(articles)),
 			Completion: completionText,
 			LatencyMs:  latency,

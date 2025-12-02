@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/generative-ai-go/genai"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
@@ -44,11 +43,6 @@ type narrativeLLMAdapter struct {
 // GenerateText implements narrative.LLMClient interface (v2.0 with options)
 func (a *narrativeLLMAdapter) GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error) {
 	return a.client.GenerateText(ctx, prompt, options)
-}
-
-// GetGenaiModel implements narrative.LLMClient interface
-func (a *narrativeLLMAdapter) GetGenaiModel() *genai.GenerativeModel {
-	return a.client.GetGenaiModel()
 }
 
 // NewDigestGenerateCmd creates the digest generate command for database-driven digests
@@ -185,7 +179,7 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 	// Initialize LLM client for summaries and narrative
 	modelName := cfg.AI.Gemini.Model
 	if modelName == "" {
-		modelName = "gemini-2.5-flash-preview-05-20"
+		modelName = "gemini-flash-lite-latest"
 	}
 
 	llmClient, err := llm.NewClient(modelName)

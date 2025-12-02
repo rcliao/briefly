@@ -5,8 +5,6 @@ import (
 	"briefly/internal/observability"
 	"context"
 	"time"
-
-	"github.com/google/generative-ai-go/genai"
 )
 
 // TracedClient wraps an LLM Client with LangFuse tracing
@@ -299,9 +297,6 @@ func (tc *TracedClient) RegenerateDigestWithMyTake(originalDigest, myTake, teamC
 	return tc.client.RegenerateDigestWithMyTake(originalDigest, myTake, teamContext, styleGuide)
 }
 
-func (tc *TracedClient) GetGenaiModel() *genai.GenerativeModel {
-	return tc.client.GetGenaiModel()
-}
 
 func (tc *TracedClient) GenerateDigestTitle(digestContent string, format string) (string, error) {
 	return tc.client.GenerateDigestTitle(digestContent, format)

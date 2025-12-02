@@ -8,7 +8,7 @@ import (
 
 	"briefly/internal/core"
 	"briefly/internal/llm"
-	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/genai"
 )
 
 // CritiqueResult contains the critique and improved digest

@@ -16,8 +16,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/google/generative-ai-go/genai"
 )
 
 // ParserAdapter wraps internal/parser to implement URLParser
@@ -207,6 +205,41 @@ func (a *SemanticClustererAdapter) CalculateSimilarity(embedding1, embedding2 []
 	return llm.CosineSimilarity(embedding1, embedding2)
 }
 
+// LouvainClustererAdapter wraps internal/clustering/louvain
+// Uses Louvain community detection for higher-quality clustering
+// Key advantage: uses edge WEIGHTS (similarity scores) instead of binary connections
+type LouvainClustererAdapter struct {
+	clusterer *clustering.LouvainClusterer
+}
+
+// NewLouvainClustererAdapter creates a new Louvain clusterer adapter
+func NewLouvainClustererAdapter(vectorStore VectorStore) *LouvainClustererAdapter {
+	searcher := &vectorSearcherWrapper{store: vectorStore}
+	clusterer := clustering.NewLouvainClusterer(searcher).
+		WithTagAware(true).
+		WithResolution(1.0).
+		WithMinSimilarity(0.3).
+		WithMaxNeighbors(10)
+	return &LouvainClustererAdapter{clusterer: clusterer}
+}
+
+func (a *LouvainClustererAdapter) ClusterArticles(ctx context.Context, articles []core.Article, summaries []core.Summary, embeddings map[string][]float64) ([]core.TopicCluster, error) {
+	if len(articles) == 0 {
+		return nil, fmt.Errorf("no articles to cluster")
+	}
+
+	if len(embeddings) == 0 {
+		return nil, fmt.Errorf("no embeddings provided")
+	}
+
+	// Use Louvain community detection (optimizes modularity Q)
+	return a.clusterer.ClusterArticles(ctx, articles, embeddings)
+}
+
+func (a *LouvainClustererAdapter) CalculateSimilarity(embedding1, embedding2 []float64) float64 {
+	return llm.CosineSimilarity(embedding1, embedding2)
+}
+
 // Helper functions for min/max
 func min(a, b int) int {
 	if a < b {
@@ -264,10 +297,6 @@ func (a *NarrativeAdapter) GenerateDigestContent(ctx context.Context, clusters [
 
 func (a *NarrativeAdapter) GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error) {
 	return a.llmClient.GenerateText(ctx, prompt, options)
-}
-
-func (a *NarrativeAdapter) GetGenaiModel() *genai.GenerativeModel {
-	return a.llmClient.GetGenaiModel()
 }
 
 func (a *NarrativeAdapter) IdentifyClusterTheme(ctx context.Context, cluster core.TopicCluster, articles []core.Article) (string, error) {
@@ -558,10 +587,6 @@ func NewLLMClientAdapter(client *llm.Client) *LLMClientAdapter {
 
 func (a *LLMClientAdapter) GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error) {
 	return a.client.GenerateText(ctx, prompt, options)
-}
-
-func (a *LLMClientAdapter) GetGenaiModel() *genai.GenerativeModel {
-	return a.client.GetGenaiModel()
 }
 
 // LegacyLLMClientAdapter adapts the new LLM client interface to old interfaces that don't support options

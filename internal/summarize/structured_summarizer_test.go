@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/genai"
 )
 
 // MockLLMClientStructured implements LLMClient for testing structured summaries

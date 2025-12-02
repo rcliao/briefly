@@ -11,7 +11,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/generative-ai-go/genai" // Phase 1: For structured summaries
+	"google.golang.org/genai" // Phase 1: For structured summaries
 )
 
 // Builder helps construct a fully configured Pipeline
@@ -126,11 +126,12 @@ func (b *Builder) Build() (*Pipeline, error) {
 	fetcher := NewFetcherAdapter()
 	embedder := NewLLMAdapter(b.llmClient)
 
-	// Phase 2: Use semantic clustering if vector store is available, otherwise K-means
+	// Phase 2: Use Louvain community detection if vector store is available, otherwise K-means
+	// Louvain provides better clustering quality by optimizing modularity and using edge weights
 	var clusterer TopicClusterer
 	if b.vectorStore != nil {
-		fmt.Println("🔍 Using semantic clustering with pgvector HNSW index")
-		clusterer = NewSemanticClustererAdapter(b.vectorStore)
+		fmt.Println("🔍 Using Louvain community detection with pgvector HNSW index")
+		clusterer = NewLouvainClustererAdapter(b.vectorStore)
 	} else {
 		fmt.Println("📊 Using K-means clustering (legacy)")
 		clusterer = NewClustererAdapter()

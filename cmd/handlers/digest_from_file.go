@@ -105,7 +105,7 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 	// Initialize LLM client
 	modelName := cfg.AI.Gemini.Model
 	if modelName == "" {
-		modelName = "gemini-2.5-flash-preview-05-20"
+		modelName = "gemini-flash-lite-latest"
 	}
 
 	fmt.Printf("🔧 Initializing AI client (model: %s)...\n", modelName)

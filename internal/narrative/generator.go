@@ -9,16 +9,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/genai"
 )
 
 // LLMClient defines the interface for LLM operations needed by the narrative generator
 type LLMClient interface {
 	// GenerateText generates text from a prompt with optional structured output
 	GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error)
-
-	// GetGenaiModel returns the underlying genai model for schema definition
-	GetGenaiModel() *genai.GenerativeModel
 }
 
 // Generator creates executive summaries from clustered articles
