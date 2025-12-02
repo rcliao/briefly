@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Pipeline orchestrates the end-to-end digest generation workflow
@@ -586,7 +588,7 @@ func (p *Pipeline) GenerateDigestsFromDatabase(ctx context.Context, opts Databas
 		// Build digest structure
 		clusterIDVal := i
 		digest := &core.Digest{
-			ID:              fmt.Sprintf("digest-%s", cluster.Label),
+			ID:              uuid.NewString(), // Use UUID for unique digest ID
 			ClusterID:       &clusterIDVal,
 			ProcessedDate:   time.Now().UTC(),
 			Title:           digestContent.Title,            // v3.0 generated title

@@ -15,6 +15,7 @@ type ClusteringStrategy string
 const (
 	StrategyKMeans  ClusteringStrategy = "kmeans"
 	StrategyHDBSCAN ClusteringStrategy = "hdbscan"
+	StrategyLouvain ClusteringStrategy = "louvain"
 	StrategyAuto    ClusteringStrategy = "auto"
 )
 
