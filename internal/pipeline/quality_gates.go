@@ -56,6 +56,7 @@ type ClusteringQualityGate struct {
 	clusters           []core.TopicCluster
 	embeddings         map[string][]float64
 	coherenceEvaluator *quality.ClusterCoherenceEvaluator
+	lastMetrics        *quality.ClusterCoherenceMetrics // Stores metrics for persistence
 }
 
 // NewClusteringQualityGate creates a new clustering quality gate
@@ -82,6 +83,12 @@ func (g *ClusteringQualityGate) IsBlocking() bool {
 	return g.config.BlockOnFailure
 }
 
+// GetMetrics returns the last evaluated cluster coherence metrics
+// Call this after Validate() to retrieve metrics for persistence
+func (g *ClusteringQualityGate) GetMetrics() *quality.ClusterCoherenceMetrics {
+	return g.lastMetrics
+}
+
 // Validate checks clustering quality
 func (g *ClusteringQualityGate) Validate(ctx context.Context) error {
 	if !g.config.EnableClusteringGate {
@@ -92,6 +99,10 @@ func (g *ClusteringQualityGate) Validate(ctx context.Context) error {
 
 	// Evaluate cluster coherence
 	metrics := g.coherenceEvaluator.EvaluateClusterCoherence(g.clusters, g.embeddings)
+	g.lastMetrics = metrics // Store for later retrieval
+
+	// Print detailed cohesion report
+	g.printDetailedCohesionReport(metrics)
 
 	// Check silhouette score
 	if metrics.AvgSilhouette < g.config.MinSilhouette {
@@ -109,7 +120,7 @@ func (g *ClusteringQualityGate) Validate(ctx context.Context) error {
 
 	// Check for clustering issues
 	if len(metrics.Issues) > 0 {
-		fmt.Printf("   ⚠️  Clustering issues detected:\n")
+		fmt.Printf("\n   ⚠️  Clustering issues detected:\n")
 		for _, issue := range metrics.Issues {
 			fmt.Printf("      - %s\n", issue)
 		}
@@ -119,10 +130,53 @@ func (g *ClusteringQualityGate) Validate(ctx context.Context) error {
 		}
 	}
 
-	fmt.Printf("   ✓ Clustering quality acceptable (silhouette: %.3f, grade: %s)\n",
-		metrics.AvgSilhouette, metrics.CoherenceGrade)
+	fmt.Printf("\n   ✓ Clustering quality acceptable\n")
 
 	return nil
+}
+
+// printDetailedCohesionReport prints per-cluster cohesion breakdown
+func (g *ClusteringQualityGate) printDetailedCohesionReport(metrics *quality.ClusterCoherenceMetrics) {
+	fmt.Println()
+	fmt.Printf("   📊 Cluster Cohesion Metrics:\n")
+	fmt.Printf("      Grade: %s\n", metrics.CoherenceGrade)
+	fmt.Printf("      Avg Silhouette: %.3f (threshold: %.2f)\n", metrics.AvgSilhouette, g.config.MinSilhouette)
+	fmt.Printf("      Avg Intra-Cluster Similarity: %.3f\n", metrics.AvgIntraClusterSimilarity)
+	fmt.Printf("      Avg Inter-Cluster Distance: %.3f\n", metrics.AvgInterClusterDistance)
+	fmt.Println()
+
+	// Per-cluster breakdown
+	fmt.Printf("      Per-Cluster Breakdown:\n")
+	fmt.Printf("      %-3s %-30s %-10s %-10s\n", "#", "Cluster Label", "Articles", "Cohesion")
+	fmt.Printf("      %-3s %-30s %-10s %-10s\n", "---", "------------------------------", "--------", "--------")
+
+	for i, cluster := range g.clusters {
+		// Get cohesion score for this cluster
+		cohesion := 0.0
+		if i < len(metrics.IntraClusterSimilarities) {
+			cohesion = metrics.IntraClusterSimilarities[i]
+		}
+
+		// Determine indicator based on cohesion quality
+		indicator := "✓"
+		if cohesion < 0.5 && cohesion >= 0.3 {
+			indicator = "⚠"
+		} else if cohesion < 0.3 {
+			indicator = "✗"
+		}
+
+		// Truncate long labels
+		label := cluster.Label
+		if len(label) > 28 {
+			label = label[:25] + "..."
+		}
+
+		fmt.Printf("      %-3d %-30s %-10d %.3f %s\n",
+			i+1, label, len(cluster.ArticleIDs), cohesion, indicator)
+	}
+
+	fmt.Println()
+	fmt.Printf("      Legend: ✓ Good (>=0.5)  ⚠ Fair (>=0.3)  ✗ Poor (<0.3)\n")
 }
 
 // ============================================================================

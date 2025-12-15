@@ -3,6 +3,7 @@ package persistence
 
 import (
 	"briefly/internal/core"
+	"briefly/internal/quality"
 	"context"
 	"time"
 )
@@ -320,6 +321,40 @@ type CitationRepository interface {
 	DeleteByDigestID(ctx context.Context, digestID string) error
 }
 
+// ClusterCoherenceRepository handles cluster coherence metrics persistence
+// Used for tracking clustering quality over time for trend analysis
+type ClusterCoherenceRepository interface {
+	// Store saves cluster coherence metrics for a digest
+	Store(ctx context.Context, digestID string, metrics *quality.ClusterCoherenceMetrics, algorithm string) error
+
+	// GetByDigestID retrieves metrics for a specific digest
+	GetByDigestID(ctx context.Context, digestID string) (*ClusterCoherenceRecord, error)
+
+	// ListRecent retrieves recent coherence metrics for trend analysis
+	ListRecent(ctx context.Context, limit int) ([]ClusterCoherenceRecord, error)
+
+	// GetAverages calculates average metrics over time window
+	GetAverages(ctx context.Context, since time.Time) (*ClusterCoherenceAverages, error)
+}
+
+// ClusterCoherenceRecord represents a stored coherence metrics record
+type ClusterCoherenceRecord struct {
+	ID                  int
+	DigestID            string
+	Metrics             *quality.ClusterCoherenceMetrics
+	ClusteringAlgorithm string
+	EvaluatedAt         time.Time
+}
+
+// ClusterCoherenceAverages provides aggregated metrics over time
+type ClusterCoherenceAverages struct {
+	AvgSilhouette             float64
+	AvgIntraClusterSimilarity float64
+	AvgInterClusterDistance   float64
+	TotalDigests              int
+	PassRate                  float64
+}
+
 // ListOptions provides common filtering and pagination options
 type ListOptions struct {
 	Limit  int               // Maximum number of results (0 for no limit)
@@ -357,6 +392,9 @@ type Database interface {
 
 	// Tags returns the tag repository (Phase 1)
 	Tags() TagRepository
+
+	// ClusterCoherence returns the cluster coherence metrics repository
+	ClusterCoherence() ClusterCoherenceRepository
 
 	// Close closes the database connection
 	Close() error

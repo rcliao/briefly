@@ -14,16 +14,17 @@ import (
 
 // PostgresDB implements the Database interface for PostgreSQL
 type PostgresDB struct {
-	db         *sql.DB
-	articles   ArticleRepository
-	summaries  SummaryRepository
-	feeds      FeedRepository
-	feedItems  FeedItemRepository
-	digests    DigestRepository
-	themes     ThemeRepository     // Phase 0
-	manualURLs ManualURLRepository // Phase 0
-	citations  CitationRepository  // Phase 1
-	tags       TagRepository       // Phase 1
+	db               *sql.DB
+	articles         ArticleRepository
+	summaries        SummaryRepository
+	feeds            FeedRepository
+	feedItems        FeedItemRepository
+	digests          DigestRepository
+	themes           ThemeRepository           // Phase 0
+	manualURLs       ManualURLRepository       // Phase 0
+	citations        CitationRepository        // Phase 1
+	tags             TagRepository             // Phase 1
+	clusterCoherence ClusterCoherenceRepository // Cluster quality metrics
 }
 
 // NewPostgresDB creates a new PostgreSQL database connection
@@ -51,23 +52,25 @@ func NewPostgresDB(connectionString string) (*PostgresDB, error) {
 	pgDB.feeds = &postgresFeedRepo{db: db}
 	pgDB.feedItems = &postgresFeedItemRepo{db: db}
 	pgDB.digests = &postgresDigestRepo{db: db}
-	pgDB.themes = &postgresThemeRepo{db: db}         // Phase 0
-	pgDB.manualURLs = &postgresManualURLRepo{db: db} // Phase 0
-	pgDB.citations = &postgresCitationRepo{db: db}   // Phase 1
-	pgDB.tags = &postgresTagRepo{db: db}             // Phase 1
+	pgDB.themes = &postgresThemeRepo{db: db}                       // Phase 0
+	pgDB.manualURLs = &postgresManualURLRepo{db: db}               // Phase 0
+	pgDB.citations = &postgresCitationRepo{db: db}                 // Phase 1
+	pgDB.tags = &postgresTagRepo{db: db}                           // Phase 1
+	pgDB.clusterCoherence = &postgresClusterCoherenceRepo{db: db}  // Cluster quality metrics
 
 	return pgDB, nil
 }
 
-func (p *PostgresDB) Articles() ArticleRepository     { return p.articles }
-func (p *PostgresDB) Summaries() SummaryRepository    { return p.summaries }
-func (p *PostgresDB) Feeds() FeedRepository           { return p.feeds }
-func (p *PostgresDB) FeedItems() FeedItemRepository   { return p.feedItems }
-func (p *PostgresDB) Digests() DigestRepository       { return p.digests }
-func (p *PostgresDB) Themes() ThemeRepository         { return p.themes }     // Phase 0
-func (p *PostgresDB) ManualURLs() ManualURLRepository { return p.manualURLs } // Phase 0
-func (p *PostgresDB) Citations() CitationRepository   { return p.citations }  // Phase 1
-func (p *PostgresDB) Tags() TagRepository             { return p.tags }       // Phase 1
+func (p *PostgresDB) Articles() ArticleRepository                   { return p.articles }
+func (p *PostgresDB) Summaries() SummaryRepository                   { return p.summaries }
+func (p *PostgresDB) Feeds() FeedRepository                          { return p.feeds }
+func (p *PostgresDB) FeedItems() FeedItemRepository                  { return p.feedItems }
+func (p *PostgresDB) Digests() DigestRepository                      { return p.digests }
+func (p *PostgresDB) Themes() ThemeRepository                        { return p.themes }           // Phase 0
+func (p *PostgresDB) ManualURLs() ManualURLRepository                { return p.manualURLs }       // Phase 0
+func (p *PostgresDB) Citations() CitationRepository                  { return p.citations }        // Phase 1
+func (p *PostgresDB) Tags() TagRepository                            { return p.tags }             // Phase 1
+func (p *PostgresDB) ClusterCoherence() ClusterCoherenceRepository   { return p.clusterCoherence } // Cluster quality metrics
 
 func (p *PostgresDB) Close() error {
 	return p.db.Close()

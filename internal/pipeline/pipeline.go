@@ -3,6 +3,7 @@ package pipeline
 import (
 	"briefly/internal/core"
 	"briefly/internal/narrative"
+	"briefly/internal/persistence"
 	"briefly/internal/quality"
 	"context"
 	"fmt"
@@ -33,6 +34,7 @@ type Pipeline struct {
 	tagClassifier   TagClassifier     // Phase 1: For multi-label tag classification
 	tagRepo         TagRepository     // Phase 1: For tag persistence
 	vectorStore     VectorStore       // Phase 2: For semantic search with pgvector
+	coherenceRepo   persistence.ClusterCoherenceRepository // Cluster quality metrics persistence
 
 	// Configuration
 	config *Config
@@ -98,6 +100,7 @@ func NewPipeline(
 	tagClassifier TagClassifier,    // Phase 1: For multi-label tag classification
 	tagRepo TagRepository,          // Phase 1: For tag persistence
 	vectorStore VectorStore,        // Phase 2: For semantic search with pgvector
+	coherenceRepo persistence.ClusterCoherenceRepository, // Cluster quality metrics persistence
 	config *Config,
 ) *Pipeline {
 	if config == nil {
@@ -122,6 +125,7 @@ func NewPipeline(
 		tagClassifier:   tagClassifier,
 		tagRepo:         tagRepo,
 		vectorStore:     vectorStore,
+		coherenceRepo:   coherenceRepo,
 		config:          config,
 	}
 }
@@ -267,6 +271,10 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 		return nil, fmt.Errorf("clustering quality gate failed: %w", err)
 	}
 
+	// Track coherence metrics for persistence (will be stored with first digest)
+	coherenceMetrics := clusteringGate.GetMetrics()
+	coherenceMetricsPersisted := false
+
 	// Step 5: Generate cluster narratives (hierarchical summarization)
 	fmt.Printf("📖 Step 5/9: Generating cluster narratives from ALL articles...\n")
 	clusters, err = p.generateClusterNarratives(ctx, clusters, articles, summaries)
@@ -378,6 +386,16 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 				if err := p.storeQualityMetrics(ctx, digest, clusterArticles); err != nil {
 					// Non-fatal: log warning but continue
 					fmt.Printf("   ⚠️  Quality metrics storage failed: %v\n", err)
+				}
+
+				// Store cluster coherence metrics (once per pipeline run, with first digest)
+				if !coherenceMetricsPersisted && coherenceMetrics != nil && p.coherenceRepo != nil {
+					if err := p.coherenceRepo.Store(ctx, digest.ID, coherenceMetrics, "kmeans"); err != nil {
+						fmt.Printf("   ⚠️  Cluster coherence metrics storage failed: %v\n", err)
+					} else {
+						fmt.Printf("   ✓ Cluster coherence metrics persisted\n")
+						coherenceMetricsPersisted = true
+					}
 				}
 			}
 		}

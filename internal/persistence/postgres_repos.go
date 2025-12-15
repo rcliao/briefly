@@ -3,6 +3,7 @@ package persistence
 import (
 	"briefly/internal/core"
 	"briefly/internal/markdown"
+	"briefly/internal/quality"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -1974,4 +1975,278 @@ func (r *postgresTagRepo) scanTagRow(rows *sql.Rows) (*core.Tag, error) {
 		return nil, err
 	}
 	return &tag, nil
+}
+
+// =============================================================================
+// Cluster Coherence Repository
+// =============================================================================
+
+// postgresClusterCoherenceRepo implements ClusterCoherenceRepository for PostgreSQL
+type postgresClusterCoherenceRepo struct {
+	db *sql.DB
+	tx *sql.Tx
+}
+
+func (r *postgresClusterCoherenceRepo) query() interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+} {
+	if r.tx != nil {
+		return r.tx
+	}
+	return r.db
+}
+
+// Store saves cluster coherence metrics for a digest
+func (r *postgresClusterCoherenceRepo) Store(ctx context.Context, digestID string, metrics *quality.ClusterCoherenceMetrics, algorithm string) error {
+	// Marshal JSON arrays
+	silhouettesJSON, err := json.Marshal(metrics.ClusterSilhouettes)
+	if err != nil {
+		return fmt.Errorf("failed to marshal cluster silhouettes: %w", err)
+	}
+
+	intraSimsJSON, err := json.Marshal(metrics.IntraClusterSimilarities)
+	if err != nil {
+		return fmt.Errorf("failed to marshal intra-cluster similarities: %w", err)
+	}
+
+	issuesJSON, err := json.Marshal(metrics.Issues)
+	if err != nil {
+		return fmt.Errorf("failed to marshal issues: %w", err)
+	}
+
+	query := `
+		INSERT INTO cluster_coherence_metrics (
+			digest_id, num_clusters, num_articles, avg_cluster_size,
+			avg_silhouette, cluster_silhouettes,
+			avg_intra_cluster_similarity, intra_cluster_similarities,
+			avg_inter_cluster_distance, coherence_grade, passed, issues,
+			clustering_algorithm, evaluated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		ON CONFLICT (digest_id) DO UPDATE SET
+			num_clusters = EXCLUDED.num_clusters,
+			num_articles = EXCLUDED.num_articles,
+			avg_cluster_size = EXCLUDED.avg_cluster_size,
+			avg_silhouette = EXCLUDED.avg_silhouette,
+			cluster_silhouettes = EXCLUDED.cluster_silhouettes,
+			avg_intra_cluster_similarity = EXCLUDED.avg_intra_cluster_similarity,
+			intra_cluster_similarities = EXCLUDED.intra_cluster_similarities,
+			avg_inter_cluster_distance = EXCLUDED.avg_inter_cluster_distance,
+			coherence_grade = EXCLUDED.coherence_grade,
+			passed = EXCLUDED.passed,
+			issues = EXCLUDED.issues,
+			clustering_algorithm = EXCLUDED.clustering_algorithm,
+			evaluated_at = EXCLUDED.evaluated_at
+	`
+
+	_, err = r.query().ExecContext(ctx, query,
+		digestID,
+		metrics.NumClusters,
+		metrics.NumArticles,
+		metrics.AvgClusterSize,
+		metrics.AvgSilhouette,
+		silhouettesJSON,
+		metrics.AvgIntraClusterSimilarity,
+		intraSimsJSON,
+		metrics.AvgInterClusterDistance,
+		metrics.CoherenceGrade,
+		metrics.Passed,
+		issuesJSON,
+		algorithm,
+		time.Now().UTC(),
+	)
+
+	return err
+}
+
+// GetByDigestID retrieves metrics for a specific digest
+func (r *postgresClusterCoherenceRepo) GetByDigestID(ctx context.Context, digestID string) (*ClusterCoherenceRecord, error) {
+	query := `
+		SELECT id, digest_id, num_clusters, num_articles, avg_cluster_size,
+			avg_silhouette, cluster_silhouettes,
+			avg_intra_cluster_similarity, intra_cluster_similarities,
+			avg_inter_cluster_distance, coherence_grade, passed, issues,
+			clustering_algorithm, evaluated_at
+		FROM cluster_coherence_metrics
+		WHERE digest_id = $1
+	`
+
+	row := r.query().QueryRowContext(ctx, query, digestID)
+	return r.scanRecord(row)
+}
+
+// ListRecent retrieves recent coherence metrics for trend analysis
+func (r *postgresClusterCoherenceRepo) ListRecent(ctx context.Context, limit int) ([]ClusterCoherenceRecord, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	query := `
+		SELECT id, digest_id, num_clusters, num_articles, avg_cluster_size,
+			avg_silhouette, cluster_silhouettes,
+			avg_intra_cluster_similarity, intra_cluster_similarities,
+			avg_inter_cluster_distance, coherence_grade, passed, issues,
+			clustering_algorithm, evaluated_at
+		FROM cluster_coherence_metrics
+		ORDER BY evaluated_at DESC
+		LIMIT $1
+	`
+
+	rows, err := r.query().QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []ClusterCoherenceRecord
+	for rows.Next() {
+		record, err := r.scanRecordRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, *record)
+	}
+
+	return records, rows.Err()
+}
+
+// GetAverages calculates average metrics over time window
+func (r *postgresClusterCoherenceRepo) GetAverages(ctx context.Context, since time.Time) (*ClusterCoherenceAverages, error) {
+	query := `
+		SELECT
+			AVG(avg_silhouette) as avg_silhouette,
+			AVG(avg_intra_cluster_similarity) as avg_intra_cluster_similarity,
+			AVG(avg_inter_cluster_distance) as avg_inter_cluster_distance,
+			COUNT(*) as total_digests,
+			SUM(CASE WHEN passed THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0) as pass_rate
+		FROM cluster_coherence_metrics
+		WHERE evaluated_at >= $1
+	`
+
+	row := r.query().QueryRowContext(ctx, query, since)
+
+	var avgs ClusterCoherenceAverages
+	var avgSil, avgIntra, avgInter, passRate sql.NullFloat64
+
+	err := row.Scan(&avgSil, &avgIntra, &avgInter, &avgs.TotalDigests, &passRate)
+	if err != nil {
+		return nil, err
+	}
+
+	if avgSil.Valid {
+		avgs.AvgSilhouette = avgSil.Float64
+	}
+	if avgIntra.Valid {
+		avgs.AvgIntraClusterSimilarity = avgIntra.Float64
+	}
+	if avgInter.Valid {
+		avgs.AvgInterClusterDistance = avgInter.Float64
+	}
+	if passRate.Valid {
+		avgs.PassRate = passRate.Float64
+	}
+
+	return &avgs, nil
+}
+
+func (r *postgresClusterCoherenceRepo) scanRecord(row *sql.Row) (*ClusterCoherenceRecord, error) {
+	var record ClusterCoherenceRecord
+	var silhouettesJSON, intraSimsJSON, issuesJSON []byte
+
+	record.Metrics = &quality.ClusterCoherenceMetrics{}
+
+	err := row.Scan(
+		&record.ID,
+		&record.DigestID,
+		&record.Metrics.NumClusters,
+		&record.Metrics.NumArticles,
+		&record.Metrics.AvgClusterSize,
+		&record.Metrics.AvgSilhouette,
+		&silhouettesJSON,
+		&record.Metrics.AvgIntraClusterSimilarity,
+		&intraSimsJSON,
+		&record.Metrics.AvgInterClusterDistance,
+		&record.Metrics.CoherenceGrade,
+		&record.Metrics.Passed,
+		&issuesJSON,
+		&record.ClusteringAlgorithm,
+		&record.EvaluatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("cluster coherence record not found")
+		}
+		return nil, err
+	}
+
+	// Unmarshal JSON arrays
+	if len(silhouettesJSON) > 0 {
+		if err := json.Unmarshal(silhouettesJSON, &record.Metrics.ClusterSilhouettes); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal cluster silhouettes: %w", err)
+		}
+	}
+
+	if len(intraSimsJSON) > 0 {
+		if err := json.Unmarshal(intraSimsJSON, &record.Metrics.IntraClusterSimilarities); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal intra-cluster similarities: %w", err)
+		}
+	}
+
+	if len(issuesJSON) > 0 {
+		if err := json.Unmarshal(issuesJSON, &record.Metrics.Issues); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal issues: %w", err)
+		}
+	}
+
+	return &record, nil
+}
+
+func (r *postgresClusterCoherenceRepo) scanRecordRow(rows *sql.Rows) (*ClusterCoherenceRecord, error) {
+	var record ClusterCoherenceRecord
+	var silhouettesJSON, intraSimsJSON, issuesJSON []byte
+
+	record.Metrics = &quality.ClusterCoherenceMetrics{}
+
+	err := rows.Scan(
+		&record.ID,
+		&record.DigestID,
+		&record.Metrics.NumClusters,
+		&record.Metrics.NumArticles,
+		&record.Metrics.AvgClusterSize,
+		&record.Metrics.AvgSilhouette,
+		&silhouettesJSON,
+		&record.Metrics.AvgIntraClusterSimilarity,
+		&intraSimsJSON,
+		&record.Metrics.AvgInterClusterDistance,
+		&record.Metrics.CoherenceGrade,
+		&record.Metrics.Passed,
+		&issuesJSON,
+		&record.ClusteringAlgorithm,
+		&record.EvaluatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal JSON arrays
+	if len(silhouettesJSON) > 0 {
+		if err := json.Unmarshal(silhouettesJSON, &record.Metrics.ClusterSilhouettes); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal cluster silhouettes: %w", err)
+		}
+	}
+
+	if len(intraSimsJSON) > 0 {
+		if err := json.Unmarshal(intraSimsJSON, &record.Metrics.IntraClusterSimilarities); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal intra-cluster similarities: %w", err)
+		}
+	}
+
+	if len(issuesJSON) > 0 {
+		if err := json.Unmarshal(issuesJSON, &record.Metrics.Issues); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal issues: %w", err)
+		}
+	}
+
+	return &record, nil
 }

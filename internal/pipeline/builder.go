@@ -217,6 +217,12 @@ func (b *Builder) Build() (*Pipeline, error) {
 		tagRepo = b.db.Tags()
 	}
 
+	// Get coherence repo if database is available
+	var coherenceRepo persistence.ClusterCoherenceRepository
+	if b.db != nil {
+		coherenceRepo = b.db.ClusterCoherence()
+	}
+
 	// Build pipeline
 	pipeline := NewPipeline(
 		parser,
@@ -236,6 +242,7 @@ func (b *Builder) Build() (*Pipeline, error) {
 		tagClassifier,   // Phase 1: For multi-label tag classification
 		tagRepo,         // Phase 1: For tag persistence
 		b.vectorStore,   // Phase 2: Vector store for semantic search
+		coherenceRepo,   // Cluster coherence metrics persistence
 		b.config,
 	)
 

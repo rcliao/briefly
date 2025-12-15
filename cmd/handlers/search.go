@@ -325,7 +325,7 @@ func runSearchStats() error {
 	fmt.Printf("Total Embeddings:     %d\n", stats.TotalEmbeddings)
 	fmt.Printf("Embedding Dimensions: %d\n", stats.EmbeddingDimensions)
 	fmt.Printf("Index Type:           %s\n", stats.IndexType)
-	fmt.Printf("Index Size:           %s\n", stats.IndexSize)
+	fmt.Printf("Index Size:           %d\n", stats.IndexSize)
 
 	if stats.AvgSearchLatency > 0 {
 		fmt.Printf("Avg Search Latency:   %.2fms\n", stats.AvgSearchLatency)
