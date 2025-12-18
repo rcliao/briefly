@@ -669,11 +669,11 @@ func (c *Client) GenerateText(ctx context.Context, prompt string, options TextGe
 		return "", fmt.Errorf("failed to generate text: %w", err)
 	}
 
-	// Debug: Check for truncation
+	// Warn if response was truncated (helps diagnose JSON parse failures)
 	if len(resp.Candidates) > 0 && resp.Candidates[0].FinishReason != "" {
 		finishReason := resp.Candidates[0].FinishReason
-		if finishReason != "STOP" && finishReason != "stop" {
-			log.Printf("[DEBUG] GenerateText: Non-normal finish reason: %s", finishReason)
+		if finishReason == "MAX_TOKENS" {
+			log.Printf("[WARN] GenerateText: Response truncated (MAX_TOKENS) - may cause JSON parse errors")
 		}
 	}
 

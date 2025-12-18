@@ -377,22 +377,20 @@ func (g *Generator) parseCritiqueResult(jsonResponse string) (*CritiqueResult, e
 	// Clean the response (remove markdown wrappers, trim whitespace)
 	cleaned := cleanJSONResponse(jsonResponse)
 
-	// Debug logging for troubleshooting
 	if len(cleaned) == 0 {
-		log.Printf("[DEBUG] parseCritiqueResult: Empty response after cleaning")
 		return nil, fmt.Errorf("empty JSON response")
-	}
-	if len(cleaned) < 100 {
-		log.Printf("[DEBUG] parseCritiqueResult: Short response (%d chars): %s", len(cleaned), cleaned)
-	} else {
-		log.Printf("[DEBUG] parseCritiqueResult: Response length: %d chars, first 200: %s...", len(cleaned), cleaned[:min(200, len(cleaned))])
 	}
 
 	var result CritiqueResult
 
 	err := json.Unmarshal([]byte(cleaned), &result)
 	if err != nil {
-		log.Printf("[DEBUG] parseCritiqueResult: JSON parse error: %v", err)
+		// Log truncated response on parse error for debugging
+		preview := cleaned
+		if len(preview) > 500 {
+			preview = preview[:500] + "..."
+		}
+		log.Printf("[ERROR] parseCritiqueResult: JSON parse failed: %v\nResponse preview: %s", err, preview)
 		return nil, fmt.Errorf("JSON parse error: %w", err)
 	}
 

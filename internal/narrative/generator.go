@@ -879,15 +879,8 @@ func (g *Generator) parseClusterNarrative(jsonResponse string) (*core.ClusterNar
 	// Clean the response (remove markdown wrappers, trim whitespace)
 	cleaned := cleanJSONResponse(jsonResponse)
 
-	// Debug logging for troubleshooting
 	if len(cleaned) == 0 {
-		log.Printf("[DEBUG] parseClusterNarrative: Empty response after cleaning")
 		return nil, fmt.Errorf("empty JSON response")
-	}
-	if len(cleaned) < 100 {
-		log.Printf("[DEBUG] parseClusterNarrative: Short response (%d chars): %s", len(cleaned), cleaned)
-	} else {
-		log.Printf("[DEBUG] parseClusterNarrative: Response length: %d chars, first 200: %s...", len(cleaned), cleaned[:min(200, len(cleaned))])
 	}
 
 	var response struct {
@@ -906,7 +899,12 @@ func (g *Generator) parseClusterNarrative(jsonResponse string) (*core.ClusterNar
 
 	err := json.Unmarshal([]byte(cleaned), &response)
 	if err != nil {
-		log.Printf("[DEBUG] parseClusterNarrative: JSON parse error: %v", err)
+		// Log truncated response on parse error for debugging
+		preview := cleaned
+		if len(preview) > 500 {
+			preview = preview[:500] + "..."
+		}
+		log.Printf("[ERROR] parseClusterNarrative: JSON parse failed: %v\nResponse preview: %s", err, preview)
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
@@ -1328,15 +1326,8 @@ func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestCo
 	// Clean the response (remove markdown wrappers, trim whitespace)
 	cleaned := cleanJSONResponse(jsonResponse)
 
-	// Debug logging for troubleshooting
 	if len(cleaned) == 0 {
-		log.Printf("[DEBUG] parseStructuredDigestContent: Empty response after cleaning")
 		return nil, fmt.Errorf("empty JSON response")
-	}
-	if len(cleaned) < 100 {
-		log.Printf("[DEBUG] parseStructuredDigestContent: Short response (%d chars): %s", len(cleaned), cleaned)
-	} else {
-		log.Printf("[DEBUG] parseStructuredDigestContent: Response length: %d chars, first 200: %s...", len(cleaned), cleaned[:min(200, len(cleaned))])
 	}
 
 	// Define a temporary struct matching the JSON schema
@@ -1370,7 +1361,12 @@ func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestCo
 	// Parse JSON
 	err := json.Unmarshal([]byte(cleaned), &response)
 	if err != nil {
-		log.Printf("[DEBUG] parseStructuredDigestContent: JSON parse error: %v", err)
+		// Log truncated response on parse error for debugging
+		preview := cleaned
+		if len(preview) > 500 {
+			preview = preview[:500] + "..."
+		}
+		log.Printf("[ERROR] parseStructuredDigestContent: JSON parse failed: %v\nResponse preview: %s", err, preview)
 		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
