@@ -54,9 +54,16 @@ func (tc *ThemeCategorizer) CategorizeArticle(ctx context.Context, article *core
 	// Enrich the article with theme information
 	// This will be stored in the database when the article is saved
 	article.TopicCluster = bestMatch.ThemeName // Use existing field for category
-	// Note: We'll need to add theme_id and theme_relevance_score fields to articles table
-	// For now, store the score in ClusterConfidence
 	article.ClusterConfidence = bestMatch.RelevanceScore
+
+	// NEW: Set ThemeID and ThemeRelevanceScore for tag-aware clustering
+	themeID := bestMatch.ThemeID
+	article.ThemeID = &themeID
+	relevanceScore := bestMatch.RelevanceScore
+	article.ThemeRelevanceScore = &relevanceScore
+
+	// NEW: Set ReaderIntent for intent-based grouping
+	article.ReaderIntent = bestMatch.ReaderIntent
 
 	// Return the theme name for the digest categorization
 	return bestMatch.ThemeName, nil
@@ -114,6 +121,15 @@ func (tc *ThemeCategorizer) CategorizeArticles(ctx context.Context, articles []c
 		// Enrich the article with theme information
 		article.TopicCluster = bestMatch.ThemeName
 		article.ClusterConfidence = bestMatch.RelevanceScore
+
+		// NEW: Set ThemeID and ThemeRelevanceScore for tag-aware clustering
+		themeID := bestMatch.ThemeID
+		article.ThemeID = &themeID
+		relevanceScore := bestMatch.RelevanceScore
+		article.ThemeRelevanceScore = &relevanceScore
+
+		// NEW: Set ReaderIntent for intent-based grouping
+		article.ReaderIntent = bestMatch.ReaderIntent
 	}
 
 	return articles, nil

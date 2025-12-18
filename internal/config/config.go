@@ -495,11 +495,11 @@ func setDefaults() {
 	viper.SetDefault("server.rate_limit.requests_per_minute", 60)
 
 	// AI defaults
-	viper.SetDefault("ai.gemini.model", "gemini-flash-lite-latest")
+	viper.SetDefault("ai.gemini.model", "gemini-3-flash-preview")
 	viper.SetDefault("ai.gemini.timeout", "30s")
 	viper.SetDefault("ai.gemini.max_tokens", 8192)
 	viper.SetDefault("ai.gemini.temperature", 0.7)
-	viper.SetDefault("ai.gemini.embedding_model", "text-embedding-004")
+	viper.SetDefault("ai.gemini.embedding_model", "gemini-embedding-001")
 	viper.SetDefault("ai.openai.model", "gpt-image-1")
 	viper.SetDefault("ai.openai.base_url", "https://api.openai.com/v1")
 	viper.SetDefault("ai.openai.timeout", "30s")
@@ -648,7 +648,7 @@ func setDefaults() {
 	// Themes defaults
 	viper.SetDefault("themes.enabled", true)
 	viper.SetDefault("themes.min_relevance_score", 0.6)
-	viper.SetDefault("themes.classification_model", "gemini-flash-lite-latest")
+	viper.SetDefault("themes.classification_model", "gemini-3-flash-preview")
 }
 
 // bindEnvironmentVariables sets up flexible environment variable binding

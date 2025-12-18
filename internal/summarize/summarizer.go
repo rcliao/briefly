@@ -55,7 +55,7 @@ func DefaultSummarizerOptions() SummarizerOptions {
 	return SummarizerOptions{
 		DefaultMaxWords:      150,
 		DefaultKeyPointCount: 5,
-		ModelName:            "gemini-flash-lite-latest",
+		ModelName:            "gemini-3-flash-preview",
 		Temperature:          0.3, // Lower temperature for more consistent summaries
 		MaxRetries:           2,
 		RetryDelay:           time.Second,

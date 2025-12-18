@@ -49,6 +49,15 @@ func DefaultQuickReadOptions() PromptOptions {
 func BuildSummarizationPrompt(title, content string, opts PromptOptions) string {
 	var prompt strings.Builder
 
+	// Target audience context
+	prompt.WriteString("**TARGET AUDIENCE:** Senior software engineers (5+ years) who:\n")
+	prompt.WriteString("- Want GenAI updates but have limited time (5-10 min/week)\n")
+	prompt.WriteString("- Prefer practical implications over marketing hype\n")
+	prompt.WriteString("- Need to advise their teams on what to learn/adopt\n")
+	prompt.WriteString("- Care about \"so what does this mean for my work?\"\n\n")
+
+	prompt.WriteString("**TONE:** Technical, skeptical of hype, action-oriented\n\n")
+
 	prompt.WriteString("Summarize this article with CONCRETE FACTS and SPECIFIC DETAILS.\n\n")
 
 	// Article details

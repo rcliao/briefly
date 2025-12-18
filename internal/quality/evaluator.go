@@ -155,8 +155,21 @@ func (e *DigestEvaluator) EvaluateClusterNarrative(narrative *core.ClusterNarrat
 		metrics.CoveragePct = float64(metrics.CitationsFound) / float64(clusterSize)
 	}
 
-	// Check vagueness
-	vaguePhraseCount, foundPhrases := DetectVaguePhrases(narrative.Summary)
+	// Build content from v3.1 fields (OneLiner, KeyDevelopments, KeyStats)
+	// Fall back to legacy Summary field if new fields are empty
+	contentText := narrative.OneLiner
+	for _, dev := range narrative.KeyDevelopments {
+		contentText += " " + dev
+	}
+	for _, stat := range narrative.KeyStats {
+		contentText += " " + stat.Stat + " " + stat.Context
+	}
+	if contentText == "" {
+		contentText = narrative.Summary // Legacy fallback
+	}
+
+	// Check vagueness using combined content
+	vaguePhraseCount, foundPhrases := DetectVaguePhrases(contentText)
 	metrics.VaguePhrases = vaguePhraseCount
 	metrics.VaguePhrasesList = foundPhrases
 
@@ -166,23 +179,23 @@ func (e *DigestEvaluator) EvaluateClusterNarrative(narrative *core.ClusterNarrat
 				metrics.VaguePhrases, foundPhrases))
 	}
 
-	// Check specificity
-	metrics.NumberCount, metrics.HasNumbers = DetectNumbers(narrative.Summary)
-	metrics.ProperNounCount, metrics.HasProperNouns = DetectProperNouns(narrative.Summary)
+	// Check specificity using combined content
+	metrics.NumberCount, metrics.HasNumbers = DetectNumbers(contentText)
+	metrics.ProperNounCount, metrics.HasProperNouns = DetectProperNouns(contentText)
 	metrics.SpecificityScore = CalculateSpecificityScore(
 		metrics.NumberCount,
 		metrics.ProperNounCount,
 		metrics.VaguePhrases,
 	)
 
-	// Word count
-	metrics.WordCount = len(strings.Fields(narrative.Summary))
+	// Word count from combined content
+	metrics.WordCount = len(strings.Fields(contentText))
 
 	// Citation density
 	if metrics.WordCount > 0 {
 		// For cluster narratives, citations might be embedded differently
 		// Count both [N] style and article references
-		allRefs := ExtractCitations(narrative.Summary)
+		allRefs := ExtractCitations(contentText)
 		metrics.CitationDensity = float64(len(allRefs)) * 100.0 / float64(metrics.WordCount)
 	}
 

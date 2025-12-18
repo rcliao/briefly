@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"briefly/internal/core"
@@ -47,7 +48,7 @@ func (g *Generator) RefineDigestWithCritique(
 	response, err := g.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
 		ResponseSchema: schema,
 		Temperature:    0.7,
-		MaxTokens:      2000,
+		MaxTokens:      8192, // Max tokens to ensure complete JSON output
 	})
 	if err != nil {
 		return nil, fmt.Errorf("critique generation failed: %w", err)
@@ -264,6 +265,29 @@ func (g *Generator) buildCritiqueSchema() *genai.Schema {
 						Type:        genai.TypeString,
 						Description: "Improved TLDR (40-75 chars STRICT)",
 					},
+					"must_read": {
+						Type:        genai.TypeObject,
+						Description: "Single most impactful article for senior engineers (REQUIRED)",
+						Properties: map[string]*genai.Schema{
+							"article_num": {
+								Type:        genai.TypeInteger,
+								Description: "Citation number of the article [N]",
+							},
+							"title": {
+								Type:        genai.TypeString,
+								Description: "Article title",
+							},
+							"why_must_read": {
+								Type:        genai.TypeString,
+								Description: "1-2 sentences why engineers should prioritize this",
+							},
+							"read_time_minutes": {
+								Type:        genai.TypeInteger,
+								Description: "Estimated reading time in minutes",
+							},
+						},
+						Required: []string{"article_num", "title", "why_must_read"},
+					},
 					"top_developments": {
 						Type:        genai.TypeArray,
 						Description: "3-5 bullet points with bold lead-ins + citations",
@@ -337,7 +361,7 @@ func (g *Generator) buildCritiqueSchema() *genai.Schema {
 						},
 					},
 				},
-				Required: []string{"title", "tldr_summary", "top_developments", "by_the_numbers", "why_it_matters", "key_moments"},
+				Required: []string{"title", "tldr_summary", "must_read", "top_developments", "by_the_numbers", "why_it_matters", "key_moments"},
 			},
 			"quality_improved": {
 				Type:        genai.TypeBoolean,
@@ -350,10 +374,25 @@ func (g *Generator) buildCritiqueSchema() *genai.Schema {
 
 // parseCritiqueResult parses the JSON response into CritiqueResult
 func (g *Generator) parseCritiqueResult(jsonResponse string) (*CritiqueResult, error) {
+	// Clean the response (remove markdown wrappers, trim whitespace)
+	cleaned := cleanJSONResponse(jsonResponse)
+
+	// Debug logging for troubleshooting
+	if len(cleaned) == 0 {
+		log.Printf("[DEBUG] parseCritiqueResult: Empty response after cleaning")
+		return nil, fmt.Errorf("empty JSON response")
+	}
+	if len(cleaned) < 100 {
+		log.Printf("[DEBUG] parseCritiqueResult: Short response (%d chars): %s", len(cleaned), cleaned)
+	} else {
+		log.Printf("[DEBUG] parseCritiqueResult: Response length: %d chars, first 200: %s...", len(cleaned), cleaned[:min(200, len(cleaned))])
+	}
+
 	var result CritiqueResult
 
-	err := json.Unmarshal([]byte(jsonResponse), &result)
+	err := json.Unmarshal([]byte(cleaned), &result)
 	if err != nil {
+		log.Printf("[DEBUG] parseCritiqueResult: JSON parse error: %v", err)
 		return nil, fmt.Errorf("JSON parse error: %w", err)
 	}
 

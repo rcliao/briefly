@@ -149,7 +149,7 @@ func runClassify(ctx context.Context, maxArticles int, minRelevance float64, the
 	// Initialize LLM client (NewClient reads API key from env/config)
 	modelName := cfg.AI.Gemini.Model
 	if modelName == "" {
-		modelName = "gemini-flash-lite-latest"
+		modelName = "gemini-3-flash-preview"
 	}
 
 	llmClient, err := llm.NewClient(modelName)

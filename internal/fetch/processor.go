@@ -54,7 +54,36 @@ func (cp *ContentProcessor) ProcessArticle(ctx context.Context, urlStr string) (
 		return nil, fmt.Errorf("failed to process %s content from %s: %w", contentType, urlStr, err)
 	}
 
+	// Calculate estimated reading time
+	article.EstimatedReadMinutes = CalculateReadingTime(&article)
+
 	return &article, nil
+}
+
+// CalculateReadingTime estimates reading time in minutes for an article
+// Uses ~200 words per minute for technical content (slower than casual reading)
+// For YouTube videos, uses the video duration if available
+func CalculateReadingTime(article *core.Article) int {
+	// For YouTube videos, use the video duration
+	if article.ContentType == core.ContentTypeYouTube && article.Duration > 0 {
+		// Duration is in seconds, convert to minutes (round up)
+		minutes := (article.Duration + 59) / 60
+		if minutes < 1 {
+			return 1
+		}
+		return minutes
+	}
+
+	// For text content, calculate based on word count
+	// Technical content reading speed: ~200 words per minute
+	wordCount := len(strings.Fields(article.CleanedText))
+	minutes := wordCount / 200
+
+	// Minimum 1 minute read time
+	if minutes < 1 {
+		return 1
+	}
+	return minutes
 }
 
 // ProcessArticles processes multiple articles concurrently

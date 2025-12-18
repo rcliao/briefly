@@ -49,7 +49,15 @@ type ClassificationResult struct {
 	ThemeName      string  // Name of the matched theme
 	RelevanceScore float64 // Relevance score (0.0-1.0)
 	Reasoning      string  // Why this theme was chosen
+	ReaderIntent   string  // Reader intent: "skim", "read", or "deep_dive"
 }
+
+// Reader intent constants
+const (
+	IntentSkim     = "skim"      // Industry news, announcements - just know it exists
+	IntentRead     = "read"      // Practical tools, techniques - actionable for engineers
+	IntentDeepDive = "deep_dive" // Research, architecture - optional for specialists
+)
 
 // Interface methods for sources.ThemeClassificationResult compatibility
 func (c *ClassificationResult) GetThemeID() string {
@@ -86,6 +94,11 @@ func CreateClassificationSchema() *genai.Schema {
 	return &genai.Schema{
 		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
+			"reader_intent": {
+				Type:        genai.TypeString,
+				Description: "Reader intent: 'skim' (news/announcements - just know it exists), 'read' (practical tools/techniques - actionable), or 'deep_dive' (research/architecture - optional for specialists)",
+				Enum:        []string{"skim", "read", "deep_dive"},
+			},
 			"classifications": {
 				Type:        genai.TypeArray,
 				Description: "List of theme classifications with relevance scores",
@@ -109,7 +122,7 @@ func CreateClassificationSchema() *genai.Schema {
 				},
 			},
 		},
-		Required: []string{"classifications"},
+		Required: []string{"reader_intent", "classifications"},
 	}
 }
 
@@ -129,7 +142,7 @@ func (c *Classifier) ClassifyArticle(ctx context.Context, article core.Article, 
 	// Use the LLM to classify with structured output (guaranteed valid JSON)
 	response, err := c.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
 		Temperature:    0.3, // Low temperature for more consistent classification
-		MaxTokens:      1000,
+		MaxTokens:      2000, // Increased to ensure complete JSON output
 		ResponseSchema: schema, // Phase 1: Structured output eliminates JSON parsing errors
 	})
 	if err != nil {
@@ -184,7 +197,8 @@ func (c *Classifier) GetBestMatch(ctx context.Context, article core.Article, the
 func (c *Classifier) buildClassificationPrompt(article core.Article, themes []core.Theme) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are a content classification expert. Analyze the following article and determine which theme(s) it belongs to.\n\n")
+	sb.WriteString("You are a content classification expert helping senior software engineers stay current on GenAI.\n")
+	sb.WriteString("Analyze the following article and determine its theme(s) AND reader intent.\n\n")
 
 	sb.WriteString("ARTICLE:\n")
 	sb.WriteString("Title: ")
@@ -212,17 +226,28 @@ func (c *Classifier) buildClassificationPrompt(article core.Article, themes []co
 		sb.WriteString("\n")
 	}
 
+	sb.WriteString("READER INTENT DEFINITIONS:\n")
+	sb.WriteString("- \"skim\": Industry news, announcements, partnerships, funding rounds.\n")
+	sb.WriteString("  Reader just needs to know it exists. Headline + 1-sentence context is enough.\n")
+	sb.WriteString("  Examples: Company X raises $100M, Partnership announced, New product launched\n\n")
+	sb.WriteString("- \"read\": Practical tools, techniques, tutorials, actionable for engineers.\n")
+	sb.WriteString("  Reader should spend 5-10 minutes understanding the details.\n")
+	sb.WriteString("  Examples: New coding tool released, How-to guide, Best practices article\n\n")
+	sb.WriteString("- \"deep_dive\": Research papers, architectural deep-dives, technical analysis.\n")
+	sb.WriteString("  Optional for specialists. Reader may want to bookmark for weekend reading.\n")
+	sb.WriteString("  Examples: Academic paper, System design breakdown, In-depth technical analysis\n\n")
+
 	sb.WriteString("TASK:\n")
-	sb.WriteString("For each theme above, provide:\n")
-	sb.WriteString("1. A relevance score from 0.0 to 1.0 indicating how well the article matches that theme\n")
-	sb.WriteString("2. Brief reasoning (1-2 sentences) explaining your classification\n\n")
+	sb.WriteString("1. Determine the READER INTENT (skim, read, or deep_dive) - think about how a busy senior engineer would consume this\n")
+	sb.WriteString("2. For each theme, provide a relevance score (0.0-1.0) and brief reasoning\n\n")
 
 	sb.WriteString("Guidelines:\n")
 	sb.WriteString("- Only include themes with relevance_score > 0.1\n")
 	sb.WriteString("- Be honest and conservative with scores\n")
 	sb.WriteString("- Consider both the title and content\n")
 	sb.WriteString("- Match against theme keywords and descriptions\n")
-	sb.WriteString("- Use the exact theme name from the list above\n\n")
+	sb.WriteString("- Use the exact theme name from the list above\n")
+	sb.WriteString("- For intent: Consider article length, depth, and practical applicability\n\n")
 
 	sb.WriteString("OUTPUT FORMAT:\n")
 	sb.WriteString("Provide your response as structured JSON following the schema.\n")
@@ -244,6 +269,7 @@ func (c *Classifier) parseClassificationResponse(response string, themes []core.
 	}
 
 	var parsed struct {
+		ReaderIntent    string `json:"reader_intent"`
 		Classifications []struct {
 			ThemeName      string  `json:"theme_name"`
 			RelevanceScore float64 `json:"relevance_score"`
@@ -253,6 +279,13 @@ func (c *Classifier) parseClassificationResponse(response string, themes []core.
 
 	if err := json.Unmarshal([]byte(cleanResponse), &parsed); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON response: %w\nResponse: %s", err, response)
+	}
+
+	// Validate and normalize reader intent
+	readerIntent := strings.ToLower(strings.TrimSpace(parsed.ReaderIntent))
+	if readerIntent != IntentSkim && readerIntent != IntentRead && readerIntent != IntentDeepDive {
+		// Default to "read" if invalid
+		readerIntent = IntentRead
 	}
 
 	// Map theme names to theme IDs
@@ -282,6 +315,7 @@ func (c *Classifier) parseClassificationResponse(response string, themes []core.
 			ThemeName:      theme.Name,
 			RelevanceScore: classification.RelevanceScore,
 			Reasoning:      classification.Reasoning,
+			ReaderIntent:   readerIntent, // Include intent with each result
 		})
 	}
 

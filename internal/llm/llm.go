@@ -4,6 +4,7 @@ import (
 	"briefly/internal/core"
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"os" // Added to fetch API key from environment variable
 	"strconv"
@@ -16,7 +17,7 @@ import (
 
 const (
 	// DefaultModel is the default Gemini model to use for summarization.
-	DefaultModel = "gemini-flash-lite-latest" // Gemini Flash Lite (latest version)
+	DefaultModel = "gemini-3-flash-preview" // Gemini 3 Flash Preview
 	// DefaultEmbeddingModel is the default model for generating embeddings
 	DefaultEmbeddingModel = "gemini-embedding-001"
 	// DefaultEmbeddingDimensions is the output dimension for embeddings (Matryoshka)
@@ -666,6 +667,14 @@ func (c *Client) GenerateText(ctx context.Context, prompt string, options TextGe
 	resp, err := c.gClient.Models.GenerateContent(ctx, modelName, contents, config)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate text: %w", err)
+	}
+
+	// Debug: Check for truncation
+	if len(resp.Candidates) > 0 && resp.Candidates[0].FinishReason != "" {
+		finishReason := resp.Candidates[0].FinishReason
+		if finishReason != "STOP" && finishReason != "stop" {
+			log.Printf("[DEBUG] GenerateText: Non-normal finish reason: %s", finishReason)
+		}
 	}
 
 	text := resp.Text()

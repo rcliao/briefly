@@ -197,6 +197,33 @@ func (p *Pipeline) GenerateDigests(ctx context.Context, opts DigestOptions) ([]D
 	fmt.Printf("   ✓ Successfully processed %d/%d articles\n", stats.SuccessfulArticles, stats.TotalURLs)
 	fmt.Printf("   • Cache hits: %d, Cache misses: %d\n\n", stats.CacheHits, stats.CacheMisses)
 
+	// Step 2.3: Classify articles into themes (for tag-aware clustering)
+	if p.categorizer != nil {
+		fmt.Printf("🎨 Step 2.3/9: Classifying articles into themes...\n")
+		// Type-assert to ThemeCategorizer for batch method
+		if themeCategorizer, ok := p.categorizer.(*ThemeCategorizer); ok {
+			categorizedArticles, err := themeCategorizer.CategorizeArticles(ctx, articles, summaries)
+			if err != nil {
+				// Non-fatal: log warning but continue
+				fmt.Printf("   ⚠️  Theme classification failed: %v\n", err)
+			} else {
+				articles = categorizedArticles
+				// Count articles with themes assigned
+				themedCount := 0
+				for _, article := range articles {
+					if article.ThemeID != nil {
+						themedCount++
+					}
+				}
+				fmt.Printf("   ✓ Classified %d/%d articles into themes\n\n", themedCount, len(articles))
+			}
+		} else {
+			fmt.Printf("   ⚠️  Theme categorizer not available (using default categorizer)\n\n")
+		}
+	} else {
+		fmt.Printf("   ⚠️  Theme classification skipped (categorizer not configured)\n\n")
+	}
+
 	// Step 2.5: Classify articles into tags (Phase 1)
 	if p.tagClassifier != nil && p.tagRepo != nil {
 		fmt.Printf("🏷️  Step 2.5/9: Classifying articles into tags...\n")
@@ -874,8 +901,16 @@ func (p *Pipeline) generateClusterNarratives(ctx context.Context, clusters []cor
 		updatedClusters = append(updatedClusters, cluster)
 
 		fmt.Printf("           ✓ Generated narrative: %s\n", narrative.Title)
+		// Calculate word count from v3.1 fields (OneLiner + KeyDevelopments + KeyStats)
+		wordCount := len(strings.Fields(narrative.OneLiner))
+		for _, dev := range narrative.KeyDevelopments {
+			wordCount += len(strings.Fields(dev))
+		}
+		for _, stat := range narrative.KeyStats {
+			wordCount += len(strings.Fields(stat.Stat)) + len(strings.Fields(stat.Context))
+		}
 		fmt.Printf("           ✓ Synthesized %d articles into %d words\n",
-			len(narrative.ArticleRefs), len(narrative.Summary)/5)
+			len(narrative.ArticleRefs), wordCount)
 	}
 
 	if len(updatedClusters) == 0 {

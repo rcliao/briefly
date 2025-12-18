@@ -6,11 +6,30 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
 	"google.golang.org/genai"
 )
+
+// cleanJSONResponse cleans potential markdown wrappers and whitespace from LLM JSON responses
+func cleanJSONResponse(response string) string {
+	cleaned := strings.TrimSpace(response)
+
+	// Remove markdown code blocks (```json ... ``` or ``` ... ```)
+	if strings.HasPrefix(cleaned, "```json") {
+		cleaned = strings.TrimPrefix(cleaned, "```json")
+		cleaned = strings.TrimSuffix(cleaned, "```")
+		cleaned = strings.TrimSpace(cleaned)
+	} else if strings.HasPrefix(cleaned, "```") {
+		cleaned = strings.TrimPrefix(cleaned, "```")
+		cleaned = strings.TrimSuffix(cleaned, "```")
+		cleaned = strings.TrimSpace(cleaned)
+	}
+
+	return cleaned
+}
 
 // LLMClient defines the interface for LLM operations needed by the narrative generator
 type LLMClient interface {
@@ -36,10 +55,19 @@ type Statistic struct {
 	Context string `json:"context"` // Brief context explaining the stat with citations (e.g., "Database queries cut by agent-discovered caching pattern [3]")
 }
 
+// MustReadHighlight represents the single most impactful article for senior engineers
+type MustReadHighlight struct {
+	ArticleNum  int    `json:"article_num"`       // Citation number of the article [N]
+	Title       string `json:"title"`             // Article title
+	WhyMustRead string `json:"why_must_read"`     // 1-2 sentences explaining why engineers should prioritize this
+	ReadTime    int    `json:"read_time_minutes"` // Estimated reading time
+}
+
 // DigestContent contains all generated content for a digest (v3.0 scannable format)
 type DigestContent struct {
 	Title            string             `json:"title"`              // Generated title (20-40 chars STRICT)
 	TLDRSummary      string             `json:"tldr_summary"`       // One-sentence summary (40-75 chars STRICT)
+	MustRead         *MustReadHighlight `json:"must_read"`          // Single most impactful article for senior engineers (NEW v3.1)
 	TopDevelopments  []string           `json:"top_developments"`   // 3-5 bullet points with bold lead-ins + citations (NEW v3.0)
 	ByTheNumbers     []Statistic        `json:"by_the_numbers"`     // 3-5 key metrics/stats with context (NEW v3.0)
 	WhyItMatters     string             `json:"why_it_matters"`     // Single sentence connecting to reader impact (NEW v3.0)
@@ -81,7 +109,7 @@ func (g *Generator) GenerateClusterSummary(ctx context.Context, cluster core.Top
 	response, err := g.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
 		ResponseSchema: schema,
 		Temperature:    0.7,
-		MaxTokens:      1500,
+		MaxTokens:      8192, // Max tokens to ensure complete JSON output
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate cluster summary: %w", err)
@@ -225,7 +253,7 @@ func (g *Generator) GenerateDigestContent(ctx context.Context, clusters []core.T
 	response, err := g.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
 		ResponseSchema: schema,
 		Temperature:    0.7,
-		MaxTokens:      2000,
+		MaxTokens:      8192, // Max tokens to ensure complete JSON output
 	})
 	if err != nil {
 		// Fallback to simple generation if LLM fails
@@ -848,6 +876,20 @@ func (g *Generator) buildClusterNarrativeSchema() *genai.Schema {
 
 // parseClusterNarrative parses JSON response into ClusterNarrative
 func (g *Generator) parseClusterNarrative(jsonResponse string) (*core.ClusterNarrative, error) {
+	// Clean the response (remove markdown wrappers, trim whitespace)
+	cleaned := cleanJSONResponse(jsonResponse)
+
+	// Debug logging for troubleshooting
+	if len(cleaned) == 0 {
+		log.Printf("[DEBUG] parseClusterNarrative: Empty response after cleaning")
+		return nil, fmt.Errorf("empty JSON response")
+	}
+	if len(cleaned) < 100 {
+		log.Printf("[DEBUG] parseClusterNarrative: Short response (%d chars): %s", len(cleaned), cleaned)
+	} else {
+		log.Printf("[DEBUG] parseClusterNarrative: Response length: %d chars, first 200: %s...", len(cleaned), cleaned[:min(200, len(cleaned))])
+	}
+
 	var response struct {
 		Title          string   `json:"title"`
 		OneLiner       string   `json:"one_liner"`
@@ -862,8 +904,9 @@ func (g *Generator) parseClusterNarrative(jsonResponse string) (*core.ClusterNar
 		Confidence  float64  `json:"confidence"`
 	}
 
-	err := json.Unmarshal([]byte(jsonResponse), &response)
+	err := json.Unmarshal([]byte(cleaned), &response)
 	if err != nil {
+		log.Printf("[DEBUG] parseClusterNarrative: JSON parse error: %v", err)
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
@@ -958,6 +1001,25 @@ func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluste
 	prompt.WriteString("  ✓ \"Voice AI achieves 1-second latency with open models\" (54 chars)\n")
 	prompt.WriteString("  ✓ \"GitHub agents serve 3,000 devs across 160+ LLMs\" (51 chars)\n")
 	prompt.WriteString("  ✗ \"AI technology sees improvements in performance\" (49 chars) - vague, no metrics, no unification\n\n")
+
+	prompt.WriteString("**Must-Read (REQUIRED - single most impactful article):**\n")
+	prompt.WriteString("- PURPOSE: Highlight the ONE article every senior engineer should prioritize this week\n")
+	prompt.WriteString("- SELECTION CRITERIA (in priority order):\n")
+	prompt.WriteString("  1. Practical tools/frameworks engineers can use immediately\n")
+	prompt.WriteString("  2. Major technical breakthroughs with measurable impact\n")
+	prompt.WriteString("  3. Industry-shaping announcements affecting engineering practices\n")
+	prompt.WriteString("- REQUIRED FIELDS:\n")
+	prompt.WriteString("  • article_num: Citation number [N] of the selected article\n")
+	prompt.WriteString("  • title: Full article title\n")
+	prompt.WriteString("  • why_must_read: 1-2 sentences explaining WHY engineers should prioritize this\n")
+	prompt.WriteString("    - Focus on practical impact, not hype\n")
+	prompt.WriteString("    - Answer: 'What can I do with this information?'\n")
+	prompt.WriteString("    - Avoid generic phrases like 'game-changing' or 'revolutionary'\n")
+	prompt.WriteString("  • read_time_minutes: Estimated reading time (use article length / 200 words per minute)\n")
+	prompt.WriteString("- EXAMPLES:\n")
+	prompt.WriteString("  ✓ {\"article_num\": 3, \"title\": \"MCP Donated to Linux Foundation\", \"why_must_read\": \"MCP becomes the industry standard for AI tool integration. If you're building LLM-powered tools, this is the protocol to learn.\", \"read_time_minutes\": 8}\n")
+	prompt.WriteString("  ✓ {\"article_num\": 7, \"title\": \"Mistral Devstral 2 Released\", \"why_must_read\": \"Apache-licensed 123B coding model outperforms GPT-4 on code tasks. Drop-in replacement for teams restricted by proprietary licenses.\", \"read_time_minutes\": 5}\n")
+	prompt.WriteString("  ✗ {\"why_must_read\": \"This is a game-changing development in AI.\"} - too vague, no practical angle\n\n")
 
 	prompt.WriteString("**Top Developments (3-5 scannable bullets):**\n")
 	prompt.WriteString("- PURPOSE: Ultra-concise bullets for 30-second scanning by busy tech professionals\n")
@@ -1156,6 +1218,29 @@ func (g *Generator) buildDigestContentSchema() *genai.Schema {
 				Type:        genai.TypeString,
 				Description: "One-sentence summary (40-75 chars STRICT MAXIMUM)",
 			},
+			"must_read": {
+				Type:        genai.TypeObject,
+				Description: "Single most impactful article for senior engineers this week",
+				Properties: map[string]*genai.Schema{
+					"article_num": {
+						Type:        genai.TypeInteger,
+						Description: "Citation number of the article [1-N]",
+					},
+					"title": {
+						Type:        genai.TypeString,
+						Description: "Article title",
+					},
+					"why_must_read": {
+						Type:        genai.TypeString,
+						Description: "1-2 sentences explaining WHY engineers should prioritize this. Focus on practical impact, not hype.",
+					},
+					"read_time_minutes": {
+						Type:        genai.TypeInteger,
+						Description: "Estimated reading time in minutes",
+					},
+				},
+				Required: []string{"article_num", "title", "why_must_read", "read_time_minutes"},
+			},
 			"top_developments": {
 				Type:        genai.TypeArray,
 				Description: "3-5 bullet points with bold lead-ins + citations. Each bullet should start with **bold text** followed by description and citations [1][2]",
@@ -1234,18 +1319,38 @@ func (g *Generator) buildDigestContentSchema() *genai.Schema {
 				},
 			},
 		},
-		Required: []string{"title", "tldr_summary", "top_developments", "by_the_numbers", "why_it_matters", "key_moments"},
+		Required: []string{"title", "tldr_summary", "must_read", "top_developments", "by_the_numbers", "why_it_matters", "key_moments"},
 	}
 }
 
 // parseStructuredDigestContent parses JSON response from LLM into DigestContent (v3.0 scannable format)
 func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestContent, error) {
+	// Clean the response (remove markdown wrappers, trim whitespace)
+	cleaned := cleanJSONResponse(jsonResponse)
+
+	// Debug logging for troubleshooting
+	if len(cleaned) == 0 {
+		log.Printf("[DEBUG] parseStructuredDigestContent: Empty response after cleaning")
+		return nil, fmt.Errorf("empty JSON response")
+	}
+	if len(cleaned) < 100 {
+		log.Printf("[DEBUG] parseStructuredDigestContent: Short response (%d chars): %s", len(cleaned), cleaned)
+	} else {
+		log.Printf("[DEBUG] parseStructuredDigestContent: Response length: %d chars, first 200: %s...", len(cleaned), cleaned[:min(200, len(cleaned))])
+	}
+
 	// Define a temporary struct matching the JSON schema
 	var response struct {
-		Title            string   `json:"title"`
-		TLDRSummary      string   `json:"tldr_summary"`
-		TopDevelopments  []string `json:"top_developments"`
-		ByTheNumbers     []struct {
+		Title       string `json:"title"`
+		TLDRSummary string `json:"tldr_summary"`
+		MustRead    *struct {
+			ArticleNum  int    `json:"article_num"`
+			Title       string `json:"title"`
+			WhyMustRead string `json:"why_must_read"`
+			ReadTime    int    `json:"read_time_minutes"`
+		} `json:"must_read"`
+		TopDevelopments []string `json:"top_developments"`
+		ByTheNumbers    []struct {
 			Stat    string `json:"stat"`
 			Context string `json:"context"`
 		} `json:"by_the_numbers"`
@@ -1263,8 +1368,9 @@ func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestCo
 	}
 
 	// Parse JSON
-	err := json.Unmarshal([]byte(jsonResponse), &response)
+	err := json.Unmarshal([]byte(cleaned), &response)
 	if err != nil {
+		log.Printf("[DEBUG] parseStructuredDigestContent: JSON parse error: %v", err)
 		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
@@ -1278,6 +1384,16 @@ func (g *Generator) parseStructuredDigestContent(jsonResponse string) (*DigestCo
 		ExecutiveSummary: response.ExecutiveSummary, // Keep for backward compatibility
 		KeyMoments:       make([]core.KeyMoment, 0, len(response.KeyMoments)),
 		Perspectives:     make([]core.Perspective, 0, len(response.Perspectives)),
+	}
+
+	// Convert must read highlight
+	if response.MustRead != nil {
+		content.MustRead = &MustReadHighlight{
+			ArticleNum:  response.MustRead.ArticleNum,
+			Title:       response.MustRead.Title,
+			WhyMustRead: response.MustRead.WhyMustRead,
+			ReadTime:    response.MustRead.ReadTime,
+		}
 	}
 
 	// Convert by the numbers

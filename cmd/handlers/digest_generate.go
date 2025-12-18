@@ -179,7 +179,7 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 	// Initialize LLM client for summaries and narrative
 	modelName := cfg.AI.Gemini.Model
 	if modelName == "" {
-		modelName = "gemini-flash-lite-latest"
+		modelName = "gemini-3-flash-preview"
 	}
 
 	llmClient, err := llm.NewClient(modelName)
@@ -572,7 +572,15 @@ func generateDigestsWithClustering(ctx context.Context, db *persistence.Postgres
 
 		// Update cluster with generated narrative
 		clusters[i].Narrative = clusterNarrative
-		fmt.Printf("   ✓ Generated: %s (%d words)\n", clusterNarrative.Title, len(clusterNarrative.Summary)/5)
+		// Calculate word count from v3.1 fields (OneLiner + KeyDevelopments + KeyStats)
+		wordCount := len(strings.Fields(clusterNarrative.OneLiner))
+		for _, dev := range clusterNarrative.KeyDevelopments {
+			wordCount += len(strings.Fields(dev))
+		}
+		for _, stat := range clusterNarrative.KeyStats {
+			wordCount += len(strings.Fields(stat.Stat)) + len(strings.Fields(stat.Context))
+		}
+		fmt.Printf("   ✓ Generated: %s (%d words)\n", clusterNarrative.Title, wordCount)
 	}
 
 	// Step 5: Generate one digest per cluster (using cluster narratives - Stage 2)
@@ -685,6 +693,7 @@ func generateDigestsWithClustering(ctx context.Context, db *persistence.Postgres
 			TopDevelopments: digestContent.TopDevelopments,
 			ByTheNumbers:    convertStatistics(digestContent.ByTheNumbers),
 			WhyItMatters:    digestContent.WhyItMatters,
+			MustRead:        convertMustRead(digestContent.MustRead),
 
 			// Legacy fields for backward compatibility
 			ArticleGroups: articleGroups, // FIXED: Now populated for homepage theme display
@@ -759,6 +768,19 @@ func convertStatistics(narrativeStats []narrative.Statistic) []core.Statistic {
 	return coreStats
 }
 
+// convertMustRead converts narrative.MustReadHighlight to core.MustReadHighlight
+func convertMustRead(narrativeMustRead *narrative.MustReadHighlight) *core.MustReadHighlight {
+	if narrativeMustRead == nil {
+		return nil
+	}
+	return &core.MustReadHighlight{
+		ArticleNum:  narrativeMustRead.ArticleNum,
+		Title:       narrativeMustRead.Title,
+		WhyMustRead: narrativeMustRead.WhyMustRead,
+		ReadTime:    narrativeMustRead.ReadTime,
+	}
+}
+
 // saveDigestMarkdown renders digest to LinkedIn-ready markdown file
 func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 	// Create output directory if needed
@@ -794,28 +816,65 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 	}
 
 	content.WriteString(fmt.Sprintf("# 🗞️ %s\n\n", digestTitle))
-	content.WriteString(fmt.Sprintf("*%d Articles Across %d Themes*\n\n",
-		digest.Metadata.ArticleCount,
-		len(digest.ArticleGroups)))
+
+	// Calculate total reading time
+	totalReadTime := 0
+	for _, group := range digest.ArticleGroups {
+		for _, article := range group.Articles {
+			if article.EstimatedReadMinutes > 0 {
+				totalReadTime += article.EstimatedReadMinutes
+			}
+		}
+	}
+	if totalReadTime > 0 && digest.Metadata.TotalReadMinutes == 0 {
+		digest.Metadata.TotalReadMinutes = totalReadTime
+	}
+
+	// Header with reading time
+	if digest.Metadata.TotalReadMinutes > 0 {
+		content.WriteString(fmt.Sprintf("*%d articles • %d min total read time*\n\n",
+			digest.Metadata.ArticleCount,
+			digest.Metadata.TotalReadMinutes))
+	} else {
+		content.WriteString(fmt.Sprintf("*%d Articles Across %d Themes*\n\n",
+			digest.Metadata.ArticleCount,
+			len(digest.ArticleGroups)))
+	}
 	content.WriteString("---\n\n")
+
+	// Must-Read Highlight Section (v3.1 - appears first)
+	if digest.MustRead != nil && digest.MustRead.Title != "" {
+		content.WriteString("## 🎯 This Week's Must-Read\n\n")
+		content.WriteString(fmt.Sprintf("**[%s]** [%d]\n\n", digest.MustRead.Title, digest.MustRead.ArticleNum))
+		content.WriteString(fmt.Sprintf("%s\n\n", digest.MustRead.WhyMustRead))
+		if digest.MustRead.ReadTime > 0 {
+			content.WriteString(fmt.Sprintf("📖 %d min read\n\n", digest.MustRead.ReadTime))
+		}
+		content.WriteString("---\n\n")
+	}
 
 	// Quick Scan Section (v3.0 scannable format) or Executive Summary (legacy)
 	if len(digest.TopDevelopments) > 0 {
 		// NEW v3.0 scannable format - simplified single list
-		content.WriteString("## 🎯 Quick Scan\n\n")
+		content.WriteString("## 📊 Quick Numbers\n\n")
+
+		// By the numbers first for quick scanning
+		for _, stat := range digest.ByTheNumbers {
+			content.WriteString(fmt.Sprintf("• **%s** - %s\n", stat.Stat, stat.Context))
+		}
+
+		content.WriteString("\n---\n\n")
+
+		// Top developments
+		content.WriteString("## 🔥 Top Developments\n\n")
 
 		// One sentence executive summary (why it matters)
 		if digest.WhyItMatters != "" {
 			content.WriteString(fmt.Sprintf("%s\n\n", digest.WhyItMatters))
 		}
 
-		// Merged bullet list: developments + numbers
 		for _, dev := range digest.TopDevelopments {
 			content.WriteString(fmt.Sprintf("• %s\n", dev))
-		}
-
-		for _, stat := range digest.ByTheNumbers {
-			content.WriteString(fmt.Sprintf("• **%s** - %s\n", stat.Stat, stat.Context))
 		}
 
 		content.WriteString("\n---\n\n")
@@ -826,82 +885,116 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 		content.WriteString("\n\n---\n\n")
 	}
 
-	// Track article numbering across all clusters
+	// Collect all articles with their original numbers for intent-based grouping
+	type numberedArticle struct {
+		num     int
+		article core.Article
+	}
+
+	allArticles := make([]numberedArticle, 0)
 	articleNum := 1
-
-	// Theme sections
 	for _, group := range digest.ArticleGroups {
-		// Theme header with emoji based on theme name
-		emoji := getThemeEmoji(group.Theme)
-		content.WriteString(fmt.Sprintf("## %s %s\n\n", emoji, group.Theme))
-
-		// Build citation number mapping (cluster-relative → digest-global)
-		// This is needed because cluster narratives use [1], [2], [3] for articles in the cluster,
-		// but the final digest numbers articles sequentially across all clusters
-		citationMap := make(map[int]int)
-		if group.ClusterNarrative != nil {
-			for i, refNum := range group.ClusterNarrative.ArticleRefs {
-				citationMap[refNum] = articleNum + i
-			}
-		}
-
-		// Theme summary - check for new bullet format first, then fallback to legacy paragraph
-		if group.ClusterNarrative != nil && len(group.ClusterNarrative.KeyDevelopments) > 0 {
-			// NEW v3.1: Bullet-based cluster summary with remapped citations
-			if group.ClusterNarrative.OneLiner != "" {
-				remappedOneLiner := remapCitations(group.ClusterNarrative.OneLiner, citationMap)
-				content.WriteString(fmt.Sprintf("%s\n\n", remappedOneLiner))
-			}
-
-			// Key developments bullets
-			for _, dev := range group.ClusterNarrative.KeyDevelopments {
-				remappedDev := remapCitations(dev, citationMap)
-				content.WriteString(fmt.Sprintf("• %s\n", remappedDev))
-			}
-
-			// Key stats bullets
-			for _, stat := range group.ClusterNarrative.KeyStats {
-				remappedContext := remapCitations(stat.Context, citationMap)
-				content.WriteString(fmt.Sprintf("• **%s** - %s\n", stat.Stat, remappedContext))
-			}
-
-			content.WriteString("\n")
-		} else if group.Summary != "" && !strings.Contains(group.Summary, "covering:") {
-			// LEGACY: Paragraph format fallback
-			content.WriteString(fmt.Sprintf("*%s*\n\n", group.Summary))
-		}
-
-		// Articles in this theme (with sequential numbering)
 		for _, article := range group.Articles {
-			// Use numbered format instead of header
-			content.WriteString(fmt.Sprintf("**%d. %s**\n\n", articleNum, article.Title))
-			content.WriteString(fmt.Sprintf("🔗 [Read Article](%s)\n\n", article.URL))
-
-			// Find summary
-			var summary *core.Summary
-			for _, s := range digest.Summaries {
-				for _, aid := range s.ArticleIDs {
-					if aid == article.ID {
-						summary = &s
-						break
-					}
-				}
-				if summary != nil {
-					break
-				}
-			}
-
-			if summary != nil && summary.SummaryText != "" {
-				content.WriteString(summary.SummaryText)
-				content.WriteString("\n\n")
-			}
-
-			if article.ThemeRelevanceScore != nil {
-				content.WriteString(fmt.Sprintf("*Relevance: %.0f%%*\n\n", *article.ThemeRelevanceScore*100))
-			}
-
-			content.WriteString("---\n\n")
+			allArticles = append(allArticles, numberedArticle{num: articleNum, article: article})
 			articleNum++
+		}
+	}
+
+	// Check if any articles have intent classification
+	hasIntentClassification := false
+	for _, na := range allArticles {
+		if na.article.ReaderIntent != "" {
+			hasIntentClassification = true
+			break
+		}
+	}
+
+	// Group articles by intent if available, otherwise fall back to theme grouping
+	if hasIntentClassification {
+		// Intent-based grouping (v3.1)
+		intentGroups := map[string][]numberedArticle{
+			"skim":      {},
+			"read":      {},
+			"deep_dive": {},
+			"":          {}, // Uncategorized
+		}
+
+		for _, na := range allArticles {
+			intent := strings.ToLower(na.article.ReaderIntent)
+			if intent != "skim" && intent != "read" && intent != "deep_dive" {
+				intent = "" // Uncategorized
+			}
+			intentGroups[intent] = append(intentGroups[intent], na)
+		}
+
+		// Render intent sections in order: skim, read, deep_dive
+		intentOrder := []string{"skim", "read", "deep_dive"}
+		for _, intent := range intentOrder {
+			articles := intentGroups[intent]
+			if len(articles) == 0 {
+				continue
+			}
+
+			// Intent section header
+			content.WriteString(fmt.Sprintf("## %s\n\n", getIntentSectionTitle(intent)))
+			content.WriteString(fmt.Sprintf("*%s*\n\n", getIntentDescription(intent)))
+
+			// Render articles in this intent group
+			for _, na := range articles {
+				renderArticleEntry(&content, na.num, na.article, digest.Summaries)
+			}
+		}
+
+		// Render uncategorized if any
+		if len(intentGroups[""]) > 0 {
+			content.WriteString("## 📌 Other\n\n")
+			for _, na := range intentGroups[""] {
+				renderArticleEntry(&content, na.num, na.article, digest.Summaries)
+			}
+		}
+	} else {
+		// Fall back to theme-based grouping (legacy)
+		articleNum = 1
+		for _, group := range digest.ArticleGroups {
+			// Theme header with emoji based on theme name
+			emoji := getThemeEmoji(group.Theme)
+			content.WriteString(fmt.Sprintf("## %s %s\n\n", emoji, group.Theme))
+
+			// Build citation number mapping (cluster-relative → digest-global)
+			citationMap := make(map[int]int)
+			if group.ClusterNarrative != nil {
+				for i, refNum := range group.ClusterNarrative.ArticleRefs {
+					citationMap[refNum] = articleNum + i
+				}
+			}
+
+			// Theme summary - check for new bullet format first, then fallback to legacy paragraph
+			if group.ClusterNarrative != nil && len(group.ClusterNarrative.KeyDevelopments) > 0 {
+				if group.ClusterNarrative.OneLiner != "" {
+					remappedOneLiner := remapCitations(group.ClusterNarrative.OneLiner, citationMap)
+					content.WriteString(fmt.Sprintf("%s\n\n", remappedOneLiner))
+				}
+
+				for _, dev := range group.ClusterNarrative.KeyDevelopments {
+					remappedDev := remapCitations(dev, citationMap)
+					content.WriteString(fmt.Sprintf("• %s\n", remappedDev))
+				}
+
+				for _, stat := range group.ClusterNarrative.KeyStats {
+					remappedContext := remapCitations(stat.Context, citationMap)
+					content.WriteString(fmt.Sprintf("• **%s** - %s\n", stat.Stat, remappedContext))
+				}
+
+				content.WriteString("\n")
+			} else if group.Summary != "" && !strings.Contains(group.Summary, "covering:") {
+				content.WriteString(fmt.Sprintf("*%s*\n\n", group.Summary))
+			}
+
+			// Articles in this theme
+			for _, article := range group.Articles {
+				renderArticleEntry(&content, articleNum, article, digest.Summaries)
+				articleNum++
+			}
 		}
 	}
 
@@ -979,6 +1072,94 @@ func getThemeEmoji(theme string) string {
 	}
 
 	return "📌" // Default
+}
+
+// getIntentBadge returns a descriptive badge for reader intent
+func getIntentBadge(intent string) string {
+	switch strings.ToLower(intent) {
+	case "skim":
+		return "📢 Quick awareness item"
+	case "read":
+		return "🛠️ Practical for builders"
+	case "deep_dive":
+		return "🔬 Deep dive for specialists"
+	default:
+		return ""
+	}
+}
+
+// getIntentEmoji returns an emoji for reader intent
+func getIntentEmoji(intent string) string {
+	switch strings.ToLower(intent) {
+	case "skim":
+		return "📢"
+	case "read":
+		return "🛠️"
+	case "deep_dive":
+		return "🔬"
+	default:
+		return "📌"
+	}
+}
+
+// getIntentSectionTitle returns a section title for reader intent
+func getIntentSectionTitle(intent string) string {
+	switch strings.ToLower(intent) {
+	case "skim":
+		return "📢 Industry News (Skim)"
+	case "read":
+		return "🛠️ For Builders (Read)"
+	case "deep_dive":
+		return "🔬 Deep Dives (Optional)"
+	default:
+		return "📌 Other"
+	}
+}
+
+// getIntentDescription returns a description for the intent section
+func getIntentDescription(intent string) string {
+	switch strings.ToLower(intent) {
+	case "skim":
+		return "Quick awareness items - partnerships, funding, releases."
+	case "read":
+		return "Practical tools and techniques for your projects."
+	case "deep_dive":
+		return "Research and architecture for specialists."
+	default:
+		return ""
+	}
+}
+
+// renderArticleEntry renders a single article entry in the digest
+func renderArticleEntry(content *strings.Builder, articleNum int, article core.Article, summaries []core.Summary) {
+	// Use numbered format with reading time
+	if article.EstimatedReadMinutes > 0 {
+		content.WriteString(fmt.Sprintf("**%d. %s** 📖 %d min\n\n", articleNum, article.Title, article.EstimatedReadMinutes))
+	} else {
+		content.WriteString(fmt.Sprintf("**%d. %s**\n\n", articleNum, article.Title))
+	}
+	content.WriteString(fmt.Sprintf("🔗 [Read Article](%s)\n\n", article.URL))
+
+	// Find summary
+	var summary *core.Summary
+	for _, s := range summaries {
+		for _, aid := range s.ArticleIDs {
+			if aid == article.ID {
+				summary = &s
+				break
+			}
+		}
+		if summary != nil {
+			break
+		}
+	}
+
+	if summary != nil && summary.SummaryText != "" {
+		content.WriteString(summary.SummaryText)
+		content.WriteString("\n\n")
+	}
+
+	content.WriteString("---\n\n")
 }
 
 // logDigestQualityMetrics calculates and logs quality metrics for a digest

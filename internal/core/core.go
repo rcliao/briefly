@@ -46,12 +46,14 @@ type Article struct {
 	// Theme classification (Phase 1)
 	ThemeID             *string   `json:"theme_id,omitempty"`              // Primary theme assigned to this article
 	ThemeRelevanceScore *float64  `json:"theme_relevance_score,omitempty"` // Relevance score (0.0-1.0) for the assigned theme
+	ReaderIntent        string    `json:"reader_intent,omitempty"`         // Reader intent: "skim", "read", or "deep_dive"
 	DatePublished       time.Time `json:"date_published"`                  // Original publication date from feed
 
 	// Content-specific metadata (conditional)
-	Duration  int    `json:"duration,omitempty"`   // YouTube only
-	Channel   string `json:"channel,omitempty"`    // YouTube only
-	PageCount int    `json:"page_count,omitempty"` // PDF only
+	Duration             int    `json:"duration,omitempty"`               // YouTube only
+	Channel              string `json:"channel,omitempty"`                // YouTube only
+	PageCount            int    `json:"page_count,omitempty"`             // PDF only
+	EstimatedReadMinutes int    `json:"estimated_read_minutes,omitempty"` // Estimated reading time in minutes
 
 	// User interaction
 	ExplorationCount int      `json:"exploration_count"`     // How often user clicked through
@@ -119,9 +121,10 @@ type Digest struct {
 	Articles      []Article     `json:"articles,omitempty"`     // Associated articles (for API responses) - v2.0
 
 	// v3.0 scannable format fields (NEW)
-	TopDevelopments []string    `json:"top_developments,omitempty"` // 3-5 bullet points with bold lead-ins + citations
-	ByTheNumbers    []Statistic `json:"by_the_numbers,omitempty"`   // 3-5 key metrics/statistics
-	WhyItMatters    string      `json:"why_it_matters,omitempty"`   // Single sentence connecting to reader impact
+	TopDevelopments []string           `json:"top_developments,omitempty"` // 3-5 bullet points with bold lead-ins + citations
+	ByTheNumbers    []Statistic        `json:"by_the_numbers,omitempty"`   // 3-5 key metrics/statistics
+	WhyItMatters    string             `json:"why_it_matters,omitempty"`   // Single sentence connecting to reader impact
+	MustRead        *MustReadHighlight `json:"must_read,omitempty"`        // v3.1: Single most impactful article highlight
 
 	// v3.0 new structure (legacy, being phased out)
 	Signal        Signal         `json:"signal,omitempty"`         // Primary insight
@@ -148,6 +151,14 @@ type Digest struct {
 	AlertsSummary       string   `json:"alerts_summary,omitempty"`       // Legacy alerts
 	TrendsSummary       string   `json:"trends_summary,omitempty"`       // Legacy trends
 	ResearchSuggestions []string `json:"research_suggestions,omitempty"` // Legacy research
+}
+
+// MustReadHighlight represents the single most impactful article for senior engineers (v3.1)
+type MustReadHighlight struct {
+	ArticleNum  int    `json:"article_num"`       // Citation number of the article [N]
+	Title       string `json:"title"`             // Article title
+	WhyMustRead string `json:"why_must_read"`     // 1-2 sentences explaining why engineers should prioritize this
+	ReadTime    int    `json:"read_time_minutes"` // Estimated reading time
 }
 
 // KeyMoment represents an important quote from an article in the digest (v2.0)
@@ -347,15 +358,16 @@ type ArticleGroup struct {
 
 // DigestMetadata contains digest processing information (v3.0)
 type DigestMetadata struct {
-	Title          string         `json:"title"`
-	TLDRSummary    string         `json:"tldr_summary"` // One-line summary for homepage preview
-	KeyMoments     []string       `json:"key_moments"`  // 3-5 key developments/highlights
-	DateGenerated  time.Time      `json:"date_generated"`
-	WordCount      int            `json:"word_count"`
-	ArticleCount   int            `json:"article_count"`
-	ProcessingTime time.Duration  `json:"processing_time"`
-	ProcessingCost ProcessingCost `json:"processing_cost"`
-	QualityScore   float64        `json:"quality_score"` // Overall digest quality
+	Title            string         `json:"title"`
+	TLDRSummary      string         `json:"tldr_summary"` // One-line summary for homepage preview
+	KeyMoments       []string       `json:"key_moments"`  // 3-5 key developments/highlights
+	DateGenerated    time.Time      `json:"date_generated"`
+	WordCount        int            `json:"word_count"`
+	ArticleCount     int            `json:"article_count"`
+	TotalReadMinutes int            `json:"total_read_minutes"` // Total reading time for all articles
+	ProcessingTime   time.Duration  `json:"processing_time"`
+	ProcessingCost   ProcessingCost `json:"processing_cost"`
+	QualityScore     float64        `json:"quality_score"` // Overall digest quality
 }
 
 // UserFeedback captures user ratings and comments (v3.0)

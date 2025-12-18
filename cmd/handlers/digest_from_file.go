@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -105,7 +106,7 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 	// Initialize LLM client
 	modelName := cfg.AI.Gemini.Model
 	if modelName == "" {
-		modelName = "gemini-flash-lite-latest"
+		modelName = "gemini-3-flash-preview"
 	}
 
 	fmt.Printf("🔧 Initializing AI client (model: %s)...\n", modelName)
@@ -160,6 +161,10 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 			cachedArticle, err := cache.GetCachedArticle(link.URL, 24*time.Hour)
 			if err == nil && cachedArticle != nil {
 				article = cachedArticle
+				// Calculate reading time if not set (for older cached articles)
+				if article.EstimatedReadMinutes == 0 {
+					article.EstimatedReadMinutes = fetch.CalculateReadingTime(article)
+				}
 				fmt.Println("           ✓ Cache hit")
 			}
 		}
@@ -248,7 +253,13 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 
 		if classification != nil {
 			articles[i].ThemeID = &classification.ThemeID
-			fmt.Printf("           ✓ Theme: %s (score: %.2f)\n", classification.ThemeName, classification.RelevanceScore)
+			articles[i].ReaderIntent = classification.ReaderIntent
+			// Log intent along with theme
+			intentLabel := classification.ReaderIntent
+			if intentLabel == "" {
+				intentLabel = "unclassified"
+			}
+			fmt.Printf("           ✓ Theme: %s (score: %.2f) | Intent: %s\n", classification.ThemeName, classification.RelevanceScore, intentLabel)
 		} else {
 			fmt.Println("           ⚠ No theme match above threshold")
 		}
@@ -347,7 +358,15 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 		}
 
 		clusters[i].Narrative = clusterNarrative
-		fmt.Printf("   ✓ Generated: %s (%d words)\n", clusterNarrative.Title, len(clusterNarrative.Summary)/5)
+		// Calculate word count from v3.1 fields (OneLiner + KeyDevelopments + KeyStats)
+		wordCount := len(strings.Fields(clusterNarrative.OneLiner))
+		for _, dev := range clusterNarrative.KeyDevelopments {
+			wordCount += len(strings.Fields(dev))
+		}
+		for _, stat := range clusterNarrative.KeyStats {
+			wordCount += len(strings.Fields(stat.Stat)) + len(strings.Fields(stat.Context))
+		}
+		fmt.Printf("   ✓ Generated: %s (%d words)\n", clusterNarrative.Title, wordCount)
 	}
 
 	// Step 8: Generate unified executive summary from ALL cluster narratives
@@ -427,6 +446,7 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 		TopDevelopments: digestContent.TopDevelopments,
 		ByTheNumbers:    convertStatistics(digestContent.ByTheNumbers),
 		WhyItMatters:    digestContent.WhyItMatters,
+		MustRead:        convertMustRead(digestContent.MustRead),
 
 		ArticleGroups: articleGroups,
 		DigestSummary: digestContent.ExecutiveSummary,
