@@ -118,26 +118,6 @@ func (c *Client) generateContent(ctx context.Context, prompt string) (string, er
 	return text, nil
 }
 
-// generateContentWithModel is a helper that uses a specific model
-func (c *Client) generateContentWithModel(ctx context.Context, modelName, prompt string) (string, error) {
-	contents := []*genai.Content{{
-		Parts: []*genai.Part{{Text: prompt}},
-		Role:  "user",
-	}}
-
-	resp, err := c.gClient.Models.GenerateContent(ctx, modelName, contents, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate content: %w", err)
-	}
-
-	text := resp.Text()
-	if text == "" {
-		return "", fmt.Errorf("empty response from model")
-	}
-
-	return text, nil
-}
-
 // SummarizeArticleText takes an Article object, extracts its CleanedText,
 // and returns a Summary object.
 func (c *Client) SummarizeArticleText(article core.Article) (core.Summary, error) {

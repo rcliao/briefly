@@ -236,7 +236,7 @@ func runSearchSimilar(articleID string, limit int, threshold float64) error {
 		return fmt.Errorf("failed to get article: %w", err)
 	}
 
-	if article.Embedding == nil || len(article.Embedding) == 0 {
+	if len(article.Embedding) == 0 {
 		return fmt.Errorf("article %s has no embedding", articleID)
 	}
 
@@ -334,12 +334,4 @@ func runSearchStats() error {
 	fmt.Println()
 
 	return nil
-}
-
-// truncate truncates a string to a maximum length
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
 }

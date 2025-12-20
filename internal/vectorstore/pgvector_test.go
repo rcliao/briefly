@@ -187,7 +187,9 @@ func TestPgVectorIntegration(t *testing.T) {
 
 		// Get tag name
 		var tagName string
-		db.QueryRowContext(ctx, "SELECT name FROM tags WHERE id = $1", tagID).Scan(&tagName)
+		if err := db.QueryRowContext(ctx, "SELECT name FROM tags WHERE id = $1", tagID).Scan(&tagName); err != nil {
+			t.Logf("Warning: could not get tag name: %v", err)
+		}
 
 		t.Logf("🏷️  Testing tag-aware search within tag: \"%s\"", tagName)
 		t.Logf("   Query article: \"%s\"", title)
@@ -270,7 +272,10 @@ func TestPgVectorIntegration(t *testing.T) {
 		keywordCount := 0
 		for rows.Next() {
 			var id, title string
-			rows.Scan(&id, &title)
+			if err := rows.Scan(&id, &title); err != nil {
+				t.Logf("Warning: scan error: %v", err)
+				continue
+			}
 			keywordCount++
 			t.Logf("      [%d] %s", keywordCount, title)
 		}
@@ -359,7 +364,10 @@ func TestPgVectorIntegration(t *testing.T) {
 		var queries []testQuery
 		for rows.Next() {
 			var q testQuery
-			rows.Scan(&q.id, &q.embedding)
+			if err := rows.Scan(&q.id, &q.embedding); err != nil {
+				t.Logf("Warning: scan error: %v", err)
+				continue
+			}
 			queries = append(queries, q)
 		}
 
@@ -467,7 +475,6 @@ func TestPgVectorStore(t *testing.T) {
 
 // generateRandomEmbedding creates a random normalized embedding
 func generateRandomEmbedding(dims int) []float64 {
-	rand.Seed(time.Now().UnixNano())
 	embedding := make([]float64, dims)
 	var sumSquares float64
 
