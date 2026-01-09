@@ -30,6 +30,7 @@ func NewDigestFromFileCmd() *cobra.Command {
 		numClusters    int
 		noCache        bool
 		themeThreshold float64
+		outputFormat   string
 	)
 
 	cmd := &cobra.Command{
@@ -44,7 +45,7 @@ This command (Phase 1.5 - Digest from File):
   • Classifies articles by theme
   • Clusters articles by topic similarity
   • Creates hierarchical summaries (cluster narratives → executive summary)
-  • Renders LinkedIn-ready markdown
+  • Renders LinkedIn-ready markdown (or Slack format with --format slack)
   • No database persistence (lightweight, in-memory processing)
 
 Perfect for weekly digests from manually curated URLs.
@@ -60,10 +61,13 @@ Examples:
   briefly digest from-file input/weekly.md --no-cache
 
   # Specify number of clusters
-  briefly digest from-file input/weekly.md --clusters 5`,
+  briefly digest from-file input/weekly.md --clusters 5
+
+  # Generate Slack-optimized digest
+  briefly digest from-file input/weekly.md --format slack`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDigestFromFile(cmd.Context(), args[0], outputDir, numClusters, noCache, themeThreshold)
+			return runDigestFromFile(cmd.Context(), args[0], outputDir, numClusters, noCache, themeThreshold, outputFormat)
 		},
 	}
 
@@ -71,11 +75,12 @@ Examples:
 	cmd.Flags().IntVar(&numClusters, "clusters", 0, "Number of clusters (0 = auto-determine)")
 	cmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable caching (fetch fresh content)")
 	cmd.Flags().Float64Var(&themeThreshold, "theme-threshold", 0.4, "Minimum theme relevance score (0.0-1.0)")
+	cmd.Flags().StringVar(&outputFormat, "format", "markdown", "Output format: markdown (default), slack")
 
 	return cmd
 }
 
-func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, numClusters int, noCache bool, themeThreshold float64) error {
+func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, numClusters int, noCache bool, themeThreshold float64, outputFormat string) error {
 	startTime := time.Now()
 	log := logger.Get()
 	log.Info("Starting digest generation from file",
@@ -83,6 +88,7 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 		"output_dir", outputDir,
 		"clusters", numClusters,
 		"no_cache", noCache,
+		"format", outputFormat,
 	)
 
 	// Load configuration
@@ -369,6 +375,11 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 		fmt.Printf("   ✓ Generated: %s (%d words)\n", clusterNarrative.Title, wordCount)
 	}
 
+	// Handle Slack format - generate and render separately
+	if outputFormat == "slack" {
+		return generateSlackDigest(ctx, narrativeGen, clusters, articleMap, summaryMap, articles, outputDir, startTime, inputFile, len(links))
+	}
+
 	// Step 8: Generate unified executive summary from ALL cluster narratives
 	fmt.Printf("\n✨ Step 8/9: Generating unified executive summary from all clusters...\n")
 
@@ -492,4 +503,168 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 	fmt.Println("   • Share on LinkedIn or your preferred platform")
 
 	return nil
+}
+
+// generateSlackDigest handles Slack format digest generation
+func generateSlackDigest(ctx context.Context, narrativeGen *narrative.Generator, clusters []core.TopicCluster, articleMap map[string]core.Article, summaryMap map[string]core.Summary, articles []core.Article, outputDir string, startTime time.Time, inputFile string, totalLinks int) error {
+	log := logger.Get()
+
+	fmt.Printf("\n📱 Step 8/9: Generating Slack-formatted digest...\n")
+
+	slackContent, err := narrativeGen.GenerateSlackDigest(ctx, clusters, articleMap, summaryMap)
+	if err != nil {
+		log.Error("Failed to generate Slack digest", "error", err)
+		return fmt.Errorf("failed to generate Slack digest: %w", err)
+	}
+
+	fmt.Printf("   ✓ Generated Slack digest: %s\n", slackContent.WeekRange)
+	fmt.Printf("      Big 3: %d items\n", len(slackContent.Big3))
+	fmt.Printf("      Also on radar: %d items\n", len(slackContent.AlsoOnRadar))
+	fmt.Printf("      Thread content: %d items\n", len(slackContent.ThreadContent))
+
+	// Step 9: Render Slack format
+	fmt.Printf("\n📄 Step 9/9: Rendering Slack markdown...\n")
+
+	output := renderSlackFormat(slackContent, articles, clusters)
+
+	// Save to file
+	timestamp := time.Now().Format("2006-01-02")
+	filename := fmt.Sprintf("digest_slack_%s.md", timestamp)
+	outputPath := fmt.Sprintf("%s/%s", outputDir, filename)
+
+	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+		return fmt.Errorf("failed to write Slack digest: %w", err)
+	}
+
+	fmt.Printf("   ✓ Saved: %s\n", outputPath)
+
+	duration := time.Since(startTime)
+
+	// Print summary
+	fmt.Printf("\n✅ Successfully generated Slack digest!\n")
+	fmt.Printf("   Week: %s\n", slackContent.WeekRange)
+	fmt.Printf("   Input file: %s\n", inputFile)
+	fmt.Printf("   Total URLs: %d\n", totalLinks)
+	fmt.Printf("   Articles fetched: %d\n", len(articles))
+	fmt.Printf("   Output file: %s\n", outputPath)
+	fmt.Printf("   Duration: %s\n", duration.Round(time.Millisecond))
+
+	fmt.Println("\n💡 Next steps:")
+	fmt.Println("   • Copy the main content to Slack")
+	fmt.Println("   • Post thread content as replies")
+	fmt.Println("   • File:", outputPath)
+
+	return nil
+}
+
+// SlackMessageChunk represents a chunked message for Slack
+type SlackMessageChunk struct {
+	Title   string // e.g., "Thread 1/3", "Thread 2/3"
+	Content string
+}
+
+// SlackChunkLimit is the max characters per Slack message (leaving buffer for formatting)
+const SlackChunkLimit = 3000
+
+// renderSlackFormat renders SlackDigestContent to Slack mrkdwn format with chunked thread content
+func renderSlackFormat(content *narrative.SlackDigestContent, articles []core.Article, clusters []core.TopicCluster) string {
+	var out strings.Builder
+
+	// Build article URL map (1-based citation number -> URL)
+	articleURLs := buildArticleURLMap(articles, clusters)
+
+	// Header
+	out.WriteString(fmt.Sprintf("🤖 *AI Weekly* — %s\n\n", content.WeekRange))
+
+	// Big 3 Section
+	out.WriteString("*🔥 This Week's Big 3*\n\n")
+	for _, item := range content.Big3 {
+		url := getArticleURL(articleURLs, item.ArticleNum)
+		out.WriteString(fmt.Sprintf("*%s* — %s\n%s\n\n", item.Headline, item.Editorial, url))
+	}
+
+	// Separator
+	out.WriteString("---\n")
+
+	// Also on my radar
+	out.WriteString("*📌 Also on my radar* (links in thread)\n")
+	for _, item := range content.AlsoOnRadar {
+		out.WriteString(fmt.Sprintf("- %s\n", item.Title))
+	}
+
+	// Chunk thread content for Slack message limits
+	chunks := chunkThreadContent(content.ThreadContent, articleURLs, SlackChunkLimit)
+
+	// Thread content (chunked for multiple messages)
+	for i, chunk := range chunks {
+		if len(chunks) > 1 {
+			out.WriteString(fmt.Sprintf("\n---\n*🧵 Thread %d/%d*\n\n", i+1, len(chunks)))
+		} else {
+			out.WriteString("\n---\n*🧵 Thread: More Details*\n\n")
+		}
+		out.WriteString(chunk)
+	}
+
+	return out.String()
+}
+
+// chunkThreadContent splits thread items into chunks that fit within Slack's character limit
+func chunkThreadContent(items []narrative.ThreadItem, articleURLs map[int]string, maxChars int) []string {
+	if len(items) == 0 {
+		return []string{}
+	}
+
+	chunks := make([]string, 0)
+	var currentChunk strings.Builder
+	itemIndex := 1
+
+	for _, item := range items {
+		url := getArticleURL(articleURLs, item.ArticleNum)
+		itemContent := fmt.Sprintf("[%d] *%s*\n%s\n%s\n\n", itemIndex, item.Title, item.Explanation, url)
+
+		// Check if adding this item would exceed the limit
+		if currentChunk.Len()+len(itemContent) > maxChars && currentChunk.Len() > 0 {
+			// Save current chunk and start new one
+			chunks = append(chunks, currentChunk.String())
+			currentChunk.Reset()
+		}
+
+		currentChunk.WriteString(itemContent)
+		itemIndex++
+	}
+
+	// Don't forget the last chunk
+	if currentChunk.Len() > 0 {
+		chunks = append(chunks, currentChunk.String())
+	}
+
+	return chunks
+}
+
+// buildArticleURLMap creates a map from citation number (1-based) to article URL
+func buildArticleURLMap(articles []core.Article, clusters []core.TopicCluster) map[int]string {
+	urlMap := make(map[int]string)
+	articleNum := 1
+
+	for _, cluster := range clusters {
+		for _, articleID := range cluster.ArticleIDs {
+			for _, article := range articles {
+				if article.ID == articleID {
+					urlMap[articleNum] = article.URL
+					articleNum++
+					break
+				}
+			}
+		}
+	}
+
+	return urlMap
+}
+
+// getArticleURL safely retrieves URL for citation number
+func getArticleURL(urlMap map[int]string, articleNum int) string {
+	if url, found := urlMap[articleNum]; found {
+		return url
+	}
+	return fmt.Sprintf("[Article %d URL not found]", articleNum)
 }
