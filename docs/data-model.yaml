@@ -1,0 +1,280 @@
+# Agentic Digest Generation: Data Model
+# Defines entities for agent state management, tool I/O, and quality tracking
+# Technology-agnostic: all types map to Go structs in internal/agent/
+
+entities:
+
+  # ============================================================================
+  # Session and Configuration
+  # ============================================================================
+
+  AgentSession:
+    description: "Top-level configuration and runtime state for one digest generation run"
+    fields:
+      id: uuid
+      input_file: string                    # Path to markdown file with URLs
+      output_path: string                   # Directory for rendered output
+      max_iterations: int                   # Max reflect/revise cycles (default: 3)
+      quality_threshold: float64            # Min acceptable quality score 0-1 (default: 0.7)
+      use_cache: boolean                    # Whether to use SQLite cache (default: true)
+      started_at: timestamp
+      completed_at: timestamp               # Nullable; set when session ends
+      status: string                        # "running", "completed", "failed", "fallback"
+      fallback_reason: string               # If status=fallback, why agent was bypassed
+      current_phase: string                 # "ingestion", "analysis", "generation", "quality", "rendering"
+      current_iteration: int                # Current reflect/revise iteration (0-based)
+    validations:
+      - field: max_iterations
+        rule: range_1_to_10
+        message: "Max iterations must be between 1 and 10"
+      - field: quality_threshold
+        rule: range_0_to_1
+        message: "Quality threshold must be between 0.0 and 1.0"
+    storage:
+      type: in_memory
+      scope: per_session
+    lifecycle:
+      creation: "CLI invocation"
+      updates: "Every tool call updates phase and iteration"
+      deletion: "Garbage collected after session ends"
+
+  # ============================================================================
+  # Working Memory State
+  # ============================================================================
+
+  WorkingMemory:
+    description: "Mutable in-memory state store for the agent session. Holds all intermediate data."
+    fields:
+      session_id: uuid                      # Reference to AgentSession
+      articles: map[string]Article          # Article ID -> Article (from internal/core)
+      summaries: map[string]Summary         # Article ID -> Summary (from internal/core)
+      triage_scores: map[string]TriageScore # Article ID -> relevance/quality scores
+      embeddings: map[string][]float64      # Article ID -> 768-dim vector
+      clusters: list[TopicCluster]          # Current cluster assignments (from internal/core)
+      cluster_evaluations: list[ClusterEvaluation] # Cluster quality assessments
+      narratives: map[string]ClusterNarrative      # Cluster ID -> narrative (from internal/core)
+      executive_summary: string             # Current executive summary draft
+      digest_draft: Digest                  # Current full digest (from internal/core)
+      reflections: list[ReflectionReport]   # History of quality assessments
+      revision_log: list[RevisionRecord]    # History of revisions applied
+      tool_call_log: list[ToolCallRecord]   # Ordered log of all tool invocations
+      quality_trajectory: list[float64]     # Quality scores over iterations for diminishing returns
+    storage:
+      type: in_memory
+      scope: per_session
+    lifecycle:
+      creation: "Session initialization (empty state)"
+      updates: "After every tool call"
+      deletion: "Session completion"
+
+  # ============================================================================
+  # Triage and Quality
+  # ============================================================================
+
+  TriageScore:
+    description: "Relevance and quality assessment for a single article, produced by triage_articles tool"
+    fields:
+      article_id: string
+      relevance_score: float64              # 0-1, how relevant to target audience
+      quality_score: float64                # 0-1, content quality (depth, originality)
+      signal_strength: float64              # 0-1, newsworthiness / information density
+      reasoning: string                     # Brief explanation of scores
+      recommended_action: string            # "include", "deprioritize", "exclude"
+    validations:
+      - field: relevance_score
+        rule: range_0_to_1
+      - field: quality_score
+        rule: range_0_to_1
+      - field: signal_strength
+        rule: range_0_to_1
+      - field: recommended_action
+        rule: one_of_include_deprioritize_exclude
+    storage:
+      type: in_memory
+      scope: within_working_memory
+
+  ClusterEvaluation:
+    description: "Quality assessment for a single topic cluster, produced by evaluate_clusters tool"
+    fields:
+      cluster_id: string
+      coherence_score: float64              # 0-1, how topically coherent the cluster is
+      separation_score: float64             # 0-1, how distinct from other clusters
+      size_appropriateness: string          # "too_small", "appropriate", "too_large"
+      suggested_action: string              # "keep", "merge_with:<id>", "split", "dissolve"
+      reasoning: string
+    storage:
+      type: in_memory
+      scope: within_working_memory
+
+  ReflectionReport:
+    description: "Quality assessment of the current digest draft, produced by reflect tool"
+    fields:
+      iteration: int                        # Which reflect/revise iteration (0-based)
+      timestamp: timestamp
+      overall_score: float64                # 0-1, weighted average of dimension scores
+      dimension_scores:
+        specificity: float64                # 0-1, are claims specific vs. vague?
+        grounding: float64                  # 0-1, are statements backed by article citations?
+        coherence: float64                  # 0-1, does the narrative flow logically?
+        reader_value: float64               # 0-1, would a senior engineer find this useful?
+        coverage: float64                   # 0-1, what fraction of articles are represented?
+      weaknesses: list[Weakness]            # Identified problems
+      strengths: list[string]               # What is working well
+      improvement_delta: float64            # Score change from previous iteration (0 if first)
+      should_continue: boolean              # Agent recommendation: worth another iteration?
+    storage:
+      type: in_memory
+      scope: within_working_memory
+    lifecycle:
+      creation: "Each reflect tool call"
+      updates: "Immutable once created"
+
+  Weakness:
+    description: "A specific quality problem identified during reflection"
+    fields:
+      section: string                       # "cluster_narrative:<id>", "executive_summary", "title", "tldr"
+      dimension: string                     # Which quality dimension is affected
+      description: string                   # What the problem is
+      severity: string                      # "critical", "major", "minor"
+      suggested_fix: string                 # How to address it
+    storage:
+      type: in_memory
+      scope: within_reflection_report
+
+  RevisionRecord:
+    description: "Record of a revision applied to a specific section"
+    fields:
+      iteration: int
+      timestamp: timestamp
+      target_section: string                # Same format as Weakness.section
+      weakness_addressed: string            # Description of the weakness being fixed
+      original_content: string              # Content before revision
+      revised_content: string               # Content after revision
+      quality_before: float64               # Score before revision
+      quality_after: float64                # Score after revision (set after re-reflection)
+    storage:
+      type: in_memory
+      scope: within_working_memory
+
+  # ============================================================================
+  # Tool Execution Tracking
+  # ============================================================================
+
+  ToolCallRecord:
+    description: "Log entry for a single tool invocation"
+    fields:
+      sequence_number: int                  # Order of execution (1-based)
+      tool_name: string                     # e.g., "fetch_articles", "reflect"
+      parameters: map[string]any            # Input parameters
+      started_at: timestamp
+      completed_at: timestamp
+      duration_ms: int
+      status: string                        # "success", "error", "timeout"
+      error_message: string                 # If status=error
+      result_summary: string                # Brief description of output (for logging)
+    storage:
+      type: in_memory
+      scope: within_working_memory
+
+  # ============================================================================
+  # Tool Definitions (for Gemini function declarations)
+  # ============================================================================
+
+  ToolDefinition:
+    description: "Schema for registering a tool with the agent. Maps to Gemini FunctionDeclaration."
+    fields:
+      name: string                          # Tool identifier (e.g., "fetch_articles")
+      description: string                   # What the tool does (sent to LLM)
+      parameters: ToolParameterSchema       # JSON Schema for input parameters
+      required_parameters: list[string]     # Which parameters are required
+      returns: ToolReturnSchema             # Description of what the tool returns
+      category: string                      # "ingestion", "analysis", "generation", "quality"
+      wraps_interface: string               # Which pipeline interface this wraps (documentation)
+      estimated_duration: string            # "fast" (<1s), "medium" (1-10s), "slow" (10s+)
+      llm_call_required: boolean            # Whether this tool makes its own LLM call
+    storage:
+      type: static
+      scope: application_lifetime
+
+  ToolParameterSchema:
+    description: "JSON Schema subset for tool parameter validation"
+    fields:
+      type: string                          # "object"
+      properties: map[string]PropertySchema
+    storage:
+      type: static
+
+  PropertySchema:
+    description: "Schema for a single tool parameter"
+    fields:
+      type: string                          # "string", "integer", "number", "boolean", "array"
+      description: string
+      enum: list[string]                    # Optional: allowed values
+      items: PropertySchema                 # Optional: for array types
+      default: any                          # Optional: default value
+
+  # ============================================================================
+  # Output
+  # ============================================================================
+
+  AgentDigestResult:
+    description: "Final output of the agentic digest generation, extending DigestResult"
+    fields:
+      digest: Digest                        # The generated digest (from internal/core)
+      markdown_path: string                 # Path to rendered markdown file
+      processing_stats: ProcessingStats     # From existing pipeline types
+      agent_metadata: AgentMetadata         # Agent-specific metadata
+    storage:
+      type: returned_to_caller
+      scope: single_invocation
+
+  AgentMetadata:
+    description: "Metadata about the agent's decision-making process"
+    fields:
+      total_iterations: int                 # How many reflect/revise cycles ran
+      final_quality_score: float64          # Last reflection overall score
+      quality_trajectory: list[float64]     # Score at each iteration
+      total_tool_calls: int                 # Number of tool invocations
+      total_llm_calls: int                  # Number of Gemini API calls (orchestration + tools)
+      tool_call_breakdown: map[string]int   # Tool name -> call count
+      strategy_used: string                 # "full_pipeline", "small_corpus", "no_clustering"
+      early_stop_reason: string             # Why iteration stopped (threshold_met, max_iterations, diminishing_returns)
+      warnings: list[string]               # Any issues encountered
+
+# ============================================================================
+# Relationships
+# ============================================================================
+
+relationships:
+
+  AgentSession_WorkingMemory:
+    type: one_to_one
+    description: "Each session has exactly one working memory instance"
+
+  WorkingMemory_Article:
+    type: one_to_many
+    description: "Working memory holds all fetched articles"
+
+  WorkingMemory_ReflectionReport:
+    type: one_to_many
+    description: "Working memory accumulates reflection reports across iterations"
+
+  WorkingMemory_ToolCallRecord:
+    type: one_to_many
+    description: "Working memory logs all tool calls in order"
+
+  ReflectionReport_Weakness:
+    type: one_to_many
+    description: "Each reflection identifies zero or more weaknesses"
+
+  Weakness_RevisionRecord:
+    type: one_to_one
+    description: "Each weakness may produce one revision attempt"
+
+  AgentSession_AgentDigestResult:
+    type: one_to_one
+    description: "Session produces one final result"
+
+  ToolDefinition_ToolCallRecord:
+    type: one_to_many
+    description: "Each tool definition can be invoked multiple times per session"

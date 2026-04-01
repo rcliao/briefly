@@ -97,6 +97,28 @@ func NewClient(modelName string) (*Client, error) {
 	}, nil
 }
 
+// GenerateContentWithTools performs a Gemini API call with function-calling (tool-use).
+// It accepts multi-turn conversation history and tool declarations, returning the raw response
+// which may contain text parts, function call parts, or both.
+func (c *Client) GenerateContentWithTools(
+	ctx context.Context,
+	contents []*genai.Content,
+	tools []*genai.Tool,
+	config *genai.GenerateContentConfig,
+) (*genai.GenerateContentResponse, error) {
+	if config == nil {
+		config = &genai.GenerateContentConfig{}
+	}
+	if tools != nil {
+		config.Tools = tools
+	}
+	resp, err := c.gClient.Models.GenerateContent(ctx, c.modelName, contents, config)
+	if err != nil {
+		return nil, fmt.Errorf("GenerateContentWithTools: %w", err)
+	}
+	return resp, nil
+}
+
 // generateContent is a helper that wraps the new SDK's GenerateContent call
 func (c *Client) generateContent(ctx context.Context, prompt string) (string, error) {
 	contents := []*genai.Content{{

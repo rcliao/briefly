@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"briefly/internal/agent"
+	"briefly/internal/agent/tools"
 	"briefly/internal/clustering"
 	"briefly/internal/config"
 	"briefly/internal/core"
@@ -26,11 +28,14 @@ import (
 // NewDigestFromFileCmd creates the digest from-file command for processing curated markdown files
 func NewDigestFromFileCmd() *cobra.Command {
 	var (
-		outputDir      string
-		numClusters    int
-		noCache        bool
-		themeThreshold float64
-		outputFormat   string
+		outputDir        string
+		numClusters      int
+		noCache          bool
+		themeThreshold   float64
+		outputFormat     string
+		useAgent         bool
+		maxIterations    int
+		qualityThreshold float64
 	)
 
 	cmd := &cobra.Command{
@@ -67,6 +72,9 @@ Examples:
   briefly digest from-file input/weekly.md --format slack`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if useAgent {
+				return runAgentDigest(cmd.Context(), args[0], outputDir, noCache, maxIterations, qualityThreshold, outputFormat)
+			}
 			return runDigestFromFile(cmd.Context(), args[0], outputDir, numClusters, noCache, themeThreshold, outputFormat)
 		},
 	}
@@ -76,8 +84,103 @@ Examples:
 	cmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable caching (fetch fresh content)")
 	cmd.Flags().Float64Var(&themeThreshold, "theme-threshold", 0.4, "Minimum theme relevance score (0.0-1.0)")
 	cmd.Flags().StringVar(&outputFormat, "format", "markdown", "Output format: markdown (default), slack")
+	cmd.Flags().BoolVar(&useAgent, "agent", false, "Use agentic digest generation with reflect/revise loop")
+	cmd.Flags().IntVar(&maxIterations, "max-iterations", 3, "Max reflect/revise iterations (agent mode only)")
+	cmd.Flags().Float64Var(&qualityThreshold, "quality-threshold", 0.7, "Min quality score 0-1 (agent mode only)")
 
 	return cmd
+}
+
+// runAgentDigest executes digest generation using the agentic orchestrator.
+func runAgentDigest(ctx context.Context, inputFile string, outputDir string, noCache bool, maxIterations int, qualityThreshold float64, outputFormat string) error {
+	fmt.Println("🚀 Starting agentic digest generation...")
+
+	// Initialize LLM client
+	llmClient, err := llm.NewClient("")
+	if err != nil {
+		return fmt.Errorf("failed to create LLM client: %w", err)
+	}
+
+	// Initialize cache (optional)
+	var cache *store.Store
+	if !noCache {
+		cacheDir := ".briefly-cache"
+		cache, err = store.NewStore(cacheDir)
+		if err != nil {
+			fmt.Printf("   ⚠️  Cache initialization failed: %v (continuing without cache)\n", err)
+		}
+	}
+
+	// Create summarizer and narrative generator with adapters
+	summarizerAdapter := &llmClientAdapter{client: llmClient}
+	summarizer := summarize.NewSummarizerWithDefaults(summarizerAdapter)
+	narrativeAdapter := &narrativeLLMAdapter{client: llmClient}
+	narrativeGen := narrative.NewGenerator(narrativeAdapter)
+
+	// Build tool registry with all 11 tools
+	registry := agent.NewToolRegistry()
+
+	toolList := []agent.Tool{
+		tools.NewFetchArticlesTool(cache),
+		tools.NewSummarizeBatchTool(summarizer, cache),
+		tools.NewTriageArticlesTool(llmClient),
+		tools.NewGetArticleIndexTool(),
+		tools.NewGenerateEmbeddingsTool(llmClient),
+		tools.NewClusterArticlesTool(),
+		tools.NewEvaluateClustersTool(),
+		tools.NewGenerateClusterNarrativeTool(narrativeGen),
+		tools.NewGenerateExecutiveSummaryTool(narrativeGen),
+		tools.NewReflectTool(llmClient),
+		tools.NewReviseSectionTool(llmClient),
+		tools.NewRenderDigestTool(),
+	}
+
+	for _, tool := range toolList {
+		if err := registry.Register(tool); err != nil {
+			return fmt.Errorf("failed to register tool %s: %w", tool.Name(), err)
+		}
+	}
+
+	fmt.Printf("   Registered %d tools\n", registry.ToolCount())
+
+	// Create orchestrator and session
+	orchestrator := agent.NewOrchestrator(llmClient, registry)
+	session := agent.AgentSession{
+		ID:               fmt.Sprintf("agent-%d", time.Now().Unix()),
+		InputFile:        inputFile,
+		OutputPath:       outputDir,
+		MaxIterations:    maxIterations,
+		QualityThreshold: qualityThreshold,
+		UseCache:         !noCache,
+		OutputFormat:     outputFormat,
+		StartedAt:        time.Now(),
+		Status:           "running",
+	}
+
+	// Run the agent
+	result, err := orchestrator.Run(ctx, session)
+	if err != nil {
+		fmt.Printf("   ❌ Agent failed: %v\n", err)
+		fmt.Printf("   Falling back to linear pipeline...\n\n")
+		return runDigestFromFile(ctx, inputFile, outputDir, 0, noCache, 0.4, outputFormat)
+	}
+
+	// Print results
+	fmt.Printf("✅ Agentic digest generation complete\n")
+	if result.MarkdownPath != "" {
+		fmt.Printf("   Output: %s\n", result.MarkdownPath)
+	}
+	fmt.Printf("   Tool calls: %d\n", result.AgentMetadata.TotalToolCalls)
+	fmt.Printf("   Iterations: %d\n", result.AgentMetadata.TotalIterations)
+	if result.AgentMetadata.FinalQualityScore > 0 {
+		fmt.Printf("   Final quality: %.2f\n", result.AgentMetadata.FinalQualityScore)
+	}
+	if result.AgentMetadata.EarlyStopReason != "" {
+		fmt.Printf("   Stop reason: %s\n", result.AgentMetadata.EarlyStopReason)
+	}
+	fmt.Printf("   Duration: %dms\n", result.AgentMetadata.TotalDurationMs)
+
+	return nil
 }
 
 func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, numClusters int, noCache bool, themeThreshold float64, outputFormat string) error {
