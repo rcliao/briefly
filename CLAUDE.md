@@ -58,7 +58,7 @@ CI (.github/workflows/test.yml) runs test/build/lint on the Go version from go.m
 
 The Slack format (`--format slack`) feeds editorial topics into `internal/narrative.GenerateSlackDigest` and renders chunked Slack mrkdwn.
 
-**Banner generation** (`cmd/handlers/banner.go`, default on, `--no-banner` to skip): after rendering, one LLM call proposes 3 visual subjects from the digest content, the user picks one interactively (auto-selects #1 when non-interactive), and `gemini-3.1-flash-image` renders a 16:9 pixel-art image → `banner.jpg` + the used prompt in `banner.prompt.txt` (the manual fallback path). The style half of the prompt is fixed config (`banner.style` in .briefly.yaml) so the series look stays consistent; the LLM only writes the subject. Banner failure never fails the digest. Design rationale: docs/design/banner-generation.md.
+**Banner generation** (`cmd/handlers/banner.go`, default on, `--no-banner` to skip): after rendering, one LLM call proposes 3 visual subjects from the digest content, the user picks one interactively (auto-selects #1 when non-interactive), and `gemini-3.1-flash-image` renders a 16:9 HD-2D style image (pixel-art sprites in a 3D diorama) → `banner.jpg` + the used prompt in `banner.prompt.txt` (the manual fallback path). The style half of the prompt is fixed config (`banner.style` in .briefly.yaml) so the series look stays consistent; the LLM only writes the subject. Banner failure never fails the digest. Design rationale: docs/design/banner-generation.md.
 
 ### Design principles (learned the hard way)
 

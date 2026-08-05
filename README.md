@@ -93,7 +93,7 @@ cache:
 banner:
   enabled: true
   model: "gemini-3.1-flash-image"
-  style: "pixel art style, 16-bit, limited color palette, abstract, minimal clean composition, no text or lettering"
+  style: "HD-2D style, detailed pixel art sprites in a 3D diorama environment, dramatic volumetric lighting, depth of field, tilt-shift, bloom and glow effects, rich atmospheric detail, no text or lettering"
   aspect_ratio: "16:9"
 ```
 

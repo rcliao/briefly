@@ -440,7 +440,7 @@ func setDefaults() {
 	// Banner defaults
 	viper.SetDefault("banner.enabled", true)
 	viper.SetDefault("banner.model", "gemini-3.1-flash-image")
-	viper.SetDefault("banner.style", "pixel art style, 16-bit, limited color palette, abstract, minimal clean composition, no text or lettering")
+	viper.SetDefault("banner.style", "HD-2D style, detailed pixel art sprites in a 3D diorama environment, dramatic volumetric lighting, depth of field, tilt-shift, bloom and glow effects, rich atmospheric detail, no text or lettering")
 	viper.SetDefault("banner.aspect_ratio", "16:9")
 
 	// AI defaults
