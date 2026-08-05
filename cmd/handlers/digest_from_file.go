@@ -1,24 +1,20 @@
 package handlers
 
 import (
-	"briefly/internal/agent"
-	"briefly/internal/agent/tools"
-	"briefly/internal/clustering"
 	"briefly/internal/config"
 	"briefly/internal/core"
 	"briefly/internal/fetch"
 	"briefly/internal/llm"
 	"briefly/internal/logger"
-	"briefly/internal/markdown"
 	"briefly/internal/narrative"
 	"briefly/internal/parser"
 	"briefly/internal/store"
 	"briefly/internal/summarize"
-	"briefly/internal/themes"
 	"context"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,14 +24,11 @@ import (
 // NewDigestFromFileCmd creates the digest from-file command for processing curated markdown files
 func NewDigestFromFileCmd() *cobra.Command {
 	var (
-		outputDir        string
-		numClusters      int
-		noCache          bool
-		themeThreshold   float64
-		outputFormat     string
-		useAgent         bool
-		maxIterations    int
-		qualityThreshold float64
+		outputDir      string
+		numClusters    int
+		noCache        bool
+		themeThreshold float64
+		outputFormat   string
 	)
 
 	cmd := &cobra.Command{
@@ -43,14 +36,14 @@ func NewDigestFromFileCmd() *cobra.Command {
 		Short: "Generate digest from curated markdown file",
 		Long: `Generate a digest from a curated markdown file containing URLs.
 
-This command (Phase 1.5 - Digest from File):
+This command:
   • Parses URLs from a markdown file
-  • Fetches articles (HTML, PDF, YouTube)
+  • Fetches articles in parallel (HTML, PDF, YouTube)
   • Generates summaries using LLM
-  • Classifies articles by theme
-  • Clusters articles by topic similarity
-  • Creates hierarchical summaries (cluster narratives → executive summary)
-  • Renders LinkedIn-ready markdown (or Slack format with --format slack)
+  • Runs a single editorial pass: topic grouping, per-article takeaways,
+    must-read pick, executive summary
+  • Renders scannable markdown (or Slack format with --format slack)
+  • Reports any curated links that failed to fetch
   • No database persistence (lightweight, in-memory processing)
 
 Perfect for weekly digests from manually curated URLs.
@@ -65,131 +58,35 @@ Examples:
   # Disable caching (fresh fetch)
   briefly digest from-file input/weekly.md --no-cache
 
-  # Specify number of clusters
-  briefly digest from-file input/weekly.md --clusters 5
-
   # Generate Slack-optimized digest
   briefly digest from-file input/weekly.md --format slack`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if useAgent {
-				return runAgentDigest(cmd.Context(), args[0], outputDir, noCache, maxIterations, qualityThreshold, outputFormat)
-			}
-			return runDigestFromFile(cmd.Context(), args[0], outputDir, numClusters, noCache, themeThreshold, outputFormat)
+			return runDigestFromFile(cmd.Context(), args[0], outputDir, noCache, outputFormat)
 		},
 	}
 
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "digests", "Output directory for digest file")
-	cmd.Flags().IntVar(&numClusters, "clusters", 0, "Number of clusters (0 = auto-determine)")
+	cmd.Flags().IntVar(&numClusters, "clusters", 0, "Deprecated: topic grouping is now editorial, not k-means")
 	cmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable caching (fetch fresh content)")
-	cmd.Flags().Float64Var(&themeThreshold, "theme-threshold", 0.4, "Minimum theme relevance score (0.0-1.0)")
+	cmd.Flags().Float64Var(&themeThreshold, "theme-threshold", 0.4, "Deprecated: theme classification removed from this pipeline")
 	cmd.Flags().StringVar(&outputFormat, "format", "markdown", "Output format: markdown (default), slack")
-	cmd.Flags().BoolVar(&useAgent, "agent", false, "Use agentic digest generation with reflect/revise loop")
-	cmd.Flags().IntVar(&maxIterations, "max-iterations", 3, "Max reflect/revise iterations (agent mode only)")
-	cmd.Flags().Float64Var(&qualityThreshold, "quality-threshold", 0.7, "Min quality score 0-1 (agent mode only)")
+	_ = cmd.Flags().MarkDeprecated("clusters", "topic grouping is now done by the editorial LLM pass")
+	_ = cmd.Flags().MarkDeprecated("theme-threshold", "theme classification was removed from this pipeline")
 
 	return cmd
 }
 
-// runAgentDigest executes digest generation using the agentic orchestrator.
-func runAgentDigest(ctx context.Context, inputFile string, outputDir string, noCache bool, maxIterations int, qualityThreshold float64, outputFormat string) error {
-	fmt.Println("🚀 Starting agentic digest generation...")
+// fetchWorkers bounds fetch/summarize concurrency: fast without hammering
+// hosts or the LLM API rate limits.
+const fetchWorkers = 4
 
-	// Initialize LLM client
-	llmClient, err := llm.NewClient("")
-	if err != nil {
-		return fmt.Errorf("failed to create LLM client: %w", err)
-	}
-
-	// Initialize cache (optional)
-	var cache *store.Store
-	if !noCache {
-		cacheDir := ".briefly-cache"
-		cache, err = store.NewStore(cacheDir)
-		if err != nil {
-			fmt.Printf("   ⚠️  Cache initialization failed: %v (continuing without cache)\n", err)
-		}
-	}
-
-	// Create summarizer and narrative generator with adapters
-	summarizerAdapter := &llmClientAdapter{client: llmClient}
-	summarizer := summarize.NewSummarizerWithDefaults(summarizerAdapter)
-	narrativeAdapter := &narrativeLLMAdapter{client: llmClient}
-	narrativeGen := narrative.NewGenerator(narrativeAdapter)
-
-	// Build tool registry with all 11 tools
-	registry := agent.NewToolRegistry()
-
-	toolList := []agent.Tool{
-		tools.NewFetchArticlesTool(cache),
-		tools.NewSummarizeBatchTool(summarizer, cache),
-		tools.NewTriageArticlesTool(llmClient),
-		tools.NewGetArticleIndexTool(),
-		tools.NewGenerateEmbeddingsTool(llmClient),
-		tools.NewClusterArticlesTool(),
-		tools.NewEvaluateClustersTool(),
-		tools.NewGenerateClusterNarrativeTool(narrativeGen),
-		tools.NewGenerateExecutiveSummaryTool(narrativeGen),
-		tools.NewReflectTool(llmClient),
-		tools.NewReviseSectionTool(llmClient),
-		tools.NewRenderDigestTool(),
-	}
-
-	for _, tool := range toolList {
-		if err := registry.Register(tool); err != nil {
-			return fmt.Errorf("failed to register tool %s: %w", tool.Name(), err)
-		}
-	}
-
-	fmt.Printf("   Registered %d tools\n", registry.ToolCount())
-
-	// Create orchestrator and session
-	orchestrator := agent.NewOrchestrator(llmClient, registry)
-	session := agent.AgentSession{
-		ID:               fmt.Sprintf("agent-%d", time.Now().Unix()),
-		InputFile:        inputFile,
-		OutputPath:       outputDir,
-		MaxIterations:    maxIterations,
-		QualityThreshold: qualityThreshold,
-		UseCache:         !noCache,
-		OutputFormat:     outputFormat,
-		StartedAt:        time.Now(),
-		Status:           "running",
-	}
-
-	// Run the agent
-	result, err := orchestrator.Run(ctx, session)
-	if err != nil {
-		fmt.Printf("   ❌ Agent failed: %v\n", err)
-		fmt.Printf("   Falling back to linear pipeline...\n\n")
-		return runDigestFromFile(ctx, inputFile, outputDir, 0, noCache, 0.4, outputFormat)
-	}
-
-	// Print results
-	fmt.Printf("✅ Agentic digest generation complete\n")
-	if result.MarkdownPath != "" {
-		fmt.Printf("   Output: %s\n", result.MarkdownPath)
-	}
-	fmt.Printf("   Tool calls: %d\n", result.AgentMetadata.TotalToolCalls)
-	fmt.Printf("   Iterations: %d\n", result.AgentMetadata.TotalIterations)
-	if result.AgentMetadata.FinalQualityScore > 0 {
-		fmt.Printf("   Final quality: %.2f\n", result.AgentMetadata.FinalQualityScore)
-	}
-	if result.AgentMetadata.EarlyStopReason != "" {
-		fmt.Printf("   Stop reason: %s\n", result.AgentMetadata.EarlyStopReason)
-	}
-	fmt.Printf("   Duration: %dms\n", result.AgentMetadata.TotalDurationMs)
-
-	return nil
-}
-
-func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, numClusters int, noCache bool, themeThreshold float64, outputFormat string) error {
+func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, noCache bool, outputFormat string) error {
 	startTime := time.Now()
 	log := logger.Get()
 	log.Info("Starting digest generation from file",
 		"input_file", inputFile,
 		"output_dir", outputDir,
-		"clusters", numClusters,
 		"no_cache", noCache,
 		"format", outputFormat,
 	)
@@ -242,7 +139,7 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 	}
 
 	// Step 1: Parse URLs from markdown file
-	fmt.Printf("\n📄 Step 1/9: Parsing URLs from %s...\n", inputFile)
+	fmt.Printf("\n📄 Step 1/5: Parsing URLs from %s...\n", inputFile)
 	urlParser := parser.NewParser()
 	links, err := urlParser.ParseMarkdownFile(inputFile)
 	if err != nil {
@@ -256,48 +153,82 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 
 	fmt.Printf("   ✓ Found %d URLs\n", len(links))
 
-	// Step 2: Fetch articles
-	fmt.Printf("\n🔍 Step 2/9: Fetching and processing articles...\n")
+	// Step 2: Fetch articles in parallel, preserving input order for citations
+	fmt.Printf("\n🔍 Step 2/5: Fetching articles (%d workers)...\n", fetchWorkers)
 	processor := fetch.NewContentProcessor()
-	articles := make([]core.Article, 0, len(links))
+
+	type fetchResult struct {
+		article *core.Article
+		failure *failedLink
+	}
+	fetchResults := make([]fetchResult, len(links))
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, fetchWorkers)
+	var cacheMu sync.Mutex
 
 	for i, link := range links {
-		fmt.Printf("   [%d/%d] Fetching: %s\n", i+1, len(links), link.URL)
+		wg.Add(1)
+		go func(i int, link core.Link) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
-		// Check cache first
-		var article *core.Article
-		if cache != nil {
-			cachedArticle, err := cache.GetCachedArticle(link.URL, 24*time.Hour)
-			if err == nil && cachedArticle != nil {
-				article = cachedArticle
-				// Calculate reading time if not set (for older cached articles)
-				if article.EstimatedReadMinutes == 0 {
-					article.EstimatedReadMinutes = fetch.CalculateReadingTime(article)
-				}
-				fmt.Println("           ✓ Cache hit")
-			}
-		}
-
-		// Fetch if not cached
-		if article == nil {
-			fetchedArticle, err := processor.ProcessArticle(ctx, link.URL)
-			if err != nil {
-				log.Warn("Failed to fetch article", "url", link.URL, "error", err)
-				fmt.Printf("           ⚠ Fetch failed: %v\n", err)
-				continue
-			}
-			article = fetchedArticle
-
-			// Save to cache
+			// Check cache first
+			var article *core.Article
 			if cache != nil {
-				if err := cache.SaveArticle(article); err != nil {
-					log.Warn("Failed to cache article", "url", link.URL, "error", err)
+				cacheMu.Lock()
+				cachedArticle, err := cache.GetCachedArticle(link.URL, 24*time.Hour)
+				cacheMu.Unlock()
+				if err == nil && cachedArticle != nil {
+					article = cachedArticle
+					// Re-extract with the current parser: older cache entries
+					// carry duplicated/junk text from a previous extractor bug.
+					if article.FetchedHTML != "" {
+						if err := fetch.ParseArticleContent(article); err == nil {
+							article.EstimatedReadMinutes = fetch.CalculateReadingTime(article)
+						}
+					} else if article.EstimatedReadMinutes == 0 {
+						article.EstimatedReadMinutes = fetch.CalculateReadingTime(article)
+					}
+					fmt.Printf("   ✓ [%d/%d] Cache hit: %s\n", i+1, len(links), link.URL)
 				}
 			}
-			fmt.Println("           ✓ Fetched and processed")
-		}
 
-		articles = append(articles, *article)
+			if article == nil {
+				fetchedArticle, err := processor.ProcessArticle(ctx, link.URL)
+				if err != nil {
+					log.Warn("Failed to fetch article", "url", link.URL, "error", err)
+					fmt.Printf("   ⚠ [%d/%d] Fetch failed: %s (%v)\n", i+1, len(links), link.URL, err)
+					fetchResults[i] = fetchResult{failure: &failedLink{URL: link.URL, Reason: fmt.Sprintf("fetch failed: %v", err)}}
+					return
+				}
+				article = fetchedArticle
+
+				if cache != nil {
+					cacheMu.Lock()
+					if err := cache.SaveArticle(article); err != nil {
+						log.Warn("Failed to cache article", "url", link.URL, "error", err)
+					}
+					cacheMu.Unlock()
+				}
+				fmt.Printf("   ✓ [%d/%d] Fetched: %s\n", i+1, len(links), link.URL)
+			}
+
+			fetchResults[i] = fetchResult{article: article}
+		}(i, link)
+	}
+	wg.Wait()
+
+	articles := make([]core.Article, 0, len(links))
+	failed := make([]failedLink, 0)
+	for _, r := range fetchResults {
+		switch {
+		case r.article != nil:
+			articles = append(articles, *r.article)
+		case r.failure != nil:
+			failed = append(failed, *r.failure)
+		}
 	}
 
 	if len(articles) == 0 {
@@ -307,298 +238,105 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 
 	fmt.Printf("   ✓ Successfully fetched %d/%d articles\n", len(articles), len(links))
 
-	// Step 3: Generate summaries
-	fmt.Printf("\n📝 Step 3/9: Generating article summaries...\n")
+	// Step 3: Generate summaries in parallel
+	fmt.Printf("\n📝 Step 3/5: Generating article summaries (%d workers)...\n", fetchWorkers)
 	adapter := &llmClientAdapter{client: llmClient}
 	summarizer := summarize.NewSummarizerWithDefaults(adapter)
 
-	articleSummaries := make(map[string]*core.Summary)
-	summaryList := make([]core.Summary, 0, len(articles))
-
-	for i, article := range articles {
-		fmt.Printf("   [%d/%d] Summarizing: %s\n", i+1, len(articles), article.Title)
-
-		// Generate summary (cache lookup is complex, skip for now)
-		summary, err := summarizer.SummarizeArticle(ctx, &article)
-		if err != nil {
-			log.Warn("Failed to generate summary", "article_id", article.ID, "error", err)
-			// Create fallback summary
-			summary = &core.Summary{
-				ID:          uuid.NewString(),
-				ArticleIDs:  []string{article.ID},
-				SummaryText: fmt.Sprintf("Summary for: %s", article.Title),
-				ModelUsed:   "fallback",
-			}
-		}
-		fmt.Println("           ✓ Generated")
-
-		articleSummaries[article.ID] = summary
-		summaryList = append(summaryList, *summary)
-	}
-
-	// Step 4: Classify articles by theme
-	fmt.Printf("\n🏷️  Step 4/9: Classifying articles by theme...\n")
-
-	// Load themes (we'll use hardcoded defaults for file-based mode)
-	defaultThemes := []core.Theme{
-		{ID: uuid.NewString(), Name: "AI & Machine Learning", Keywords: []string{"ai", "machine learning", "llm", "gpt"}},
-		{ID: uuid.NewString(), Name: "Cloud & DevOps", Keywords: []string{"cloud", "kubernetes", "docker", "devops"}},
-		{ID: uuid.NewString(), Name: "Software Engineering", Keywords: []string{"programming", "software", "development", "code"}},
-		{ID: uuid.NewString(), Name: "Web Development", Keywords: []string{"web", "javascript", "react", "frontend"}},
-		{ID: uuid.NewString(), Name: "Data & Analytics", Keywords: []string{"data", "analytics", "database", "sql"}},
-	}
-
-	themeClassifier := themes.NewClassifier(llmClient, nil) // Pass nil for PostHog (lightweight mode)
-
+	summaries := make([]*core.Summary, len(articles))
 	for i := range articles {
-		fmt.Printf("   [%d/%d] Classifying: %s\n", i+1, len(articles), articles[i].Title)
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
-		classification, err := themeClassifier.GetBestMatch(ctx, articles[i], defaultThemes, themeThreshold)
-		if err != nil {
-			log.Warn("Failed to classify article", "article_id", articles[i].ID, "error", err)
-			fmt.Println("           ⚠ Classification failed")
-			continue
-		}
-
-		if classification != nil {
-			articles[i].ThemeID = &classification.ThemeID
-			articles[i].ReaderIntent = classification.ReaderIntent
-			// Log intent along with theme
-			intentLabel := classification.ReaderIntent
-			if intentLabel == "" {
-				intentLabel = "unclassified"
+			summary, err := summarizer.SummarizeArticle(ctx, &articles[i])
+			if err != nil {
+				log.Warn("Failed to generate summary", "article_id", articles[i].ID, "error", err)
+				fmt.Printf("   ⚠ [%d/%d] Summary failed: %s (%v)\n", i+1, len(articles), articles[i].Title, err)
+				summary = &core.Summary{
+					ID:          uuid.NewString(),
+					ArticleIDs:  []string{articles[i].ID},
+					SummaryText: fmt.Sprintf("Summary for: %s", articles[i].Title),
+					ModelUsed:   "fallback",
+				}
+			} else {
+				fmt.Printf("   ✓ [%d/%d] Summarized: %s\n", i+1, len(articles), articles[i].Title)
 			}
-			fmt.Printf("           ✓ Theme: %s (score: %.2f) | Intent: %s\n", classification.ThemeName, classification.RelevanceScore, intentLabel)
-		} else {
-			fmt.Println("           ⚠ No theme match above threshold")
-		}
+			summaries[i] = summary
+		}(i)
+	}
+	wg.Wait()
+
+	articleSummaries := make(map[string]*core.Summary, len(articles))
+	for i := range articles {
+		articleSummaries[articles[i].ID] = summaries[i]
 	}
 
-	// Step 5: Generate embeddings
-	fmt.Printf("\n🧠 Step 5/9: Generating embeddings for clustering...\n")
-	embeddingsMap := make(map[string][]float64)
+	// Step 4: Single editorial pass — topic grouping, one-liners, must-read,
+	// executive summary. Replaces theme classification + embeddings + k-means
+	// + per-cluster narratives from the previous pipeline.
+	fmt.Printf("\n✨ Step 4/5: Running editorial pass (grouping, takeaways, must-read)...\n")
 
-	for i, article := range articles {
-		summary, hasSummary := articleSummaries[article.ID]
-		textForEmbedding := article.CleanedText
-		if hasSummary {
-			textForEmbedding = summary.SummaryText
-		}
-
-		// Truncate if too long
-		if len(textForEmbedding) > 2000 {
-			textForEmbedding = textForEmbedding[:2000]
-		}
-
-		fmt.Printf("   [%d/%d] Embedding: %s\n", i+1, len(articles), article.Title)
-
-		embedding, err := llmClient.GenerateEmbedding(textForEmbedding)
-		if err != nil {
-			log.Warn("Failed to generate embedding", "article_id", article.ID, "error", err)
-			fmt.Println("           ⚠ Failed")
-			continue
-		}
-
-		embeddingsMap[article.ID] = embedding
-		articles[i].Embedding = embedding
-		fmt.Printf("           ✓ Generated (%d dimensions)\n", len(embedding))
-	}
-
-	// Step 6: Cluster articles
-	fmt.Printf("\n🔍 Step 6/9: Clustering articles by topic...\n")
-
-	// Auto-determine clusters if not specified
-	if numClusters == 0 {
-		numClusters = (len(articles) + 4) / 5 // ~5 articles per cluster
-		if numClusters < 3 {
-			numClusters = 3
-		}
-		if numClusters > 15 {
-			numClusters = 15
-		}
-	}
-
-	fmt.Printf("   🔍 Clustering %d articles into ~%d topics (K-means++ with cosine distance)...\n", len(articles), numClusters)
-
-	clusterer := clustering.NewKMeansClusterer()
-	clusters, err := clusterer.Cluster(articles, numClusters)
+	editorial, err := generateEditorialDigest(ctx, llmClient, articles, articleSummaries)
 	if err != nil {
-		return fmt.Errorf("failed to cluster articles: %w", err)
+		log.Warn("Editorial pass failed, using fallback structure", "error", err)
+		fmt.Printf("   ⚠ Editorial pass failed (%v), using fallback structure\n", err)
+		editorial = fallbackEditorialDigest(articles, articleSummaries)
 	}
 
-	if len(clusters) == 0 {
-		return fmt.Errorf("no clusters found")
+	fmt.Printf("   ✓ %s\n", editorial.Title)
+	for _, topic := range editorial.Topics {
+		fmt.Printf("      %s %s (%d articles)\n", topic.Emoji, topic.Name, len(topic.Citations))
 	}
 
-	fmt.Printf("   ✓ Found %d topic clusters\n", len(clusters))
-	for i, cluster := range clusters {
-		fmt.Printf("      %d. %s (%d articles)\n", i+1, cluster.Label, len(cluster.ArticleIDs))
-	}
-
-	// Create article and summary maps
-	articleMap := make(map[string]core.Article)
-	summaryMap := make(map[string]core.Summary)
-	for i, article := range articles {
-		articleMap[article.ID] = articles[i]
-	}
-	for _, summary := range summaryList {
-		for _, articleID := range summary.ArticleIDs {
-			summaryMap[articleID] = summary
-		}
-	}
-
-	// Step 7: Generate cluster narratives (hierarchical stage 1)
-	fmt.Printf("\n📖 Step 7/9: Generating cluster narratives from ALL articles...\n")
-	narrativeAdapter := &narrativeLLMAdapter{client: llmClient}
-	narrativeGen := narrative.NewGenerator(narrativeAdapter)
-
-	for i, cluster := range clusters {
-		if len(cluster.ArticleIDs) == 0 {
-			continue
-		}
-
-		fmt.Printf("   [%d/%d] Cluster: %s (%d articles)\n", i+1, len(clusters), cluster.Label, len(cluster.ArticleIDs))
-
-		clusterNarrative, err := narrativeGen.GenerateClusterSummary(ctx, cluster, articleMap, summaryMap)
-		if err != nil {
-			log.Warn("Failed to generate cluster narrative", "cluster", cluster.Label, "error", err)
-			fmt.Println("           ⚠ Narrative generation failed")
-			continue
-		}
-
-		clusters[i].Narrative = clusterNarrative
-		// Calculate word count from v3.1 fields (OneLiner + KeyDevelopments + KeyStats)
-		wordCount := len(strings.Fields(clusterNarrative.OneLiner))
-		for _, dev := range clusterNarrative.KeyDevelopments {
-			wordCount += len(strings.Fields(dev))
-		}
-		for _, stat := range clusterNarrative.KeyStats {
-			wordCount += len(strings.Fields(stat.Stat)) + len(strings.Fields(stat.Context))
-		}
-		fmt.Printf("   ✓ Generated: %s (%d words)\n", clusterNarrative.Title, wordCount)
-	}
-
-	// Handle Slack format - generate and render separately
+	// Handle Slack format using editorial topics as clusters
 	if outputFormat == "slack" {
+		articleMap := make(map[string]core.Article, len(articles))
+		summaryMap := make(map[string]core.Summary, len(articles))
+		for i := range articles {
+			articleMap[articles[i].ID] = articles[i]
+			summaryMap[articles[i].ID] = *summaries[i]
+		}
+		clusters := make([]core.TopicCluster, 0, len(editorial.Topics))
+		for _, topic := range editorial.Topics {
+			ids := make([]string, 0, len(topic.Citations))
+			for _, c := range topic.Citations {
+				ids = append(ids, articles[c-1].ID)
+			}
+			clusters = append(clusters, core.TopicCluster{Label: topic.Name, ArticleIDs: ids})
+		}
+		narrativeGen := narrative.NewGenerator(&narrativeLLMAdapter{client: llmClient})
 		return generateSlackDigest(ctx, narrativeGen, clusters, articleMap, summaryMap, articles, outputDir, startTime, inputFile, len(links))
 	}
 
-	// Step 8: Generate unified executive summary from ALL cluster narratives
-	fmt.Printf("\n✨ Step 8/9: Generating unified executive summary from all clusters...\n")
-
-	// Generate ONE digest content from ALL clusters (hierarchical summarization)
-	critiqueConfig := narrative.DefaultCritiqueConfig()
-	digestContent, err := narrativeGen.GenerateDigestContentWithCritique(ctx, clusters, articleMap, summaryMap, critiqueConfig)
-	if err != nil {
-		log.Warn("Failed to generate unified digest content", "error", err)
-		// Use fallback
-		digestContent = &narrative.DigestContent{
-			Title:            fmt.Sprintf("Weekly Tech Digest - %d Articles", len(articles)),
-			TLDRSummary:      fmt.Sprintf("Digest covering %d articles across %d topics", len(articles), len(clusters)),
-			KeyMoments:       []core.KeyMoment{},
-			Perspectives:     []core.Perspective{},
-			ExecutiveSummary: "This digest covers recent developments in technology.",
-		}
-	}
-
-	fmt.Printf("   ✓ Generated unified digest: %s\n", digestContent.Title)
-
-	// Build article groups organized by cluster
-	articleGroups := make([]core.ArticleGroup, 0, len(clusters))
-	for _, cluster := range clusters {
-		if len(cluster.ArticleIDs) == 0 {
-			continue
-		}
-
-		// Build article list for this cluster
-		clusterArticles := make([]core.Article, 0, len(cluster.ArticleIDs))
-		for _, articleID := range cluster.ArticleIDs {
-			if article, found := articleMap[articleID]; found {
-				clusterArticles = append(clusterArticles, article)
-			}
-		}
-
-		// Get theme/cluster name
-		themeName := cluster.Label
-		if cluster.Narrative != nil && cluster.Narrative.Title != "" {
-			themeName = cluster.Narrative.Title
-		}
-
-		// Use cluster narrative as the summary
-		clusterSummary := ""
-		if cluster.Narrative != nil {
-			clusterSummary = cluster.Narrative.Summary
-		}
-
-		articleGroups = append(articleGroups, core.ArticleGroup{
-			Theme:            themeName,
-			Articles:         clusterArticles,
-			Summary:          clusterSummary,
-			ClusterNarrative: cluster.Narrative, // NEW v3.1: Include cluster narrative for bullet rendering
-			Category:         themeName,
-		})
-	}
-
-	// Inject citations into executive summary
-	summaryWithCitations := markdown.InjectCitationURLs(digestContent.ExecutiveSummary, articles)
+	// Step 5: Render markdown
+	fmt.Printf("\n📄 Step 5/5: Rendering markdown digest...\n")
 
 	now := time.Now()
-
-	// Create ONE unified digest with all articles
-	digest := &core.Digest{
-		ID:            uuid.NewString(),
-		Title:         digestContent.Title,
-		Summary:       summaryWithCitations,
-		TLDRSummary:   digestContent.TLDRSummary,
-		KeyMoments:    digestContent.KeyMoments,
-		Perspectives:  digestContent.Perspectives,
-		Articles:      articles,
-		ProcessedDate: now,
-		ArticleCount:  len(articles),
-
-		// v3.0 scannable format fields (NEW)
-		TopDevelopments: digestContent.TopDevelopments,
-		ByTheNumbers:    convertStatistics(digestContent.ByTheNumbers),
-		WhyItMatters:    digestContent.WhyItMatters,
-		MustRead:        convertMustRead(digestContent.MustRead),
-
-		ArticleGroups: articleGroups,
-		DigestSummary: digestContent.ExecutiveSummary,
-		Metadata: core.DigestMetadata{
-			Title:         digestContent.Title,
-			ArticleCount:  len(articles),
-			DateGenerated: now,
-			TLDRSummary:   digestContent.TLDRSummary,
-		},
-	}
-
-	// Step 9: Render unified markdown file
-	fmt.Printf("\n📄 Step 9/9: Rendering unified markdown digest...\n")
-
-	outputPath, err := saveDigestMarkdown(digest, outputDir)
-	if err != nil {
-		return fmt.Errorf("failed to save digest markdown: %w", err)
+	content := renderEditorialDigest(editorial, articles, failed, now)
+	outputPath := fmt.Sprintf("%s/digest_%s.md", outputDir, now.Format("2006-01-02"))
+	if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write digest: %w", err)
 	}
 
 	fmt.Printf("   ✓ Saved: %s\n", outputPath)
 
 	duration := time.Since(startTime)
-
-	// Print summary
-	fmt.Printf("\n✅ Successfully generated unified digest!\n")
-	fmt.Printf("   Title: %s\n", digest.Title)
+	fmt.Printf("\n✅ Successfully generated digest!\n")
+	fmt.Printf("   Title: %s\n", editorial.Title)
 	fmt.Printf("   Input file: %s\n", inputFile)
 	fmt.Printf("   Total URLs: %d\n", len(links))
-	fmt.Printf("   Articles fetched: %d\n", len(articles))
-	fmt.Printf("   Topic clusters: %d\n", len(clusters))
+	fmt.Printf("   Articles included: %d\n", len(articles))
+	if len(failed) > 0 {
+		fmt.Printf("   ⚠️  Links not included: %d (listed in digest footer)\n", len(failed))
+		for _, f := range failed {
+			fmt.Printf("      - %s (%s)\n", f.URL, f.Reason)
+		}
+	}
 	fmt.Printf("   Output file: %s\n", outputPath)
 	fmt.Printf("   Duration: %s\n", duration.Round(time.Millisecond))
-
-	// Show cluster breakdown
-	fmt.Println("\n📊 Cluster Breakdown:")
-	for i, group := range articleGroups {
-		fmt.Printf("   %d. %s (%d articles)\n", i+1, group.Theme, len(group.Articles))
-	}
 
 	fmt.Println("\n💡 Next steps:")
 	fmt.Println("   • Review the digest:", outputPath)
@@ -606,6 +344,21 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 	fmt.Println("   • Share on LinkedIn or your preferred platform")
 
 	return nil
+}
+
+// fallbackEditorialDigest builds a minimal but complete digest structure when
+// the editorial LLM call fails: one topic, one-liners from summaries.
+func fallbackEditorialDigest(articles []core.Article, summaries map[string]*core.Summary) *editorialDigest {
+	d := &editorialDigest{
+		Title: fmt.Sprintf("This Week in GenAI — %d Links", len(articles)),
+	}
+	citations := make([]int, 0, len(articles))
+	for i := range articles {
+		citations = append(citations, i+1)
+	}
+	d.Topics = []editorialTopic{{Name: "This Week", Emoji: "🗞️", Citations: citations}}
+	normalizeEditorialDigest(d, articles, summaries)
+	return d
 }
 
 // generateSlackDigest handles Slack format digest generation

@@ -65,7 +65,7 @@ func BuildSummarizationPrompt(title, content string, opts PromptOptions) string 
 		prompt.WriteString(fmt.Sprintf("**Title:** %s\n\n", title))
 	}
 
-	prompt.WriteString(fmt.Sprintf("**Content:**\n%s\n\n", truncateContent(content, 4000)))
+	prompt.WriteString(fmt.Sprintf("**Content:**\n%s\n\n", truncateContent(content, 12000)))
 
 	// PHASE 1: Fact Extraction (NEW)
 	prompt.WriteString("**PHASE 1: Extract Concrete Facts**\n")
