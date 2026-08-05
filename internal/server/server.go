@@ -23,7 +23,7 @@ type Server struct {
 	config     config.Server
 	log        *slog.Logger
 	renderer   *TemplateRenderer
-	analytics  interface{} // Optional analytics client
+	analytics  any // Optional analytics client
 }
 
 // New creates a new HTTP server instance
@@ -67,9 +67,6 @@ func New(db persistence.Database, cfg config.Server) *Server {
 func (s *Server) setupMiddleware() {
 	// Request ID middleware
 	s.router.Use(middleware.RequestID)
-
-	// Real IP middleware
-	s.router.Use(middleware.RealIP)
 
 	// Logging middleware
 	s.router.Use(middleware.Logger)

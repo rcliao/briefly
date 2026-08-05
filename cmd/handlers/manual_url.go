@@ -181,7 +181,7 @@ func runManualURLAdd(ctx context.Context, urls []string, submittedBy string) err
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	addedCount := 0
 	for _, url := range urls {
@@ -222,7 +222,7 @@ func runManualURLList(ctx context.Context, statusFilter string, limit int) error
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	var urls []core.ManualURL
 	if statusFilter != "" {
@@ -271,7 +271,7 @@ func runManualURLList(ctx context.Context, statusFilter string, limit int) error
 			url.ID[:8]+"...", urlShort, statusIcon, url.Status, submittedBy, created,
 		)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	fmt.Printf("\nTotal URLs: %d\n", len(urls))
 	if statusFilter != "" {
@@ -286,7 +286,7 @@ func runManualURLStatus(ctx context.Context, urlID string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	manualURL, err := db.ManualURLs().Get(ctx, urlID)
 	if err != nil {
@@ -321,7 +321,7 @@ func runManualURLRetry(ctx context.Context, urlID string, retryAll bool) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if retryAll {
 		log.Info("Retrying all failed URLs")
@@ -375,7 +375,7 @@ func runManualURLClear(ctx context.Context, clearProcessed, clearFailed bool) er
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	deletedCount := 0
 

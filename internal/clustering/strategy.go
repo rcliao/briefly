@@ -169,7 +169,7 @@ func (ac *AdaptiveClusterer) Cluster(
 		clusterer := NewKMeansClustererV2(ac.kmeansConfig)
 		clusters, analysis, err = clusterer.ClusterWithOptimalK(articles)
 		if err != nil {
-			return nil, nil, strategy, fmt.Errorf("K-means clustering failed: %w", err)
+			return nil, nil, strategy, fmt.Errorf("k-means clustering failed: %w", err)
 		}
 
 	case StrategyHDBSCAN:

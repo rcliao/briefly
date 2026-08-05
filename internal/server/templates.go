@@ -62,13 +62,13 @@ func (tr *TemplateRenderer) loadTemplates() error {
 			}
 			return a / b
 		},
-		"eq": func(a, b interface{}) bool { return a == b },
-		"ne": func(a, b interface{}) bool { return a != b },
+		"eq": func(a, b any) bool { return a == b },
+		"ne": func(a, b any) bool { return a != b },
 		"gt": func(a, b int) bool { return a > b },
 		"lt": func(a, b int) bool { return a < b },
-		"len": func(s interface{}) int {
+		"len": func(s any) int {
 			switch v := s.(type) {
-			case []interface{}:
+			case []any:
 				return len(v)
 			case string:
 				return len(v)
@@ -119,7 +119,7 @@ func (tr *TemplateRenderer) loadTemplates() error {
 }
 
 // Render executes a template with the given data
-func (tr *TemplateRenderer) Render(w io.Writer, name string, data interface{}) error {
+func (tr *TemplateRenderer) Render(w io.Writer, name string, data any) error {
 	// In dev mode, reload templates on each request
 	if tr.devMode {
 		if err := tr.loadTemplates(); err != nil {

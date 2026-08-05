@@ -60,7 +60,7 @@ func runDigestCompare(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create comparison framework
 	framework := testing.NewComparisonFramework()

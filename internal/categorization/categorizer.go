@@ -65,19 +65,19 @@ func (c *Categorizer) buildCategorizationPrompt(article *core.Article, summary *
 
 	// List available categories
 	for _, cat := range c.categories {
-		prompt.WriteString(fmt.Sprintf("- **%s**: %s\n", cat.Name, cat.Description))
+		fmt.Fprintf(&prompt, "- **%s**: %s\n", cat.Name, cat.Description)
 	}
 
 	prompt.WriteString("\n**Article Information:**\n")
-	prompt.WriteString(fmt.Sprintf("Title: %s\n", article.Title))
-	prompt.WriteString(fmt.Sprintf("URL: %s\n", article.URL))
+	fmt.Fprintf(&prompt, "Title: %s\n", article.Title)
+	fmt.Fprintf(&prompt, "URL: %s\n", article.URL)
 
 	if summary != nil && summary.SummaryText != "" {
 		summaryText := summary.SummaryText
 		if len(summaryText) > 500 {
 			summaryText = summaryText[:500] + "..."
 		}
-		prompt.WriteString(fmt.Sprintf("Summary: %s\n", summaryText))
+		fmt.Fprintf(&prompt, "Summary: %s\n", summaryText)
 	}
 
 	prompt.WriteString("\n**Instructions:**\n")

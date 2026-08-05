@@ -372,7 +372,7 @@ func extractClusterData(clustering *hdbscan.Clustering) []ClusterData {
 		clusterPtr := clustersField.Index(i)
 
 		// Dereference pointer to get cluster struct
-		if clusterPtr.Kind() == reflect.Ptr {
+		if clusterPtr.Kind() == reflect.Pointer {
 			clusterPtr = clusterPtr.Elem()
 		}
 

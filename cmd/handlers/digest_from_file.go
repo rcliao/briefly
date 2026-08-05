@@ -133,7 +133,7 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 		if err != nil {
 			log.Warn("Failed to initialize cache, continuing without cache", "error", err)
 		} else {
-			defer cache.Close()
+			defer func() { _ = cache.Close() }()
 			fmt.Println("   ✓ Cache initialized")
 		}
 	}
@@ -430,13 +430,13 @@ func renderSlackFormat(content *narrative.SlackDigestContent, articles []core.Ar
 	articleURLs := buildArticleURLMap(articles, clusters)
 
 	// Header
-	out.WriteString(fmt.Sprintf("🤖 *AI Weekly* — %s\n\n", content.WeekRange))
+	fmt.Fprintf(&out, "🤖 *AI Weekly* — %s\n\n", content.WeekRange)
 
 	// Big 3 Section
 	out.WriteString("*🔥 This Week's Big 3*\n\n")
 	for _, item := range content.Big3 {
 		url := getArticleURL(articleURLs, item.ArticleNum)
-		out.WriteString(fmt.Sprintf("*%s* — %s\n%s\n\n", item.Headline, item.Editorial, url))
+		fmt.Fprintf(&out, "*%s* — %s\n%s\n\n", item.Headline, item.Editorial, url)
 	}
 
 	// Separator
@@ -445,7 +445,7 @@ func renderSlackFormat(content *narrative.SlackDigestContent, articles []core.Ar
 	// Also on my radar
 	out.WriteString("*📌 Also on my radar* (links in thread)\n")
 	for _, item := range content.AlsoOnRadar {
-		out.WriteString(fmt.Sprintf("- %s\n", item.Title))
+		fmt.Fprintf(&out, "- %s\n", item.Title)
 	}
 
 	// Chunk thread content for Slack message limits
@@ -454,7 +454,7 @@ func renderSlackFormat(content *narrative.SlackDigestContent, articles []core.Ar
 	// Thread content (chunked for multiple messages)
 	for i, chunk := range chunks {
 		if len(chunks) > 1 {
-			out.WriteString(fmt.Sprintf("\n---\n*🧵 Thread %d/%d*\n\n", i+1, len(chunks)))
+			fmt.Fprintf(&out, "\n---\n*🧵 Thread %d/%d*\n\n", i+1, len(chunks))
 		} else {
 			out.WriteString("\n---\n*🧵 Thread: More Details*\n\n")
 		}

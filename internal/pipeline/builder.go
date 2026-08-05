@@ -267,7 +267,7 @@ type LLMClientForSummarize struct {
 	client *llm.Client
 }
 
-func (l *LLMClientForSummarize) GenerateText(ctx context.Context, prompt string, options interface{}) (string, error) {
+func (l *LLMClientForSummarize) GenerateText(ctx context.Context, prompt string, options any) (string, error) {
 	// Phase 1: Handle structured summary options with ResponseSchema
 	llmOptions := llm.TextGenerationOptions{}
 

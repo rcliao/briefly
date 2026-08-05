@@ -323,10 +323,3 @@ func GradeClusterCoherence(metrics *ClusterCoherenceMetrics, thresholds QualityT
 	// Grade D - Poor clustering
 	return "D - POOR"
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

@@ -13,7 +13,7 @@ import (
 // LLMClient defines the interface for LLM operations
 type LLMClient interface {
 	// GenerateText generates text from a prompt
-	GenerateText(ctx context.Context, prompt string, options interface{}) (string, error)
+	GenerateText(ctx context.Context, prompt string, options any) (string, error)
 }
 
 // SummarizerInterface defines the interface for article summarization

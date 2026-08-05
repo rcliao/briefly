@@ -453,12 +453,15 @@ func Load(configFile string) (*Config, error) {
 	return config, nil
 }
 
-// Get returns the global configuration, loading it if necessary
+// Get returns the global configuration, loading it if necessary.
+// A CLI cannot proceed without configuration, so a load failure here exits
+// with a clear message rather than panicking with a stack trace.
 func Get() *Config {
 	if globalConfig == nil {
 		config, err := Load("")
 		if err != nil {
-			panic(fmt.Sprintf("Failed to load configuration: %v", err))
+			fmt.Fprintf(os.Stderr, "briefly: failed to load configuration: %v\n", err)
+			os.Exit(1)
 		}
 		return config
 	}
@@ -736,7 +739,6 @@ func bindEnvironmentVariables() {
 		"PORT",
 	})
 
-
 	// PostHog analytics
 	bindEnvKeys("observability.posthog.api_key", []string{
 		"POSTHOG_API_KEY",
@@ -923,18 +925,18 @@ func GenerateTeamContextPrompt() string {
 	prompt.WriteString("I'm sharing these links with my software engineering team. ")
 
 	if len(team.TechStack) > 0 {
-		prompt.WriteString(fmt.Sprintf("We work with %s, ", strings.Join(team.TechStack, ", ")))
+		fmt.Fprintf(&prompt, "We work with %s, ", strings.Join(team.TechStack, ", "))
 	}
 
 	if team.ProductType != "" {
-		prompt.WriteString(fmt.Sprintf("and focus on %s. ", team.ProductType))
+		fmt.Fprintf(&prompt, "and focus on %s. ", team.ProductType)
 	}
 
 	prompt.WriteString("Help me write concise \"Why it matters\" insights for each link.\n\n")
 	prompt.WriteString("Context about our team:\n")
 
 	if team.ProductType != "" {
-		prompt.WriteString(fmt.Sprintf("- We build %s\n", team.ProductType))
+		fmt.Fprintf(&prompt, "- We build %s\n", team.ProductType)
 	}
 
 	if len(team.CurrentChallenges) > 0 {
@@ -956,7 +958,7 @@ func GenerateTeamContextPrompt() string {
 	}
 
 	if team.Priority != "" {
-		prompt.WriteString(fmt.Sprintf("- Current priority: %s\n", team.Priority))
+		fmt.Fprintf(&prompt, "- Current priority: %s\n", team.Priority)
 	}
 
 	return prompt.String()

@@ -60,7 +60,7 @@ func digestShowRun(cmd *cobra.Command, digestID string, format string) {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect to database: %v\n", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Fetch digest with relationships
 	digest, err := db.Digests().GetWithArticles(ctx, digestID)

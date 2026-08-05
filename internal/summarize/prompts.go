@@ -62,10 +62,10 @@ func BuildSummarizationPrompt(title, content string, opts PromptOptions) string 
 
 	// Article details
 	if title != "" {
-		prompt.WriteString(fmt.Sprintf("**Title:** %s\n\n", title))
+		fmt.Fprintf(&prompt, "**Title:** %s\n\n", title)
 	}
 
-	prompt.WriteString(fmt.Sprintf("**Content:**\n%s\n\n", truncateContent(content, 12000)))
+	fmt.Fprintf(&prompt, "**Content:**\n%s\n\n", truncateContent(content, 12000))
 
 	// PHASE 1: Fact Extraction (NEW)
 	prompt.WriteString("**PHASE 1: Extract Concrete Facts**\n")
@@ -91,7 +91,7 @@ func BuildSummarizationPrompt(title, content string, opts PromptOptions) string 
 
 	// PHASE 2: Summary with Facts (ENHANCED)
 	prompt.WriteString("**PHASE 2: Create Summary Using Facts**\n")
-	prompt.WriteString(fmt.Sprintf("Write a %d-word summary that:\n", opts.MaxWords))
+	fmt.Fprintf(&prompt, "Write a %d-word summary that:\n", opts.MaxWords)
 	prompt.WriteString("1. Uses ONLY the concrete facts you extracted above\n")
 	prompt.WriteString("2. Includes specific numbers, names, and dates (not vague terms)\n")
 	prompt.WriteString("3. Focuses on what actually happened and why it matters\n\n")
@@ -105,7 +105,7 @@ func BuildSummarizationPrompt(title, content string, opts PromptOptions) string 
 
 	// Key Points (if requested)
 	if opts.IncludeKeyPoints {
-		prompt.WriteString(fmt.Sprintf("**PHASE 3: Extract %d Key Points**\n", opts.KeyPointCount))
+		fmt.Fprintf(&prompt, "**PHASE 3: Extract %d Key Points**\n", opts.KeyPointCount)
 		prompt.WriteString("Each key point must:\n")
 		prompt.WriteString("- Be specific (include numbers, names, or dates)\n")
 		prompt.WriteString("- State ONE concrete fact or insight\n")
@@ -121,12 +121,12 @@ func BuildSummarizationPrompt(title, content string, opts PromptOptions) string 
 	prompt.WriteString("IMPACT: [List specific problems solved/improvements]\n\n")
 
 	prompt.WriteString("SUMMARY:\n")
-	prompt.WriteString(fmt.Sprintf("[Your %d-word summary using facts above]\n\n", opts.MaxWords))
+	fmt.Fprintf(&prompt, "[Your %d-word summary using facts above]\n\n", opts.MaxWords)
 
 	if opts.IncludeKeyPoints {
 		prompt.WriteString("KEY POINTS:\n")
 		for i := 1; i <= opts.KeyPointCount; i++ {
-			prompt.WriteString(fmt.Sprintf("- [Specific key point %d with numbers/names/dates]\n", i))
+			fmt.Fprintf(&prompt, "- [Specific key point %d with numbers/names/dates]\n", i)
 		}
 	}
 
@@ -202,7 +202,7 @@ func BuildComparisonPrompt(summaries []string) string {
 	prompt.WriteString("Analyze these article summaries and identify common themes and connections.\n\n")
 
 	for i, summary := range summaries {
-		prompt.WriteString(fmt.Sprintf("**Article %d:**\n%s\n\n", i+1, truncateContent(summary, 300)))
+		fmt.Fprintf(&prompt, "**Article %d:**\n%s\n\n", i+1, truncateContent(summary, 300))
 	}
 
 	prompt.WriteString(`**Instructions:**

@@ -863,7 +863,7 @@ type ThemeClassifierAdapter struct {
 
 // NewThemeClassifierAdapter creates an adapter from a classifier
 // The classifier must have a GetBestMatch method that returns a result implementing ThemeClassificationResult
-func NewThemeClassifierAdapter(classifier interface{}) *ThemeClassifierAdapter {
+func NewThemeClassifierAdapter(classifier any) *ThemeClassifierAdapter {
 	// Define the expected interface
 	type classifierWithGetBestMatch interface {
 		GetBestMatch(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (ThemeClassificationResult, error)
@@ -882,7 +882,7 @@ func NewThemeClassifierAdapter(classifier interface{}) *ThemeClassifierAdapter {
 		getBestMatchFunc: func(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (ThemeClassificationResult, error) {
 			// Use reflection-free approach: call the method directly via interface{}
 			type anyResultClassifier interface {
-				GetBestMatch(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (interface{}, error)
+				GetBestMatch(ctx context.Context, article core.Article, themes []core.Theme, minRelevance float64) (any, error)
 			}
 
 			if c, ok := classifier.(anyResultClassifier); ok {
@@ -899,7 +899,7 @@ func NewThemeClassifierAdapter(classifier interface{}) *ThemeClassifierAdapter {
 				}
 			}
 
-			panic(fmt.Sprintf("classifier %T does not implement expected GetBestMatch signature", classifier))
+			return nil, fmt.Errorf("classifier %T does not implement expected GetBestMatch signature", classifier)
 		},
 	}
 }

@@ -486,16 +486,16 @@ const (
 // Citation represents source attribution metadata for an article (Phase 1)
 // Updated in v2.0 to support both article metadata citations AND digest inline citations
 type Citation struct {
-	ID            string                 `json:"id"`                       // Unique identifier
-	ArticleID     string                 `json:"article_id"`               // Reference to source article
-	URL           string                 `json:"url"`                      // Canonical URL
-	Title         string                 `json:"title,omitempty"`          // Original title from source
-	Publisher     string                 `json:"publisher,omitempty"`      // Publisher or domain name
-	Author        string                 `json:"author,omitempty"`         // Article author if available
-	PublishedDate *time.Time             `json:"published_date,omitempty"` // Original publication date
-	AccessedDate  time.Time              `json:"accessed_date"`            // When we fetched this article
-	Metadata      map[string]interface{} `json:"metadata,omitempty"`       // Additional metadata (DOI, ISBN, etc.)
-	CreatedAt     time.Time              `json:"created_at"`               // Citation record creation
+	ID            string         `json:"id"`                       // Unique identifier
+	ArticleID     string         `json:"article_id"`               // Reference to source article
+	URL           string         `json:"url"`                      // Canonical URL
+	Title         string         `json:"title,omitempty"`          // Original title from source
+	Publisher     string         `json:"publisher,omitempty"`      // Publisher or domain name
+	Author        string         `json:"author,omitempty"`         // Article author if available
+	PublishedDate *time.Time     `json:"published_date,omitempty"` // Original publication date
+	AccessedDate  time.Time      `json:"accessed_date"`            // When we fetched this article
+	Metadata      map[string]any `json:"metadata,omitempty"`       // Additional metadata (DOI, ISBN, etc.)
+	CreatedAt     time.Time      `json:"created_at"`               // Citation record creation
 
 	// v2.0 digest citation fields (for inline citations in digest summaries)
 	DigestID       *string `json:"digest_id,omitempty"`       // Reference to digest (NULL = article metadata, NOT NULL = digest citation)

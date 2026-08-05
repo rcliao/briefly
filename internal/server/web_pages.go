@@ -33,7 +33,7 @@ func (s *Server) handleThemesPage(w http.ResponseWriter, r *http.Request) {
 	apiKey, host := s.getPostHogConfig()
 
 	tmpl := template.Must(template.New("themes").Parse(themesPageTemplate))
-	data := map[string]interface{}{
+	data := map[string]any{
 		"PostHogAPIKey":  apiKey,
 		"PostHogHost":    host,
 		"PostHogEnabled": apiKey != "",
@@ -52,7 +52,7 @@ func (s *Server) handleSubmitPage(w http.ResponseWriter, r *http.Request) {
 	apiKey, host := s.getPostHogConfig()
 
 	tmpl := template.Must(template.New("submit").Parse(submitPageTemplate))
-	data := map[string]interface{}{
+	data := map[string]any{
 		"PostHogAPIKey":  apiKey,
 		"PostHogHost":    host,
 		"PostHogEnabled": apiKey != "",
@@ -477,7 +477,7 @@ func (s *Server) prepareDigestDetailData(ctx context.Context, digest *core.Diges
 			// Remove wrapping <p> tags from markdown output
 			devHTMLStr := strings.TrimPrefix(string(devHTML), "<p>")
 			devHTMLStr = strings.TrimSuffix(devHTMLStr, "</p>\n")
-			sb.WriteString(fmt.Sprintf("<li>%s</li>\n", devHTMLStr))
+			fmt.Fprintf(&sb, "<li>%s</li>\n", devHTMLStr)
 		}
 
 		// Add by the numbers
@@ -485,7 +485,7 @@ func (s *Server) prepareDigestDetailData(ctx context.Context, digest *core.Diges
 			contextHTML := renderMarkdownWithCitations(stat.Context)
 			contextHTMLStr := strings.TrimPrefix(string(contextHTML), "<p>")
 			contextHTMLStr = strings.TrimSuffix(contextHTMLStr, "</p>\n")
-			sb.WriteString(fmt.Sprintf("<li><strong>%s</strong> - %s</li>\n", stat.Stat, contextHTMLStr))
+			fmt.Fprintf(&sb, "<li><strong>%s</strong> - %s</li>\n", stat.Stat, contextHTMLStr)
 		}
 
 		sb.WriteString("</ul>\n")

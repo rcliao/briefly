@@ -20,9 +20,9 @@ type postgresSummaryRepo struct {
 }
 
 func (r *postgresSummaryRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -58,7 +58,7 @@ func (r *postgresSummaryRepo) GetByArticleID(ctx context.Context, articleID stri
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var summaries []core.Summary
 	for rows.Next() {
@@ -81,7 +81,7 @@ func (r *postgresSummaryRepo) List(ctx context.Context, opts ListOptions) ([]cor
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var summaries []core.Summary
 	for rows.Next() {
@@ -155,9 +155,9 @@ type postgresFeedRepo struct {
 }
 
 func (r *postgresFeedRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -211,7 +211,7 @@ func (r *postgresFeedRepo) ListActive(ctx context.Context) ([]core.Feed, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var feeds []core.Feed
 	for rows.Next() {
@@ -238,7 +238,7 @@ func (r *postgresFeedRepo) List(ctx context.Context, opts ListOptions) ([]core.F
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var feeds []core.Feed
 	for rows.Next() {
@@ -350,9 +350,9 @@ type postgresFeedItemRepo struct {
 }
 
 func (r *postgresFeedItemRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -400,7 +400,7 @@ func (r *postgresFeedItemRepo) CreateBatch(ctx context.Context, items []core.Fee
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for _, item := range items {
 		_, err := stmt.ExecContext(ctx,
@@ -438,7 +438,7 @@ func (r *postgresFeedItemRepo) GetByFeedID(ctx context.Context, feedID string, l
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []core.FeedItem
 	for rows.Next() {
@@ -462,7 +462,7 @@ func (r *postgresFeedItemRepo) GetUnprocessed(ctx context.Context, limit int) ([
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []core.FeedItem
 	for rows.Next() {
@@ -488,7 +488,7 @@ func (r *postgresFeedItemRepo) List(ctx context.Context, opts ListOptions) ([]co
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []core.FeedItem
 	for rows.Next() {
@@ -547,9 +547,9 @@ type postgresDigestRepo struct {
 }
 
 func (r *postgresDigestRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -789,7 +789,7 @@ func (r *postgresDigestRepo) Get(ctx context.Context, id string) (*core.Digest, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load digest articles: %w", err)
 	}
-	defer articleRows.Close()
+	defer func() { _ = articleRows.Close() }()
 
 	var articles []core.Article
 	for articleRows.Next() {
@@ -887,7 +887,7 @@ func (r *postgresDigestRepo) List(ctx context.Context, opts ListOptions) ([]core
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var digests []core.Digest
 	for rows.Next() {
@@ -1063,11 +1063,11 @@ func (r *postgresDigestRepo) StoreWithRelationships(ctx context.Context, digest 
 	}
 
 	// Build legacy content JSONB for backward compatibility
-	contentJSON := map[string]interface{}{
+	contentJSON := map[string]any{
 		"summary": digest.Summary,
 		"title":   digest.Title,
 		"my_take": "",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"title":          digest.Title,
 			"tldr_summary":   digest.TLDRSummary,
 			"article_count":  digest.ArticleCount,
@@ -1250,7 +1250,7 @@ func (r *postgresDigestRepo) ListRecent(ctx context.Context, since time.Time, li
 	if err != nil {
 		return nil, fmt.Errorf("failed to query recent digests: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var digests []core.Digest
 	for rows.Next() {
@@ -1325,7 +1325,7 @@ func (r *postgresDigestRepo) GetDigestArticles(ctx context.Context, digestID str
 	if err != nil {
 		return nil, fmt.Errorf("query articles for digest failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var articles []core.Article
 	for rows.Next() {
@@ -1372,9 +1372,9 @@ type postgresThemeRepo struct {
 }
 
 func (r *postgresThemeRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -1428,7 +1428,7 @@ func (r *postgresThemeRepo) List(ctx context.Context, enabledOnly bool) ([]core.
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var themes []core.Theme
 	for rows.Next() {
@@ -1512,9 +1512,9 @@ type postgresManualURLRepo struct {
 }
 
 func (r *postgresManualURLRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -1576,7 +1576,7 @@ func (r *postgresManualURLRepo) List(ctx context.Context, opts ListOptions) ([]c
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var manualURLs []core.ManualURL
 	for rows.Next() {
@@ -1598,7 +1598,7 @@ func (r *postgresManualURLRepo) GetPending(ctx context.Context, limit int) ([]co
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var manualURLs []core.ManualURL
 	for rows.Next() {
@@ -1626,7 +1626,7 @@ func (r *postgresManualURLRepo) GetByStatus(ctx context.Context, status string, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var manualURLs []core.ManualURL
 	for rows.Next() {
@@ -1708,9 +1708,9 @@ type postgresTagRepo struct {
 }
 
 func (r *postgresTagRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -1765,7 +1765,7 @@ func (r *postgresTagRepo) List(ctx context.Context, enabledOnly bool) ([]core.Ta
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tags []core.Tag
 	for rows.Next() {
@@ -1796,7 +1796,7 @@ func (r *postgresTagRepo) ListByTheme(ctx context.Context, themeID string, enabl
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tags []core.Tag
 	for rows.Next() {
@@ -1870,7 +1870,7 @@ func (r *postgresTagRepo) GetArticleTags(ctx context.Context, articleID string) 
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tags []core.Tag
 	relevanceScores := make(map[string]float64)
@@ -1909,7 +1909,7 @@ func (r *postgresTagRepo) GetTagArticles(ctx context.Context, tagID string, minR
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var articleIDs []string
 	relevanceScores := make(map[string]float64)
@@ -1988,9 +1988,9 @@ type postgresClusterCoherenceRepo struct {
 }
 
 func (r *postgresClusterCoherenceRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -2097,7 +2097,7 @@ func (r *postgresClusterCoherenceRepo) ListRecent(ctx context.Context, limit int
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []ClusterCoherenceRecord
 	for rows.Next() {

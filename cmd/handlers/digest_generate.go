@@ -27,7 +27,7 @@ type llmClientAdapter struct {
 }
 
 // GenerateText implements summarize.LLMClient interface
-func (a *llmClientAdapter) GenerateText(ctx context.Context, prompt string, opts interface{}) (string, error) {
+func (a *llmClientAdapter) GenerateText(ctx context.Context, prompt string, opts any) (string, error) {
 	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
 }
 
@@ -123,7 +123,7 @@ func runDigestGenerate(ctx context.Context, sinceDays int, themeFilter string, o
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := db.Ping(ctx); err != nil {
 		return fmt.Errorf("database ping failed: %w", err)
@@ -450,8 +450,8 @@ func generateFallbackExecutiveSummary(articleGroups []core.ArticleGroup) string 
 		totalArticles += len(group.Articles)
 	}
 
-	summary.WriteString(fmt.Sprintf("%d articles across %d themes: %s.",
-		totalArticles, len(themes), strings.Join(themes, ", ")))
+	fmt.Fprintf(&summary, "%d articles across %d themes: %s.",
+		totalArticles, len(themes), strings.Join(themes, ", "))
 
 	return summary.String()
 }
@@ -490,7 +490,7 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 		}
 	}
 
-	content.WriteString(fmt.Sprintf("# 🗞️ %s\n\n", digestTitle))
+	fmt.Fprintf(&content, "# 🗞️ %s\n\n", digestTitle)
 
 	// Calculate total reading time
 	totalReadTime := 0
@@ -507,23 +507,23 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 
 	// Header with reading time
 	if digest.Metadata.TotalReadMinutes > 0 {
-		content.WriteString(fmt.Sprintf("*%d articles • %d min total read time*\n\n",
+		fmt.Fprintf(&content, "*%d articles • %d min total read time*\n\n",
 			digest.Metadata.ArticleCount,
-			digest.Metadata.TotalReadMinutes))
+			digest.Metadata.TotalReadMinutes)
 	} else {
-		content.WriteString(fmt.Sprintf("*%d Articles Across %d Themes*\n\n",
+		fmt.Fprintf(&content, "*%d Articles Across %d Themes*\n\n",
 			digest.Metadata.ArticleCount,
-			len(digest.ArticleGroups)))
+			len(digest.ArticleGroups))
 	}
 	content.WriteString("---\n\n")
 
 	// Must-Read Highlight Section (v3.1 - appears first)
 	if digest.MustRead != nil && digest.MustRead.Title != "" {
 		content.WriteString("## 🎯 This Week's Must-Read\n\n")
-		content.WriteString(fmt.Sprintf("**[%s]** [%d]\n\n", digest.MustRead.Title, digest.MustRead.ArticleNum))
-		content.WriteString(fmt.Sprintf("%s\n\n", digest.MustRead.WhyMustRead))
+		fmt.Fprintf(&content, "**[%s]** [%d]\n\n", digest.MustRead.Title, digest.MustRead.ArticleNum)
+		fmt.Fprintf(&content, "%s\n\n", digest.MustRead.WhyMustRead)
 		if digest.MustRead.ReadTime > 0 {
-			content.WriteString(fmt.Sprintf("📖 %d min read\n\n", digest.MustRead.ReadTime))
+			fmt.Fprintf(&content, "📖 %d min read\n\n", digest.MustRead.ReadTime)
 		}
 		content.WriteString("---\n\n")
 	}
@@ -535,7 +535,7 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 
 		// By the numbers first for quick scanning
 		for _, stat := range digest.ByTheNumbers {
-			content.WriteString(fmt.Sprintf("• **%s** - %s\n", stat.Stat, stat.Context))
+			fmt.Fprintf(&content, "• **%s** - %s\n", stat.Stat, stat.Context)
 		}
 
 		content.WriteString("\n---\n\n")
@@ -545,11 +545,11 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 
 		// One sentence executive summary (why it matters)
 		if digest.WhyItMatters != "" {
-			content.WriteString(fmt.Sprintf("%s\n\n", digest.WhyItMatters))
+			fmt.Fprintf(&content, "%s\n\n", digest.WhyItMatters)
 		}
 
 		for _, dev := range digest.TopDevelopments {
-			content.WriteString(fmt.Sprintf("• %s\n", dev))
+			fmt.Fprintf(&content, "• %s\n", dev)
 		}
 
 		content.WriteString("\n---\n\n")
@@ -611,8 +611,8 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 			}
 
 			// Intent section header
-			content.WriteString(fmt.Sprintf("## %s\n\n", getIntentSectionTitle(intent)))
-			content.WriteString(fmt.Sprintf("*%s*\n\n", getIntentDescription(intent)))
+			fmt.Fprintf(&content, "## %s\n\n", getIntentSectionTitle(intent))
+			fmt.Fprintf(&content, "*%s*\n\n", getIntentDescription(intent))
 
 			// Render articles in this intent group
 			for _, na := range articles {
@@ -633,7 +633,7 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 		for _, group := range digest.ArticleGroups {
 			// Theme header with emoji based on theme name
 			emoji := getThemeEmoji(group.Theme)
-			content.WriteString(fmt.Sprintf("## %s %s\n\n", emoji, group.Theme))
+			fmt.Fprintf(&content, "## %s %s\n\n", emoji, group.Theme)
 
 			// Build citation number mapping (cluster-relative → digest-global)
 			citationMap := make(map[int]int)
@@ -647,22 +647,22 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 			if group.ClusterNarrative != nil && len(group.ClusterNarrative.KeyDevelopments) > 0 {
 				if group.ClusterNarrative.OneLiner != "" {
 					remappedOneLiner := remapCitations(group.ClusterNarrative.OneLiner, citationMap)
-					content.WriteString(fmt.Sprintf("%s\n\n", remappedOneLiner))
+					fmt.Fprintf(&content, "%s\n\n", remappedOneLiner)
 				}
 
 				for _, dev := range group.ClusterNarrative.KeyDevelopments {
 					remappedDev := remapCitations(dev, citationMap)
-					content.WriteString(fmt.Sprintf("• %s\n", remappedDev))
+					fmt.Fprintf(&content, "• %s\n", remappedDev)
 				}
 
 				for _, stat := range group.ClusterNarrative.KeyStats {
 					remappedContext := remapCitations(stat.Context, citationMap)
-					content.WriteString(fmt.Sprintf("• **%s** - %s\n", stat.Stat, remappedContext))
+					fmt.Fprintf(&content, "• **%s** - %s\n", stat.Stat, remappedContext)
 				}
 
 				content.WriteString("\n")
 			} else if group.Summary != "" && !strings.Contains(group.Summary, "covering:") {
-				content.WriteString(fmt.Sprintf("*%s*\n\n", group.Summary))
+				fmt.Fprintf(&content, "*%s*\n\n", group.Summary)
 			}
 
 			// Articles in this theme
@@ -674,8 +674,8 @@ func saveDigestMarkdown(digest *core.Digest, outputDir string) (string, error) {
 	}
 
 	// Footer
-	content.WriteString(fmt.Sprintf("*Generated on %s*\n",
-		digest.Metadata.DateGenerated.Format("Jan 2, 2006")))
+	fmt.Fprintf(&content, "*Generated on %s*\n",
+		digest.Metadata.DateGenerated.Format("Jan 2, 2006"))
 
 	// Write file
 	if err := os.WriteFile(outputPath, []byte(content.String()), 0644); err != nil {
@@ -781,11 +781,11 @@ func getIntentDescription(intent string) string {
 func renderArticleEntry(content *strings.Builder, articleNum int, article core.Article, summaries []core.Summary) {
 	// Use numbered format with reading time
 	if article.EstimatedReadMinutes > 0 {
-		content.WriteString(fmt.Sprintf("**%d. %s** 📖 %d min\n\n", articleNum, article.Title, article.EstimatedReadMinutes))
+		fmt.Fprintf(content, "**%d. %s** 📖 %d min\n\n", articleNum, article.Title, article.EstimatedReadMinutes)
 	} else {
-		content.WriteString(fmt.Sprintf("**%d. %s**\n\n", articleNum, article.Title))
+		fmt.Fprintf(content, "**%d. %s**\n\n", articleNum, article.Title)
 	}
-	content.WriteString(fmt.Sprintf("🔗 [Read Article](%s)\n\n", article.URL))
+	fmt.Fprintf(content, "🔗 [Read Article](%s)\n\n", article.URL)
 
 	// Find summary
 	var summary *core.Summary

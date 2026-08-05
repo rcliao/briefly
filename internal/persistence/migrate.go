@@ -1,11 +1,12 @@
 package persistence
 
 import (
+	"cmp"
 	"context"
 	"embed"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -139,7 +140,7 @@ func (m *MigrationManager) getAppliedMigrations(ctx context.Context) ([]int, err
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var versions []int
 	for rows.Next() {
@@ -197,8 +198,8 @@ func (m *MigrationManager) loadMigrations() ([]Migration, error) {
 	}
 
 	// Sort by version
-	sort.Slice(migrations, func(i, j int) bool {
-		return migrations[i].Version < migrations[j].Version
+	slices.SortFunc(migrations, func(a, b Migration) int {
+		return cmp.Compare(a.Version, b.Version)
 	})
 
 	return migrations, nil

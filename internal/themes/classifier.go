@@ -216,12 +216,12 @@ func (c *Classifier) buildClassificationPrompt(article core.Article, themes []co
 
 	sb.WriteString("AVAILABLE THEMES:\n")
 	for i, theme := range themes {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, theme.Name))
+		fmt.Fprintf(&sb, "%d. %s\n", i+1, theme.Name)
 		if theme.Description != "" {
-			sb.WriteString(fmt.Sprintf("   Description: %s\n", theme.Description))
+			fmt.Fprintf(&sb, "   Description: %s\n", theme.Description)
 		}
 		if len(theme.Keywords) > 0 {
-			sb.WriteString(fmt.Sprintf("   Keywords: %s\n", strings.Join(theme.Keywords, ", ")))
+			fmt.Fprintf(&sb, "   Keywords: %s\n", strings.Join(theme.Keywords, ", "))
 		}
 		sb.WriteString("\n")
 	}

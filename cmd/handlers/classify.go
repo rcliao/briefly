@@ -130,7 +130,7 @@ func runClassify(ctx context.Context, maxArticles int, minRelevance float64, the
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Test database connection
 	if err := db.Ping(ctx); err != nil {

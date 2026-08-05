@@ -170,7 +170,7 @@ func runThemeAdd(ctx context.Context, name, description string, keywords []strin
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Check if theme already exists
 	existing, err := db.Themes().GetByName(ctx, name)
@@ -214,7 +214,7 @@ func runThemeRemove(ctx context.Context, themeID string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Check if theme exists
 	theme, err := db.Themes().Get(ctx, themeID)
@@ -237,7 +237,7 @@ func runThemeList(ctx context.Context, showDisabled bool) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	themes, err := db.Themes().List(ctx, !showDisabled)
 	if err != nil {
@@ -279,7 +279,7 @@ func runThemeList(ctx context.Context, showDisabled bool) error {
 			theme.ID[:8]+"...", nameShort, keywordsShort, status,
 		)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	fmt.Printf("\nTotal themes: %d\n", len(themes))
 	if !showDisabled {
@@ -301,7 +301,7 @@ func runThemeToggle(ctx context.Context, themeID string, enabled bool) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	theme, err := db.Themes().Get(ctx, themeID)
 	if err != nil {
@@ -335,7 +335,7 @@ func runThemeUpdate(ctx context.Context, themeID, description string, keywords [
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	theme, err := db.Themes().Get(ctx, themeID)
 	if err != nil {

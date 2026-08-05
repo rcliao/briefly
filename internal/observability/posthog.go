@@ -17,10 +17,10 @@ type PostHogClient struct {
 }
 
 // EventProperties contains properties for an event
-type EventProperties map[string]interface{}
+type EventProperties map[string]any
 
 // UserProperties contains properties for a user
-type UserProperties map[string]interface{}
+type UserProperties map[string]any
 
 // NewPostHogClient creates a new PostHog analytics client
 func NewPostHogClient() (*PostHogClient, error) {
@@ -180,7 +180,7 @@ func (p *PostHogClient) TrackLLMCall(ctx context.Context, model string, operatio
 
 // TrackEvent tracks a generic event with custom properties (Phase 1)
 // This method provides a generic interface for tracking arbitrary events
-func (p *PostHogClient) TrackEvent(ctx context.Context, event string, properties map[string]interface{}) error {
+func (p *PostHogClient) TrackEvent(ctx context.Context, event string, properties map[string]any) error {
 	return p.Capture(ctx, "system", event, properties)
 }
 

@@ -240,21 +240,6 @@ func (a *LouvainClustererAdapter) CalculateSimilarity(embedding1, embedding2 []f
 	return llm.CosineSimilarity(embedding1, embedding2)
 }
 
-// Helper functions for min/max
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // OrdererAdapter wraps internal/ordering
 type OrdererAdapter struct{}
 
@@ -370,7 +355,7 @@ func (a *RendererAdapter) renderCategoryBasedDigest(digest *core.Digest) (string
 	var content strings.Builder
 
 	// Header
-	content.WriteString(fmt.Sprintf("# %s\n\n", digest.Metadata.Title))
+	fmt.Fprintf(&content, "# %s\n\n", digest.Metadata.Title)
 
 	// Article count and reading time
 	articleCount := digest.Metadata.ArticleCount
@@ -378,7 +363,7 @@ func (a *RendererAdapter) renderCategoryBasedDigest(digest *core.Digest) (string
 	if readTime < 1 {
 		readTime = 1
 	}
-	content.WriteString(fmt.Sprintf("📊 %d sources • ⏱️ %dm read\n\n", articleCount, readTime))
+	fmt.Fprintf(&content, "📊 %d sources • ⏱️ %dm read\n\n", articleCount, readTime)
 
 	// Signal section (executive summary)
 	if digest.DigestSummary != "" {
@@ -400,7 +385,7 @@ func (a *RendererAdapter) renderCategoryBasedDigest(digest *core.Digest) (string
 
 		// Category header with icon
 		categoryIcon := a.getCategoryIcon(group.Category)
-		content.WriteString(fmt.Sprintf("### %s %s\n\n", categoryIcon, group.Category))
+		fmt.Fprintf(&content, "### %s %s\n\n", categoryIcon, group.Category)
 
 		// Articles in this category
 		for i, article := range group.Articles {
@@ -409,7 +394,7 @@ func (a *RendererAdapter) renderCategoryBasedDigest(digest *core.Digest) (string
 			}
 
 			// Article title with global numbering
-			content.WriteString(fmt.Sprintf("**[%d] %s**\n", globalArticleNum, article.Title))
+			fmt.Fprintf(&content, "**[%d] %s**\n", globalArticleNum, article.Title)
 			globalArticleNum++ // Increment global counter
 
 			// Summary from MyTake (populated earlier)
@@ -419,7 +404,7 @@ func (a *RendererAdapter) renderCategoryBasedDigest(digest *core.Digest) (string
 			}
 
 			// Link
-			content.WriteString(fmt.Sprintf("🔗 [Read more](%s)\n\n", article.URL))
+			fmt.Fprintf(&content, "🔗 [Read more](%s)\n\n", article.URL)
 		}
 	}
 

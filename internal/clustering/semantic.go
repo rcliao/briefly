@@ -54,14 +54,14 @@ func (s *SemanticClusterer) WithSimilarityThreshold(threshold float64) *Semantic
 }
 
 // WithMaxNeighbors sets the maximum neighbors to consider
-func (s *SemanticClusterer) WithMaxNeighbors(max int) *SemanticClusterer {
-	s.maxNeighbors = max
+func (s *SemanticClusterer) WithMaxNeighbors(n int) *SemanticClusterer {
+	s.maxNeighbors = n
 	return s
 }
 
 // WithMinClusterSize sets the minimum cluster size
-func (s *SemanticClusterer) WithMinClusterSize(min int) *SemanticClusterer {
-	s.minClusterSize = min
+func (s *SemanticClusterer) WithMinClusterSize(n int) *SemanticClusterer {
+	s.minClusterSize = n
 	return s
 }
 

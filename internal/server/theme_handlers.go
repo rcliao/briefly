@@ -210,8 +210,8 @@ func (s *Server) handleDeleteTheme(w http.ResponseWriter, r *http.Request) {
 
 // respondError writes an error response
 func (s *Server) respondError(w http.ResponseWriter, status int, message string) {
-	s.respondJSON(w, status, map[string]interface{}{
-		"error": map[string]interface{}{
+	s.respondJSON(w, status, map[string]any{
+		"error": map[string]any{
 			"status":  status,
 			"message": message,
 		},

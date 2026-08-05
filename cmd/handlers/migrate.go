@@ -118,7 +118,7 @@ func runMigrateUp(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create migration manager
 	pgDB, ok := db.(*persistence.PostgresDB)
@@ -143,7 +143,7 @@ func runMigrateStatus(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create migration manager
 	pgDB, ok := db.(*persistence.PostgresDB)
@@ -222,7 +222,7 @@ func runMigrateRollback(ctx context.Context, force bool) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create migration manager
 	pgDB, ok := db.(*persistence.PostgresDB)

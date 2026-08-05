@@ -22,7 +22,7 @@ type LLMClient interface {
 // PostHogTracker interface for analytics tracking
 type PostHogTracker interface {
 	IsEnabled() bool
-	TrackEvent(ctx context.Context, event string, properties map[string]interface{}) error
+	TrackEvent(ctx context.Context, event string, properties map[string]any) error
 }
 
 // Classifier classifies articles into multiple tags using LLM (multi-label classification)
@@ -133,7 +133,7 @@ func (c *Classifier) ClassifyArticle(ctx context.Context, article core.Article, 
 
 			// Track tag classification in PostHog
 			if c.posthog != nil && c.posthog.IsEnabled() {
-				_ = c.posthog.TrackEvent(ctx, "tag_classification", map[string]interface{}{
+				_ = c.posthog.TrackEvent(ctx, "tag_classification", map[string]any{
 					"article_id":      article.ID,
 					"tag_id":          result.TagID,
 					"tag_name":        result.TagName,
@@ -219,12 +219,12 @@ func (c *Classifier) buildClassificationPrompt(article core.Article, summary *co
 
 	sb.WriteString("AVAILABLE TAGS:\n")
 	for i, tag := range tags {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, tag.Name))
+		fmt.Fprintf(&sb, "%d. %s\n", i+1, tag.Name)
 		if tag.Description != "" {
-			sb.WriteString(fmt.Sprintf("   Description: %s\n", tag.Description))
+			fmt.Fprintf(&sb, "   Description: %s\n", tag.Description)
 		}
 		if len(tag.Keywords) > 0 {
-			sb.WriteString(fmt.Sprintf("   Keywords: %s\n", strings.Join(tag.Keywords, ", ")))
+			fmt.Fprintf(&sb, "   Keywords: %s\n", strings.Join(tag.Keywords, ", "))
 		}
 		sb.WriteString("\n")
 	}

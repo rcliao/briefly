@@ -19,7 +19,7 @@ type MockLLMClientStructured struct {
 	failUntil  int // Fail until this attempt number
 }
 
-func (m *MockLLMClientStructured) GenerateText(ctx context.Context, prompt string, options interface{}) (string, error) {
+func (m *MockLLMClientStructured) GenerateText(ctx context.Context, prompt string, options any) (string, error) {
 	m.callCount++
 
 	// Fail for testing retry logic

@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/lib/pq"
 )
@@ -65,7 +66,7 @@ func (p *PgVectorAdapter) Search(ctx context.Context, query SearchQuery) ([]Sear
 
 	// Build exclusion filter
 	excludeClause := ""
-	args := []interface{}{vectorStr, query.SimilarityThreshold, query.Limit}
+	args := []any{vectorStr, query.SimilarityThreshold, query.Limit}
 	if len(query.ExcludeIDs) > 0 {
 		excludeClause = "AND a.id NOT IN (SELECT unnest($4::text[]))"
 		args = append(args, pq.Array(query.ExcludeIDs))
@@ -89,7 +90,7 @@ func (p *PgVectorAdapter) Search(ctx context.Context, query SearchQuery) ([]Sear
 	if err != nil {
 		return nil, fmt.Errorf("failed to search: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []SearchResult
 	for rows.Next() {
@@ -134,7 +135,7 @@ func (p *PgVectorAdapter) SearchByTag(ctx context.Context, query SearchQuery, ta
 
 	// Build exclusion filter
 	excludeClause := ""
-	args := []interface{}{vectorStr, query.SimilarityThreshold, query.Limit, tagID}
+	args := []any{vectorStr, query.SimilarityThreshold, query.Limit, tagID}
 	if len(query.ExcludeIDs) > 0 {
 		excludeClause = "AND a.id NOT IN (SELECT unnest($5::text[]))"
 		args = append(args, pq.Array(query.ExcludeIDs))
@@ -159,7 +160,7 @@ func (p *PgVectorAdapter) SearchByTag(ctx context.Context, query SearchQuery, ta
 	if err != nil {
 		return nil, fmt.Errorf("failed to search by tag: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []SearchResult
 	for rows.Next() {
@@ -208,7 +209,7 @@ func (p *PgVectorAdapter) SearchByTags(ctx context.Context, query SearchQuery, t
 
 	// Build exclusion filter
 	excludeClause := ""
-	args := []interface{}{vectorStr, query.SimilarityThreshold, query.Limit, pq.Array(tagIDs)}
+	args := []any{vectorStr, query.SimilarityThreshold, query.Limit, pq.Array(tagIDs)}
 	if len(query.ExcludeIDs) > 0 {
 		excludeClause = "AND a.id NOT IN (SELECT unnest($5::text[]))"
 		args = append(args, pq.Array(query.ExcludeIDs))
@@ -234,7 +235,7 @@ func (p *PgVectorAdapter) SearchByTags(ctx context.Context, query SearchQuery, t
 	if err != nil {
 		return nil, fmt.Errorf("failed to search by tags: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []SearchResult
 	for rows.Next() {
@@ -362,9 +363,9 @@ func (p *PgVectorAdapter) GetStats(ctx context.Context) (*VectorStoreStats, erro
 		stats.IndexType = "none"
 		stats.IndexSize = 0
 	} else {
-		if contains(indexDef, "hnsw") {
+		if strings.Contains(indexDef, "hnsw") {
 			stats.IndexType = "hnsw"
-		} else if contains(indexDef, "ivfflat") {
+		} else if strings.Contains(indexDef, "ivfflat") {
 			stats.IndexType = "ivfflat"
 		} else {
 			stats.IndexType = "unknown"
@@ -402,7 +403,7 @@ func (p *PgVectorAdapter) populateArticles(ctx context.Context, results []Search
 	if err != nil {
 		return fmt.Errorf("failed to query articles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	articlesMap := make(map[string]*core.Article)
 	for rows.Next() {
@@ -455,7 +456,7 @@ func (p *PgVectorAdapter) populateTags(ctx context.Context, results []SearchResu
 	if err != nil {
 		return fmt.Errorf("failed to query tags: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	tagsMap := make(map[string][]string)
 	for rows.Next() {
@@ -494,20 +495,4 @@ func formatVector(embedding []float64) string {
 	}
 	result += "]"
 	return result
-}
-
-// contains checks if a string contains a substring (case-insensitive)
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-			containsHelper(s, substr)))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

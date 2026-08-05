@@ -23,7 +23,7 @@ func NewMockLLMClient() *MockLLMClient {
 	}
 }
 
-func (m *MockLLMClient) GenerateText(ctx context.Context, prompt string, options interface{}) (string, error) {
+func (m *MockLLMClient) GenerateText(ctx context.Context, prompt string, options any) (string, error) {
 	m.callCount++
 
 	if m.shouldFail {

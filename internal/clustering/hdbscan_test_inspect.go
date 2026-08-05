@@ -68,7 +68,7 @@ func inspectClusters(clustersValue reflect.Value) {
 				fmt.Printf("      Key: %v, Value Type: %s\n", key, val.Type())
 
 				// Try to inspect the value
-				if val.Kind() == reflect.Interface || val.Kind() == reflect.Ptr {
+				if val.Kind() == reflect.Interface || val.Kind() == reflect.Pointer {
 					val = val.Elem()
 				}
 
@@ -101,7 +101,7 @@ func inspectStruct(v reflect.Value, indent int) {
 		indentStr += " "
 	}
 
-	if v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+	if v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return
 		}

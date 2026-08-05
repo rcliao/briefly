@@ -16,9 +16,9 @@ type postgresCitationRepo struct {
 }
 
 func (r *postgresCitationRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -91,7 +91,7 @@ func (r *postgresCitationRepo) GetByArticleIDs(ctx context.Context, articleIDs [
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	citations := make(map[string]*core.Citation)
 	for rows.Next() {
@@ -123,7 +123,7 @@ func (r *postgresCitationRepo) List(ctx context.Context, opts ListOptions) ([]co
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var citations []core.Citation
 	for rows.Next() {

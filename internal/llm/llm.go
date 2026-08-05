@@ -278,9 +278,9 @@ Make each insight specific and actionable for our team.`
 	// Prepare article list
 	var articleList strings.Builder
 	for i, article := range articles {
-		articleList.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, article.Title))
-		articleList.WriteString(fmt.Sprintf("   Summary: %s\n", article.CleanedText[:min(500, len(article.CleanedText))]))
-		articleList.WriteString(fmt.Sprintf("   URL: %s\n\n", article.LinkID))
+		fmt.Fprintf(&articleList, "%d. **%s**\n", i+1, article.Title)
+		fmt.Fprintf(&articleList, "   Summary: %s\n", article.CleanedText[:min(500, len(article.CleanedText))])
+		fmt.Fprintf(&articleList, "   URL: %s\n\n", article.LinkID)
 	}
 
 	prompt := fmt.Sprintf(whyItMattersPrompt, teamContext, articleList.String())
@@ -491,13 +491,6 @@ Generate the complete enhanced digest that feels like a collaborative effort bet
 	return content, nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Close cleans up resources used by the client
 func (c *Client) Close() {
 	// New SDK client doesn't require explicit close
@@ -651,8 +644,7 @@ func (c *Client) GenerateText(ctx context.Context, prompt string, options TextGe
 	if options.MaxTokens > 0 || options.Temperature > 0 || options.ResponseSchema != nil {
 		config = &genai.GenerateContentConfig{}
 		if options.MaxTokens > 0 {
-			maxTokens := int32(options.MaxTokens)
-			config.MaxOutputTokens = maxTokens
+			config.MaxOutputTokens = options.MaxTokens
 		}
 		if options.Temperature > 0 {
 			temp := float32(options.Temperature)

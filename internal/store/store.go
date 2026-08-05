@@ -285,7 +285,7 @@ func (s *Store) DB() *sql.DB {
 
 // CacheArticle stores an article in the cache
 func (s *Store) CacheArticle(article core.Article) error {
-	metadata, _ := json.Marshal(map[string]interface{}{
+	metadata, _ := json.Marshal(map[string]any{
 		"link_id": article.LinkID,
 	})
 
@@ -992,8 +992,8 @@ func (s *Store) MarkFeedItemProcessed(itemID string) error {
 }
 
 // GetFeedStats returns statistics about feed items
-func (s *Store) GetFeedStats() (map[string]interface{}, error) {
-	stats := make(map[string]interface{})
+func (s *Store) GetFeedStats() (map[string]any, error) {
+	stats := make(map[string]any)
 
 	// Count feeds
 	var feedCount, activeFeedCount int

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -334,7 +334,7 @@ func (s *Server) getDigestsForTheme(ctx context.Context, themeID string, page in
 			themes = append(themes, theme)
 		}
 		// Sort themes alphabetically for consistent display order
-		sort.Strings(themes)
+		slices.Sort(themes)
 
 		result = append(result, DigestSummaryView{
 			ID:             d.ID,

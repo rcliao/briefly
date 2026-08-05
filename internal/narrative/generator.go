@@ -3,11 +3,12 @@ package narrative
 import (
 	"briefly/internal/core"
 	"briefly/internal/llm"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"sort"
+	"slices"
 	"strings"
 
 	"google.golang.org/genai"
@@ -435,8 +436,8 @@ func (g *Generator) buildNarrativePrompt(insights []ClusterInsight) string {
 	articleNum := 1
 	for _, insight := range insights {
 		for _, article := range insight.TopArticles {
-			prompt.WriteString(fmt.Sprintf("[%d] %s\n", articleNum, article.Title))
-			prompt.WriteString(fmt.Sprintf("    Summary: %s\n\n", truncateText(article.Summary, 150)))
+			fmt.Fprintf(&prompt, "[%d] %s\n", articleNum, article.Title)
+			fmt.Fprintf(&prompt, "    Summary: %s\n\n", truncateText(article.Summary, 150))
 			articleNum++
 		}
 	}
@@ -518,7 +519,7 @@ func (g *Generator) generateFallbackNarrative(insights []ClusterInsight) string 
 	// Add one sentence per cluster
 	for _, insight := range insights {
 		if len(insight.TopArticles) > 0 {
-			narrative.WriteString(fmt.Sprintf("Key developments in %s include ", insight.Theme))
+			fmt.Fprintf(&narrative, "Key developments in %s include ", insight.Theme)
 
 			titles := make([]string, 0, len(insight.TopArticles))
 			for _, article := range insight.TopArticles {
@@ -552,7 +553,7 @@ func (g *Generator) IdentifyClusterTheme(ctx context.Context, cluster core.Topic
 	for i, articleID := range cluster.ArticleIDs {
 		for _, article := range articles {
 			if article.ID == articleID {
-				prompt.WriteString(fmt.Sprintf("%d. %s\n", i+1, article.Title))
+				fmt.Fprintf(&prompt, "%d. %s\n", i+1, article.Title)
 				break
 			}
 		}
@@ -587,18 +588,18 @@ func (g *Generator) SelectTopArticles(cluster core.TopicCluster, articles []core
 	}
 
 	// Sort by signal strength (or quality score if available)
-	sort.Slice(clusterArticles, func(i, j int) bool {
-		scoreI := clusterArticles[i].SignalStrength
-		if scoreI == 0 {
-			scoreI = clusterArticles[i].QualityScore
+	slices.SortFunc(clusterArticles, func(a, b core.Article) int {
+		scoreA := a.SignalStrength
+		if scoreA == 0 {
+			scoreA = a.QualityScore
 		}
 
-		scoreJ := clusterArticles[j].SignalStrength
-		if scoreJ == 0 {
-			scoreJ = clusterArticles[j].QualityScore
+		scoreB := b.SignalStrength
+		if scoreB == 0 {
+			scoreB = b.QualityScore
 		}
 
-		return scoreI > scoreJ
+		return cmp.Compare(scoreB, scoreA)
 	})
 
 	// Take top N
@@ -774,17 +775,17 @@ func (g *Generator) convertOldMomentsToStructured(oldMoments []string) []core.Ke
 func (g *Generator) buildClusterSummaryPrompt(clusterLabel string, articles []ArticleSummary) string {
 	var prompt strings.Builder
 
-	prompt.WriteString(fmt.Sprintf("Generate a cohesive narrative for the \"%s\" topic cluster.\n\n", clusterLabel))
+	fmt.Fprintf(&prompt, "Generate a cohesive narrative for the \"%s\" topic cluster.\n\n", clusterLabel)
 
 	prompt.WriteString("**ALL Articles in this cluster:**\n")
 	for i, article := range articles {
-		prompt.WriteString(fmt.Sprintf("\n[%d] %s\n", i+1, article.Title))
-		prompt.WriteString(fmt.Sprintf("    URL: %s\n", article.URL))
-		prompt.WriteString(fmt.Sprintf("    Summary: %s\n", article.Summary))
+		fmt.Fprintf(&prompt, "\n[%d] %s\n", i+1, article.Title)
+		fmt.Fprintf(&prompt, "    URL: %s\n", article.URL)
+		fmt.Fprintf(&prompt, "    Summary: %s\n", article.Summary)
 		if len(article.KeyPoints) > 0 {
 			prompt.WriteString("    Key Points:\n")
 			for _, point := range article.KeyPoints {
-				prompt.WriteString(fmt.Sprintf("    - %s\n", point))
+				fmt.Fprintf(&prompt, "    - %s\n", point)
 			}
 		}
 	}
@@ -817,7 +818,7 @@ func (g *Generator) buildClusterSummaryPrompt(clusterLabel string, articles []Ar
 
 	prompt.WriteString("**VERIFICATION BEFORE FINALIZING:**\n")
 	prompt.WriteString("Before returning, verify:\n")
-	prompt.WriteString(fmt.Sprintf("1. All %d articles are cited at least once in article_refs array\n", len(articles)))
+	fmt.Fprintf(&prompt, "1. All %d articles are cited at least once in article_refs array\n", len(articles))
 	prompt.WriteString("2. No banned vague phrases appear in the summary\n")
 	prompt.WriteString("3. At least 3 specific numbers/metrics in summary\n")
 	prompt.WriteString("4. At least 5 proper nouns (companies/people/products)\n")
@@ -832,11 +833,11 @@ func (g *Generator) buildClusterSummaryPrompt(clusterLabel string, articles []Ar
 	prompt.WriteString("  * Example: \"Hephaestus enables self-discovering workflows achieving 60%% query reduction while OpenPCC provides private inference.\"\n")
 	prompt.WriteString("  * Example: \"Google explores space-based TPU infrastructure as radiology positions reach 1,208 despite automation predictions.\"\n")
 	prompt.WriteString("- Key Developments: 2-4 bullet points in format: **Bold Lead-In** - Description with citations [N]\n")
-	prompt.WriteString(fmt.Sprintf("  * Each bullet MUST cite specific articles from the %d above\n", len(articles)))
+	fmt.Fprintf(&prompt, "  * Each bullet MUST cite specific articles from the %d above\n", len(articles))
 	prompt.WriteString("  * Example: **Agentic frameworks deliver real wins** - Hephaestus spawned tasks that discovered 60%% query reduction [3]\n")
 	prompt.WriteString("- Key Stats: 1-3 key statistics in format: {\"stat\": \"60%%\", \"context\": \"Query reduction from agent-discovered caching pattern [3]\"}\n")
 	prompt.WriteString("- Key Themes: 3-5 main themes from the cluster\n")
-	prompt.WriteString(fmt.Sprintf("- Article Refs: Citation numbers of ALL %d articles (1-based array)\n", len(articles)))
+	fmt.Fprintf(&prompt, "- Article Refs: Citation numbers of ALL %d articles (1-based array)\n", len(articles))
 	prompt.WriteString("- Confidence: How coherent this cluster is (0.0-1.0)\n\n")
 
 	prompt.WriteString("Generate the cluster narrative in JSON format matching the schema.\n")
@@ -980,10 +981,10 @@ func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluste
 			continue
 		}
 
-		prompt.WriteString(fmt.Sprintf("## Cluster %d: %s\n", i+1, cluster.Narrative.Title))
-		prompt.WriteString(fmt.Sprintf("**Theme:** %s\n", cluster.Label))
-		prompt.WriteString(fmt.Sprintf("**Key Themes:** %s\n", strings.Join(cluster.Narrative.KeyThemes, ", ")))
-		prompt.WriteString(fmt.Sprintf("**Articles Covered:** %d\n\n", len(cluster.ArticleIDs)))
+		fmt.Fprintf(&prompt, "## Cluster %d: %s\n", i+1, cluster.Narrative.Title)
+		fmt.Fprintf(&prompt, "**Theme:** %s\n", cluster.Label)
+		fmt.Fprintf(&prompt, "**Key Themes:** %s\n", strings.Join(cluster.Narrative.KeyThemes, ", "))
+		fmt.Fprintf(&prompt, "**Articles Covered:** %d\n\n", len(cluster.ArticleIDs))
 		prompt.WriteString("**Cluster Summary:**\n")
 		prompt.WriteString(cluster.Narrative.Summary)
 		prompt.WriteString("\n\n---\n\n")
@@ -995,8 +996,8 @@ func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluste
 	for _, cluster := range clusters {
 		for _, articleID := range cluster.ArticleIDs {
 			if article, found := articles[articleID]; found {
-				prompt.WriteString(fmt.Sprintf("[%d] %s\n", articleNum, article.Title))
-				prompt.WriteString(fmt.Sprintf("    URL: %s\n\n", article.URL))
+				fmt.Fprintf(&prompt, "[%d] %s\n", articleNum, article.Title)
+				fmt.Fprintf(&prompt, "    URL: %s\n\n", article.URL)
 				articleNum++
 			}
 		}
@@ -1100,7 +1101,7 @@ func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluste
 	prompt.WriteString("   \"recently\", \"significant\", \"substantial\"\n\n")
 
 	prompt.WriteString("✅ REQUIRED SPECIFICITY:\n")
-	prompt.WriteString(fmt.Sprintf("   • Cite EVERY article at least once (you have %d articles total)\n", articleNum-1))
+	fmt.Fprintf(&prompt, "   • Cite EVERY article at least once (you have %d articles total)\n", articleNum-1)
 	prompt.WriteString("   • Include at least 5 specific facts with citations\n")
 	prompt.WriteString("   • Use exact numbers/percentages from cluster narratives\n")
 	prompt.WriteString("   • Name specific companies, products, people\n\n")
@@ -1111,7 +1112,7 @@ func (g *Generator) buildNarrativePromptFromClusters(clusters []core.TopicCluste
 	prompt.WriteString("2. ✓ Title includes specific actor (company/tech) + quantified result\n")
 	prompt.WriteString("3. ✓ TLDR ≤ 75 characters AND follows [Subject]+[Verb]+[Object]+[Impact] structure\n")
 	prompt.WriteString("4. ✓ TLDR contains at least one specific number/percentage\n")
-	prompt.WriteString(fmt.Sprintf("5. ✓ All %d articles cited at least once in top_developments bullets\n", articleNum-1))
+	fmt.Fprintf(&prompt, "5. ✓ All %d articles cited at least once in top_developments bullets\n", articleNum-1)
 	prompt.WriteString("6. ✓ Top developments: 3-5 bullets, each starting with **Bold Lead-In**\n")
 	prompt.WriteString("7. ✓ Top developments: 75-100 words total (15-25 words per bullet)\n")
 	prompt.WriteString("8. ✓ By the numbers: 3-5 stats with context ≤ 15 words each\n")
@@ -1169,9 +1170,9 @@ func (g *Generator) buildStructuredNarrativePrompt(insights []ClusterInsight) st
 	articleNum := 1
 	for _, insight := range insights {
 		for _, article := range insight.TopArticles {
-			prompt.WriteString(fmt.Sprintf("[%d] %s\n", articleNum, article.Title))
-			prompt.WriteString(fmt.Sprintf("    URL: %s\n", article.URL))
-			prompt.WriteString(fmt.Sprintf("    Summary: %s\n\n", truncateText(article.Summary, 200)))
+			fmt.Fprintf(&prompt, "[%d] %s\n", articleNum, article.Title)
+			fmt.Fprintf(&prompt, "    URL: %s\n", article.URL)
+			fmt.Fprintf(&prompt, "    Summary: %s\n\n", truncateText(article.Summary, 200))
 			articleNum++
 		}
 	}
@@ -1571,10 +1572,10 @@ func (g *Generator) buildSlackDigestPrompt(clusters []core.TopicCluster, article
 		for _, articleID := range cluster.ArticleIDs {
 			if article, found := articles[articleID]; found {
 				summary := summaries[articleID]
-				prompt.WriteString(fmt.Sprintf("[%d] %s\n", articleNum, article.Title))
-				prompt.WriteString(fmt.Sprintf("    URL: %s\n", article.URL))
+				fmt.Fprintf(&prompt, "[%d] %s\n", articleNum, article.Title)
+				fmt.Fprintf(&prompt, "    URL: %s\n", article.URL)
 				if summary.SummaryText != "" {
-					prompt.WriteString(fmt.Sprintf("    Summary: %s\n\n", truncateText(summary.SummaryText, 200)))
+					fmt.Fprintf(&prompt, "    Summary: %s\n\n", truncateText(summary.SummaryText, 200))
 				} else {
 					prompt.WriteString("\n")
 				}
@@ -1610,7 +1611,7 @@ func (g *Generator) buildSlackDigestPrompt(clusters []core.TopicCluster, article
 	prompt.WriteString("   ✓ {\"headline\": \"DeepSeek V3 surprises everyone\", \"editorial\": \"Open-weights 685B MoE matching GPT-4 on benchmarks. Training cost allegedly $5.5M. If real, changes the economics conversation.\", \"article_num\": 3}\n")
 	prompt.WriteString("   ✗ {\"headline\": \"New AI model released\", \"editorial\": \"A new model has been announced with improved capabilities.\"} - TOO GENERIC!\n\n")
 
-	prompt.WriteString(fmt.Sprintf("**3. ALSO ON RADAR** - ALL remaining articles (%d total minus Big 3 = %d items)\n", articleNum-1, articleNum-1-3))
+	fmt.Fprintf(&prompt, "**3. ALSO ON RADAR** - ALL remaining articles (%d total minus Big 3 = %d items)\n", articleNum-1, articleNum-1-3)
 	prompt.WriteString("   - Include EVERY article that didn't make Big 3\n")
 	prompt.WriteString("   - title: Short, descriptive title (e.g., \"OpenAI o3 ARC-AGI results\")\n")
 	prompt.WriteString("   - article_num: Citation number of source article\n\n")

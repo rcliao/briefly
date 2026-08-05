@@ -129,7 +129,7 @@ func runSearchQuery(args []string, limit int, threshold float64) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Initialize LLM client
 	llmClient, err := llm.NewClient(cfg.AI.Gemini.APIKey)
@@ -219,7 +219,7 @@ func runSearchSimilar(articleID string, limit int, threshold float64) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Initialize vector store
 	vectorStore := vectorstore.NewPgVectorAdapter(db.GetDB())
@@ -309,7 +309,7 @@ func runSearchStats() error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Initialize vector store
 	vectorStore := vectorstore.NewPgVectorAdapter(db.GetDB())

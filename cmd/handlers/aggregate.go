@@ -130,7 +130,7 @@ func runAggregateWithClassification(ctx context.Context, maxArticles, concurrenc
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Test database connection
 	if err := db.Ping(ctx); err != nil {

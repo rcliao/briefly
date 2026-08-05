@@ -73,16 +73,16 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 // handleListArticles handles GET /api/articles
 func (s *Server) handleListArticles(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement in Phase 2
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
+	s.respondJSON(w, http.StatusOK, map[string]any{
 		"message": "Articles API - Coming in Phase 2",
-		"data":    []interface{}{},
+		"data":    []any{},
 	})
 }
 
 // handleGetArticle handles GET /api/articles/{id}
 func (s *Server) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement in Phase 2
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
+	s.respondJSON(w, http.StatusOK, map[string]any{
 		"message": "Single article API - Coming in Phase 2",
 	})
 }
@@ -90,9 +90,9 @@ func (s *Server) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 // handleRecentArticles handles GET /api/articles/recent
 func (s *Server) handleRecentArticles(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement in Phase 2
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
+	s.respondJSON(w, http.StatusOK, map[string]any{
 		"message": "Recent articles API - Coming in Phase 2",
-		"data":    []interface{}{},
+		"data":    []any{},
 	})
 }
 
@@ -101,22 +101,22 @@ func (s *Server) handleRecentArticles(w http.ResponseWriter, r *http.Request) {
 // handleListFeeds handles GET /api/feeds
 func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement in Phase 2
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
+	s.respondJSON(w, http.StatusOK, map[string]any{
 		"message": "Feeds API - Coming in Phase 2",
-		"data":    []interface{}{},
+		"data":    []any{},
 	})
 }
 
 // handleFeedStats handles GET /api/feeds/{id}/stats
 func (s *Server) handleFeedStats(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement in Phase 2
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
+	s.respondJSON(w, http.StatusOK, map[string]any{
 		"message": "Feed stats API - Coming in Phase 2",
 	})
 }
 
 // respondJSON writes a JSON response
-func (s *Server) respondJSON(w http.ResponseWriter, status int, data interface{}) {
+func (s *Server) respondJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 

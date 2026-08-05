@@ -137,9 +137,9 @@ type postgresArticleRepo struct {
 }
 
 func (r *postgresArticleRepo) query() interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 } {
 	if r.tx != nil {
 		return r.tx
@@ -172,7 +172,7 @@ func (r *postgresArticleRepo) Create(ctx context.Context, article *core.Article)
 
 	// Convert embedding to VECTOR format for pgvector
 	// Format: '[1.0,2.0,3.0,...]' - pgvector can parse this format
-	var embeddingVector interface{}
+	var embeddingVector any
 	if len(article.Embedding) == 768 {
 		// Build comma-separated string for VECTOR type
 		embeddingStr := "["
@@ -238,7 +238,7 @@ func (r *postgresArticleRepo) List(ctx context.Context, opts ListOptions) ([]cor
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var articles []core.Article
 	for rows.Next() {
@@ -304,7 +304,7 @@ func (r *postgresArticleRepo) GetRecent(ctx context.Context, since time.Time, li
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var articles []core.Article
 	for rows.Next() {
@@ -330,7 +330,7 @@ func (r *postgresArticleRepo) GetByCluster(ctx context.Context, clusterLabel str
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var articles []core.Article
 	for rows.Next() {

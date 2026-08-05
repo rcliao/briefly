@@ -73,7 +73,7 @@ func RenderMarkdownDigest(digestItems []DigestData, outputDir string, finalDiges
 	var markdownContent strings.Builder
 
 	// Digest Title
-	markdownContent.WriteString(fmt.Sprintf("# Weekly Digest - %s\n\n", dateStr))
+	fmt.Fprintf(&markdownContent, "# Weekly Digest - %s\n\n", dateStr)
 
 	if len(digestItems) == 0 {
 		markdownContent.WriteString("No articles processed for this digest.\n")
@@ -88,12 +88,12 @@ func RenderMarkdownDigest(digestItems []DigestData, outputDir string, finalDiges
 
 		// Add individual summaries (either as main content or as appendix)
 		for i, item := range digestItems {
-			markdownContent.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, item.Title))
+			fmt.Fprintf(&markdownContent, "### %d. %s\n\n", i+1, item.Title)
 			markdownContent.WriteString(item.SummaryText + "\n\n")
 			if item.MyTake != "" {
-				markdownContent.WriteString(fmt.Sprintf("**My Take:** %s\n\n", item.MyTake))
+				fmt.Fprintf(&markdownContent, "**My Take:** %s\n\n", item.MyTake)
 			}
-			markdownContent.WriteString(fmt.Sprintf("[^%d]: %s\n\n", i+1, item.URL))
+			fmt.Fprintf(&markdownContent, "[^%d]: %s\n\n", i+1, item.URL)
 			markdownContent.WriteString("---\n\n")
 		}
 	}

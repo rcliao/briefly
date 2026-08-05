@@ -60,7 +60,7 @@ func digestListRun(cmd *cobra.Command, limit int, since int) {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect to database: %v\n", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Calculate since date
 	sinceDate := time.Now().AddDate(0, 0, -since)

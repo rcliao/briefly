@@ -51,7 +51,7 @@ func (t *Tracker) TrackArticle(ctx context.Context, article *core.Article) (*cor
 		Author:        "",  // Could be extracted from article metadata if available
 		PublishedDate: nil, // Could be extracted from article metadata if available
 		AccessedDate:  article.DateFetched,
-		Metadata:      make(map[string]interface{}),
+		Metadata:      make(map[string]any),
 		CreatedAt:     time.Now().UTC(),
 	}
 
@@ -130,9 +130,9 @@ func extractPublisher(rawURL string) string {
 }
 
 // EnrichWithMetadata adds additional metadata to a citation
-func (t *Tracker) EnrichWithMetadata(citation *core.Citation, metadata map[string]interface{}) {
+func (t *Tracker) EnrichWithMetadata(citation *core.Citation, metadata map[string]any) {
 	if citation.Metadata == nil {
-		citation.Metadata = make(map[string]interface{})
+		citation.Metadata = make(map[string]any)
 	}
 
 	for key, value := range metadata {

@@ -94,12 +94,12 @@ func runServe(ctx context.Context, port int, host, staticDir, templateDir string
 		// Try environment variable fallback
 		dbConnStr = os.Getenv("DATABASE_URL")
 		if dbConnStr == "" {
-			return fmt.Errorf("database connection string not configured\n\n" +
-				"The web server requires a database connection. Please set one of:\n" +
-				"  • database.connection_string in .briefly.yaml\n" +
-				"  • DATABASE_URL environment variable\n\n" +
-				"Example:\n" +
-				"  export DATABASE_URL='postgres://user:pass@localhost:5432/briefly?sslmode=disable'\n")
+			fmt.Println("The web server requires a database connection. Please set one of:")
+			fmt.Println("  • database.connection_string in .briefly.yaml")
+			fmt.Println("  • DATABASE_URL environment variable")
+			fmt.Println("\nExample:")
+			fmt.Println("  export DATABASE_URL='postgres://user:pass@localhost:5432/briefly?sslmode=disable'")
+			return fmt.Errorf("database connection string not configured")
 		}
 	}
 
@@ -109,13 +109,13 @@ func runServe(ctx context.Context, port int, host, staticDir, templateDir string
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Test database connection
 	if err := db.Ping(ctx); err != nil {
-		return fmt.Errorf("database ping failed: %w\n\n"+
-			"Make sure PostgreSQL is running and the connection string is correct.\n"+
-			"Run 'briefly migrate up' to initialize the database schema.", err)
+		fmt.Println("Make sure PostgreSQL is running and the connection string is correct.")
+		fmt.Println("Run 'briefly migrate up' to initialize the database schema.")
+		return fmt.Errorf("database ping failed: %w", err)
 	}
 
 	log.Info("Database connection successful")

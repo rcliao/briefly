@@ -69,7 +69,7 @@ func qualityAuditRun(cmd *cobra.Command, limit int, since int, verbose bool) {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect to database: %v\n", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Calculate since date
 	sinceDate := time.Now().AddDate(0, 0, -since)
@@ -245,7 +245,7 @@ func qualityReportRun(cmd *cobra.Command, digestID string) {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect to database: %v\n", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Fetch digest
 	digest, err := db.Digests().GetByID(ctx, digestID)
@@ -312,7 +312,7 @@ func qualityTrendsRun(cmd *cobra.Command, since int) {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect to database: %v\n", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	sinceDate := time.Now().AddDate(0, 0, -since)
 

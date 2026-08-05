@@ -1,11 +1,12 @@
 package clustering
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"math"
 	"math/rand"
-	"sort"
+	"slices"
 	"time"
 
 	"briefly/internal/core"
@@ -421,8 +422,8 @@ func (km *KMeansClustererV2) extractKeywords(
 		sortedWords = append(sortedWords, wordFreq{word, count})
 	}
 
-	sort.Slice(sortedWords, func(i, j int) bool {
-		return sortedWords[i].count > sortedWords[j].count
+	slices.SortFunc(sortedWords, func(a, b wordFreq) int {
+		return cmp.Compare(b.count, a.count)
 	})
 
 	// Return top 5 keywords

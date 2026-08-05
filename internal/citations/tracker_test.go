@@ -546,10 +546,10 @@ func TestEnrichWithMetadata(t *testing.T) {
 	citation := &core.Citation{
 		ID:        uuid.NewString(),
 		ArticleID: uuid.NewString(),
-		Metadata:  make(map[string]interface{}),
+		Metadata:  make(map[string]any),
 	}
 
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"doi":      "10.1234/test",
 		"keywords": []string{"test", "citation"},
 		"abstract": "Test abstract",
@@ -581,7 +581,7 @@ func TestEnrichWithMetadata_NilMetadata(t *testing.T) {
 		Metadata:  nil, // Nil metadata
 	}
 
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"test": "value",
 	}
 

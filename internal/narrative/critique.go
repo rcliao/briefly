@@ -78,10 +78,10 @@ func (g *Generator) buildCritiquePrompt(
 	prompt.WriteString("**ORIGINAL CLUSTER NARRATIVES:**\n\n")
 	for i, cluster := range clusters {
 		if cluster.Narrative != nil {
-			prompt.WriteString(fmt.Sprintf("## Cluster %d: %s\n", i+1, cluster.Narrative.Title))
-			prompt.WriteString(fmt.Sprintf("**Articles:** %d\n", len(cluster.ArticleIDs)))
-			prompt.WriteString(fmt.Sprintf("**Key Themes:** %s\n", strings.Join(cluster.Narrative.KeyThemes, ", ")))
-			prompt.WriteString(fmt.Sprintf("**Summary:**\n%s\n\n", cluster.Narrative.Summary))
+			fmt.Fprintf(&prompt, "## Cluster %d: %s\n", i+1, cluster.Narrative.Title)
+			fmt.Fprintf(&prompt, "**Articles:** %d\n", len(cluster.ArticleIDs))
+			fmt.Fprintf(&prompt, "**Key Themes:** %s\n", strings.Join(cluster.Narrative.KeyThemes, ", "))
+			fmt.Fprintf(&prompt, "**Summary:**\n%s\n\n", cluster.Narrative.Summary)
 			prompt.WriteString("---\n\n")
 		}
 	}
@@ -92,8 +92,8 @@ func (g *Generator) buildCritiquePrompt(
 	for _, cluster := range clusters {
 		for _, articleID := range cluster.ArticleIDs {
 			if article, found := articles[articleID]; found {
-				prompt.WriteString(fmt.Sprintf("[%d] %s\n", articleNum, article.Title))
-				prompt.WriteString(fmt.Sprintf("    URL: %s\n", article.URL))
+				fmt.Fprintf(&prompt, "[%d] %s\n", articleNum, article.Title)
+				fmt.Fprintf(&prompt, "    URL: %s\n", article.URL)
 
 				// Include summary excerpt for context
 				if summary, found := summaries[articleID]; found {
@@ -101,7 +101,7 @@ func (g *Generator) buildCritiquePrompt(
 					if len(excerpt) > 150 {
 						excerpt = excerpt[:150] + "..."
 					}
-					prompt.WriteString(fmt.Sprintf("    Summary: %s\n", excerpt))
+					fmt.Fprintf(&prompt, "    Summary: %s\n", excerpt)
 				}
 				prompt.WriteString("\n")
 				articleNum++
@@ -113,14 +113,14 @@ func (g *Generator) buildCritiquePrompt(
 
 	// SECTION 3: Draft digest to critique
 	prompt.WriteString("**DRAFT DIGEST TO CRITIQUE:**\n\n")
-	prompt.WriteString(fmt.Sprintf("**Title:** %s (%d chars)\n", draftDigest.Title, len(draftDigest.Title)))
-	prompt.WriteString(fmt.Sprintf("**TLDR:** %s (%d chars)\n\n", draftDigest.TLDRSummary, len(draftDigest.TLDRSummary)))
-	prompt.WriteString(fmt.Sprintf("**Executive Summary:**\n%s\n\n", draftDigest.ExecutiveSummary))
+	fmt.Fprintf(&prompt, "**Title:** %s (%d chars)\n", draftDigest.Title, len(draftDigest.Title))
+	fmt.Fprintf(&prompt, "**TLDR:** %s (%d chars)\n\n", draftDigest.TLDRSummary, len(draftDigest.TLDRSummary))
+	fmt.Fprintf(&prompt, "**Executive Summary:**\n%s\n\n", draftDigest.ExecutiveSummary)
 
 	if len(draftDigest.KeyMoments) > 0 {
 		prompt.WriteString("**Key Moments:**\n")
 		for i, km := range draftDigest.KeyMoments {
-			prompt.WriteString(fmt.Sprintf("%d. \"%s\" [%d]\n", i+1, km.Quote, km.CitationNumber))
+			fmt.Fprintf(&prompt, "%d. \"%s\" [%d]\n", i+1, km.Quote, km.CitationNumber)
 		}
 		prompt.WriteString("\n")
 	}
@@ -147,9 +147,9 @@ func (g *Generator) buildCritiquePrompt(
 	prompt.WriteString("   - REQUIRED: At least one specific number/percentage in TLDR\n\n")
 
 	prompt.WriteString("3. **Article Coverage:**\n")
-	prompt.WriteString(fmt.Sprintf("   - Identify which articles ([1-%d]) are mentioned in executive summary\n", totalArticles))
+	fmt.Fprintf(&prompt, "   - Identify which articles ([1-%d]) are mentioned in executive summary\n", totalArticles)
 	prompt.WriteString("   - List any articles that are NOT mentioned\n")
-	prompt.WriteString(fmt.Sprintf("   - REQUIRED: All %d articles should be cited\n\n", totalArticles))
+	fmt.Fprintf(&prompt, "   - REQUIRED: All %d articles should be cited\n\n", totalArticles)
 
 	prompt.WriteString("4. **Vagueness Detection:**\n")
 	prompt.WriteString("   - Find any vague/generic phrases: \"several\", \"various\", \"many\", \"some\", \"numerous\"\n")
@@ -184,7 +184,7 @@ func (g *Generator) buildCritiquePrompt(
 	prompt.WriteString("✅ MUST FIX:\n")
 	prompt.WriteString("- Title: Use power verb (\"cuts\"/\"hits\"/\"beats\"), include specific actor + quantified result\n")
 	prompt.WriteString("- TLDR: Follow [Subject]+[Verb]+[Object]+[Impact] structure with specific number\n")
-	prompt.WriteString(fmt.Sprintf("- Coverage: Cite all %d articles at least once\n", totalArticles))
+	fmt.Fprintf(&prompt, "- Coverage: Cite all %d articles at least once\n", totalArticles)
 	prompt.WriteString("- Connections: Add transition phrases between clusters (\"Building on...\", \"Meanwhile...\")\n")
 	prompt.WriteString("- Vagueness: Replace ALL vague phrases with specific facts\n")
 	prompt.WriteString("- Key Moments: Ensure every moment includes quantified data/metrics\n")

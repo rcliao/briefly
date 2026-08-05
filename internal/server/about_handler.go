@@ -7,7 +7,7 @@ import (
 // handleAboutPage renders the static about page
 func (s *Server) handleAboutPage(w http.ResponseWriter, r *http.Request) {
 	// Minimal data needed for base template (PostHog analytics)
-	data := map[string]interface{}{
+	data := map[string]any{
 		"PostHogEnabled": s.analytics != nil,
 		"PostHogAPIKey":  "",
 		"PostHogHost":    "https://app.posthog.com",

@@ -31,7 +31,7 @@ func TestPgVectorIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Verify connection
 	if err := db.Ping(); err != nil {
@@ -80,7 +80,7 @@ func TestPgVectorIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to query articles: %v", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		t.Log("📚 Articles with embeddings:")
 		count := 0
@@ -279,7 +279,7 @@ func TestPgVectorIntegration(t *testing.T) {
 			keywordCount++
 			t.Logf("      [%d] %s", keywordCount, title)
 		}
-		rows.Close()
+		_ = rows.Close()
 
 		// Semantic search
 		t.Log("")
@@ -355,7 +355,7 @@ func TestPgVectorIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to get embeddings: %v", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		type testQuery struct {
 			id        string
@@ -419,7 +419,7 @@ func TestPgVectorStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx := context.Background()
 	store := NewPgVectorAdapter(db)

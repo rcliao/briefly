@@ -76,7 +76,7 @@ func NewFeedManager() *FeedManager {
 
 // FetchFeed fetches and parses a feed from the given URL
 func (fm *FeedManager) FetchFeed(feedURL string, lastModified, etag string) (*ParsedFeed, error) {
-	req, err := http.NewRequest("GET", feedURL, nil)
+	req, err := http.NewRequest(http.MethodGet, feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

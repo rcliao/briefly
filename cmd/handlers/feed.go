@@ -171,7 +171,7 @@ func runFeedAdd(ctx context.Context, feedURL string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	sourceMgr := sources.NewManager(db)
 	feed, err := sourceMgr.AddFeed(ctx, feedURL)
@@ -198,7 +198,7 @@ func runFeedRemove(ctx context.Context, feedID string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	sourceMgr := sources.NewManager(db)
 	if err := sourceMgr.RemoveFeed(ctx, feedID); err != nil {
@@ -214,7 +214,7 @@ func runFeedList(ctx context.Context, showInactive bool) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	sourceMgr := sources.NewManager(db)
 	feeds, err := sourceMgr.ListFeeds(ctx, !showInactive)
@@ -265,7 +265,7 @@ func runFeedList(ctx context.Context, showInactive bool) error {
 			idShort, titleShort, status, lastFetched, errorCount,
 		)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	fmt.Printf("\nTotal feeds: %d\n", len(feeds))
 	if !showInactive {
@@ -287,7 +287,7 @@ func runFeedToggle(ctx context.Context, feedID string, active bool) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	sourceMgr := sources.NewManager(db)
 	if err := sourceMgr.ToggleFeed(ctx, feedID, active); err != nil {
@@ -307,7 +307,7 @@ func runFeedStats(ctx context.Context, feedID string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if feedID == "" {
 		// Show summary statistics for all feeds
