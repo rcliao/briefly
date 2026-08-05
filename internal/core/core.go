@@ -14,9 +14,8 @@ type Link struct {
 type ContentType string
 
 const (
-	ContentTypeHTML    ContentType = "html"
-	ContentTypePDF     ContentType = "pdf"
-	ContentTypeYouTube ContentType = "youtube"
+	ContentTypeHTML ContentType = "html"
+	ContentTypePDF  ContentType = "pdf"
 )
 
 // Article represents the content fetched and processed from a Link (v3.0 simplified)
@@ -50,7 +49,6 @@ type Article struct {
 	DatePublished       time.Time `json:"date_published"`                  // Original publication date from feed
 
 	// Content-specific metadata (conditional)
-	Duration             int    `json:"duration,omitempty"`               // YouTube only
 	Channel              string `json:"channel,omitempty"`                // YouTube only
 	PageCount            int    `json:"page_count,omitempty"`             // PDF only
 	EstimatedReadMinutes int    `json:"estimated_read_minutes,omitempty"` // Estimated reading time in minutes

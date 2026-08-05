@@ -14,10 +14,18 @@ import (
 )
 
 // ProcessPDFContent extracts text content from a PDF file
-func ProcessPDFContent(link core.Link) (core.Article, error) {
+func ProcessPDFContent(link core.Link) (article core.Article, err error) {
+	// ledongthuc/pdf panics on malformed structures in paths its own recover()
+	// does not cover (NumPage, Page); a panic here would kill the whole
+	// parallel digest run, so convert it to a per-article error.
+	defer func() {
+		if r := recover(); r != nil {
+			article = core.Article{}
+			err = fmt.Errorf("malformed PDF from %s: %v", link.URL, r)
+		}
+	}()
 	var reader io.ReaderAt
 	var size int64
-	var err error
 
 	// Handle both local files and remote URLs
 	if strings.HasPrefix(link.URL, "file://") || !strings.HasPrefix(link.URL, "http") {
@@ -71,8 +79,9 @@ func ProcessPDFContent(link core.Link) (core.Article, error) {
 			return core.Article{}, fmt.Errorf("URL %s does not return a PDF (Content-Type: %s)", link.URL, contentType)
 		}
 
-		// Read the entire response into memory
-		data, err := io.ReadAll(resp.Body)
+		// Read the response into memory, capped: a hostile or misconfigured
+		// endpoint must not be able to exhaust RAM
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 20<<20))
 		if err != nil {
 			return core.Article{}, fmt.Errorf("failed to read PDF data from %s: %w", link.URL, err)
 		}
@@ -115,7 +124,7 @@ func ProcessPDFContent(link core.Link) (core.Article, error) {
 	// Generate title from first few lines if available
 	title := extractPDFTitle(cleanedText, link.URL)
 
-	article := core.Article{
+	article = core.Article{
 		ID:          uuid.NewString(),
 		URL:         link.URL, // Set the URL field
 		LinkID:      link.ID,

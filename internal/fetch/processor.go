@@ -38,8 +38,6 @@ func (cp *ContentProcessor) ProcessArticle(ctx context.Context, urlStr string) (
 	switch contentType {
 	case core.ContentTypePDF:
 		article, err = ProcessPDFContent(link)
-	case core.ContentTypeYouTube:
-		article, err = ProcessYouTubeContent(link)
 	case core.ContentTypeHTML:
 		fallthrough
 	default:
@@ -62,18 +60,7 @@ func (cp *ContentProcessor) ProcessArticle(ctx context.Context, urlStr string) (
 
 // CalculateReadingTime estimates reading time in minutes for an article
 // Uses ~200 words per minute for technical content (slower than casual reading)
-// For YouTube videos, uses the video duration if available
 func CalculateReadingTime(article *core.Article) int {
-	// For YouTube videos, use the video duration
-	if article.ContentType == core.ContentTypeYouTube && article.Duration > 0 {
-		// Duration is in seconds, convert to minutes (round up)
-		minutes := (article.Duration + 59) / 60
-		if minutes < 1 {
-			return 1
-		}
-		return minutes
-	}
-
 	// For text content, calculate based on word count
 	// Technical content reading speed: ~200 words per minute
 	wordCount := len(strings.Fields(article.CleanedText))
@@ -116,9 +103,6 @@ func (cp *ContentProcessor) CleanAndExtractContent(ctx context.Context, article 
 	case core.ContentTypePDF:
 		// PDF content is already cleaned during extraction
 		return nil
-	case core.ContentTypeYouTube:
-		// YouTube transcript is already cleaned during extraction
-		return nil
 	case core.ContentTypeHTML:
 		return ParseArticleContent(article)
 	default:
@@ -128,11 +112,6 @@ func (cp *ContentProcessor) CleanAndExtractContent(ctx context.Context, article 
 
 // detectContentType determines the content type of a URL
 func (cp *ContentProcessor) detectContentType(urlStr string) (core.ContentType, error) {
-	// Check for YouTube URLs first
-	if DetectYouTubeURL(urlStr) {
-		return core.ContentTypeYouTube, nil
-	}
-
 	// Check for PDF URLs by extension
 	if DetectPDFURL(urlStr) {
 		return core.ContentTypePDF, nil
@@ -237,8 +216,6 @@ func GetContentTypeLabel(contentType core.ContentType) string {
 	switch contentType {
 	case core.ContentTypePDF:
 		return "PDF Document"
-	case core.ContentTypeYouTube:
-		return "YouTube Video"
 	case core.ContentTypeHTML:
 		return "Web Article"
 	default:
@@ -251,8 +228,6 @@ func GetContentTypeIcon(contentType core.ContentType) string {
 	switch contentType {
 	case core.ContentTypePDF:
 		return "📄"
-	case core.ContentTypeYouTube:
-		return "🎥"
 	case core.ContentTypeHTML:
 		return "🌐"
 	default:

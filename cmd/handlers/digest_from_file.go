@@ -60,7 +60,7 @@ func NewDigestFromFileCmd() *cobra.Command {
 
 This command:
   • Parses URLs from a markdown file
-  • Fetches articles in parallel (HTML, PDF, YouTube)
+  • Fetches articles in parallel (HTML, PDF)
   • Generates summaries using LLM
   • Runs a single editorial pass: topic grouping, per-article takeaways,
     must-read pick, executive summary
@@ -238,6 +238,15 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 				fmt.Printf("   ✓ [%d/%d] Fetched: %s\n", i+1, len(links), link.URL)
 			}
 
+			// A page that returned HTTP 200 but no readable text (JS-rendered
+			// app, bot-check interstitial) must land in the failed list, not
+			// the digest — summarizing nothing produces invented takeaways.
+			if words := len(strings.Fields(article.CleanedText)); words < 30 {
+				fmt.Printf("   ⚠ [%d/%d] No readable text (%d words): %s\n", i+1, len(links), words, link.URL)
+				fetchResults[i] = fetchResult{failure: &failedLink{URL: link.URL, Reason: fmt.Sprintf("only %d words of readable text extracted (JS-rendered or blocked page?)", words)}}
+				return
+			}
+
 			fetchResults[i] = fetchResult{article: article}
 		}(i, link)
 	}
@@ -358,7 +367,7 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 			clusters = append(clusters, core.TopicCluster{Label: topic.Name, ArticleIDs: ids})
 		}
 		narrativeGen := narrative.NewGenerator(&narrativeLLMAdapter{client: llmClient})
-		return generateSlackDigest(ctx, narrativeGen, clusters, articleMap, summaryMap, articles, outputDir, startTime, inputFile, len(links))
+		return generateSlackDigest(ctx, narrativeGen, clusters, articleMap, summaryMap, articles, outputDir, startTime, inputFile, len(links), failed)
 	}
 
 	// Step 5: Render markdown
@@ -429,7 +438,7 @@ func fallbackEditorialDigest(articles []core.Article, summaries map[string]*core
 }
 
 // generateSlackDigest handles Slack format digest generation
-func generateSlackDigest(ctx context.Context, narrativeGen *narrative.Generator, clusters []core.TopicCluster, articleMap map[string]core.Article, summaryMap map[string]core.Summary, articles []core.Article, outputDir string, startTime time.Time, inputFile string, totalLinks int) error {
+func generateSlackDigest(ctx context.Context, narrativeGen *narrative.Generator, clusters []core.TopicCluster, articleMap map[string]core.Article, summaryMap map[string]core.Summary, articles []core.Article, outputDir string, startTime time.Time, inputFile string, totalLinks int, failed []failedLink) error {
 	log := logger.Get()
 
 	fmt.Printf("\n📱 Step 8/9: Generating Slack-formatted digest...\n")
@@ -449,6 +458,17 @@ func generateSlackDigest(ctx context.Context, narrativeGen *narrative.Generator,
 	fmt.Printf("\n📄 Step 9/9: Rendering Slack markdown...\n")
 
 	output := renderSlackFormat(slackContent, articles, clusters)
+
+	// Same contract as the markdown path: failed links are reported in the
+	// output itself, never silently dropped.
+	if len(failed) > 0 {
+		var b strings.Builder
+		fmt.Fprintf(&b, "\n⚠️ %d link(s) could not be included:\n", len(failed))
+		for _, f := range failed {
+			fmt.Fprintf(&b, "%s — %s\n", f.URL, f.Reason)
+		}
+		output += b.String()
+	}
 
 	// Save into the dated digest folder alongside any other assets
 	digestDir := filepath.Join(outputDir, time.Now().Format("2006-01-02"))
@@ -471,6 +491,9 @@ func generateSlackDigest(ctx context.Context, narrativeGen *narrative.Generator,
 	fmt.Printf("   Input file: %s\n", inputFile)
 	fmt.Printf("   Total URLs: %d\n", totalLinks)
 	fmt.Printf("   Articles fetched: %d\n", len(articles))
+	if len(failed) > 0 {
+		fmt.Printf("   ⚠️  Links not included: %d (listed at the end of the digest)\n", len(failed))
+	}
 	fmt.Printf("   Output file: %s\n", outputPath)
 	fmt.Printf("   Duration: %s\n", duration.Round(time.Millisecond))
 
