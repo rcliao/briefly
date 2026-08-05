@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"briefly/internal/core"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -141,5 +142,22 @@ func TestRenderEditorialDigest(t *testing.T) {
 		if strings.Contains(out, banned) {
 			t.Errorf("rendered digest contains banned sequence %q\n---\n%s", banned, out)
 		}
+	}
+}
+
+func TestSelectBannerSubject(t *testing.T) {
+	subjects := []string{"first scene", "second scene", "third scene"}
+
+	// Non-interactive stdin (a pipe/file) must default to the first subject
+	r, w, _ := os.Pipe()
+	_ = w.Close()
+	if got := selectBannerSubject(subjects, r); got != "first scene" {
+		t.Errorf("non-interactive selection = %q, want first subject", got)
+	}
+	_ = r.Close()
+
+	// Single subject short-circuits
+	if got := selectBannerSubject([]string{"only"}, nil); got != "only" {
+		t.Errorf("single-subject selection = %q, want it returned directly", got)
 	}
 }

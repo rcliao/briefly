@@ -622,6 +622,48 @@ func parseCategorizeResponse(response string, categories map[string]Category) (C
 }
 
 // GenerateText generates text using the LLM with specified options
+// GenerateImage generates an image from a text prompt using a Gemini image
+// model (e.g. gemini-3.1-flash-image). It returns the raw image bytes and
+// their MIME type (the model chooses the format, typically image/jpeg).
+func (c *Client) GenerateImage(ctx context.Context, model, prompt, aspectRatio string) ([]byte, string, error) {
+	if prompt == "" {
+		return nil, "", fmt.Errorf("prompt cannot be empty")
+	}
+	if model == "" {
+		return nil, "", fmt.Errorf("image model cannot be empty")
+	}
+
+	contents := []*genai.Content{{
+		Parts: []*genai.Part{{Text: prompt}},
+		Role:  "user",
+	}}
+
+	config := &genai.GenerateContentConfig{
+		ResponseModalities: []string{"TEXT", "IMAGE"},
+	}
+	if aspectRatio != "" {
+		config.ImageConfig = &genai.ImageConfig{AspectRatio: aspectRatio}
+	}
+
+	resp, err := c.gClient.Models.GenerateContent(ctx, model, contents, config)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to generate image: %w", err)
+	}
+
+	for _, candidate := range resp.Candidates {
+		if candidate.Content == nil {
+			continue
+		}
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+				return part.InlineData.Data, part.InlineData.MIMEType, nil
+			}
+		}
+	}
+
+	return nil, "", fmt.Errorf("model returned no image data (possibly blocked by safety filters)")
+}
+
 func (c *Client) GenerateText(ctx context.Context, prompt string, options TextGenerationOptions) (string, error) {
 	if prompt == "" {
 		return "", fmt.Errorf("prompt cannot be empty")

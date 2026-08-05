@@ -29,6 +29,15 @@ type Config struct {
 	Logging   Logging   `mapstructure:"logging"`
 	CLI       CLI       `mapstructure:"cli"`
 	Themes    Themes    `mapstructure:"themes"`
+	Banner    Banner    `mapstructure:"banner"`
+}
+
+// Banner holds LinkedIn banner image generation configuration
+type Banner struct {
+	Enabled     bool   `mapstructure:"enabled"`
+	Model       string `mapstructure:"model"`
+	Style       string `mapstructure:"style"`
+	AspectRatio string `mapstructure:"aspect_ratio"`
 }
 
 // App holds general application configuration
@@ -427,6 +436,12 @@ func setDefaults() {
 	viper.SetDefault("app.debug", false)
 	viper.SetDefault("app.log_level", "info")
 	viper.SetDefault("app.data_dir", ".briefly-cache")
+
+	// Banner defaults
+	viper.SetDefault("banner.enabled", true)
+	viper.SetDefault("banner.model", "gemini-3.1-flash-image")
+	viper.SetDefault("banner.style", "pixel art style, 16-bit, limited color palette, abstract, minimal clean composition, no text or lettering")
+	viper.SetDefault("banner.aspect_ratio", "16:9")
 
 	// AI defaults
 	viper.SetDefault("ai.gemini.model", "gemini-3.6-flash")

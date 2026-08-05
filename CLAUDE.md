@@ -24,6 +24,11 @@ briefly read --raw https://example.com/article
 # Cache management (SQLite in .briefly-cache/)
 briefly cache stats
 briefly cache clear --confirm
+
+# Regenerate the LinkedIn banner for a digest (also runs automatically
+# during digest generation; skip with --no-banner)
+briefly banner digests/digest_2026-08-05.md
+briefly banner digests/digest_2026-08-05.md --prompt "custom subject"
 ```
 
 **Input format:** a markdown file with one URL per line (bare URLs or markdown links).
@@ -52,6 +57,8 @@ CI (.github/workflows/test.yml) runs test/build/lint on the Go version from go.m
 5. **Render** — paste-friendly plain text: bare URLs on their own line, no markdown links/bold/headers/rules, `EMOJI UPPERCASE` topic headers, blank lines between title/description/URL, failed links listed in a footer. Read times are computed from cleaned word count (~200 wpm), never LLM-estimated.
 
 The Slack format (`--format slack`) feeds editorial topics into `internal/narrative.GenerateSlackDigest` and renders chunked Slack mrkdwn.
+
+**Banner generation** (`cmd/handlers/banner.go`, default on, `--no-banner` to skip): after rendering, one LLM call proposes 3 visual subjects from the digest content, the user picks one interactively (auto-selects #1 when non-interactive), and `gemini-3.1-flash-image` renders a 16:9 pixel-art image → `digests/banner_YYYY-MM-DD.jpg` + the used prompt in `banner_YYYY-MM-DD.prompt.txt` (the manual fallback path). The style half of the prompt is fixed config (`banner.style` in .briefly.yaml) so the series look stays consistent; the LLM only writes the subject. Banner failure never fails the digest. Design rationale: docs/design/banner-generation.md.
 
 ### Design principles (learned the hard way)
 

@@ -46,6 +46,7 @@ Examples:
 
 	// Add subcommands
 	rootCmd.AddCommand(NewDigestCmd())
+	rootCmd.AddCommand(NewBannerCmd())
 	rootCmd.AddCommand(NewReadSimplifiedCmd())
 	rootCmd.AddCommand(NewCacheCmd())
 

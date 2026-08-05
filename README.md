@@ -66,6 +66,10 @@ briefly read https://example.com/article
 # Cache management (SQLite, .briefly-cache/)
 briefly cache stats
 briefly cache clear --confirm
+
+# Regenerate the banner image for a digest (runs automatically during
+# digest generation; pick 1 of 3 suggested prompts, or bring your own)
+briefly banner digests/digest_2026-08-05.md
 ```
 
 ## How it works
@@ -86,6 +90,11 @@ ai:
     model: "gemini-3.6-flash"
 cache:
   directory: ".briefly-cache"
+banner:
+  enabled: true
+  model: "gemini-3.1-flash-image"
+  style: "pixel art style, 16-bit, limited color palette, abstract, minimal clean composition, no text or lettering"
+  aspect_ratio: "16:9"
 ```
 
 `BRIEFLY_LOG_LEVEL` (debug|info|warn|error, default warn) controls JSON logging to stderr; stdout carries only command output.

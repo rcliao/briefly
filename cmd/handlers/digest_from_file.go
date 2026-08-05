@@ -49,6 +49,7 @@ func NewDigestFromFileCmd() *cobra.Command {
 		noCache        bool
 		themeThreshold float64
 		outputFormat   string
+		noBanner       bool
 	)
 
 	cmd := &cobra.Command{
@@ -82,7 +83,7 @@ Examples:
   briefly digest from-file input/weekly.md --format slack`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDigestFromFile(cmd.Context(), args[0], outputDir, noCache, outputFormat)
+			return runDigestFromFile(cmd.Context(), args[0], outputDir, noCache, outputFormat, noBanner)
 		},
 	}
 
@@ -91,6 +92,7 @@ Examples:
 	cmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable caching (fetch fresh content)")
 	cmd.Flags().Float64Var(&themeThreshold, "theme-threshold", 0.4, "Deprecated: theme classification removed from this pipeline")
 	cmd.Flags().StringVar(&outputFormat, "format", "markdown", "Output format: markdown (default), slack")
+	cmd.Flags().BoolVar(&noBanner, "no-banner", false, "Skip banner image generation")
 	_ = cmd.Flags().MarkDeprecated("clusters", "topic grouping is now done by the editorial LLM pass")
 	_ = cmd.Flags().MarkDeprecated("theme-threshold", "theme classification was removed from this pipeline")
 
@@ -101,7 +103,7 @@ Examples:
 // hosts or the LLM API rate limits.
 const fetchWorkers = 4
 
-func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, noCache bool, outputFormat string) error {
+func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, noCache bool, outputFormat string, noBanner bool) error {
 	startTime := time.Now()
 	log := logger.Get()
 	log.Info("Starting digest generation from file",
@@ -369,6 +371,17 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 	}
 
 	fmt.Printf("   ✓ Saved: %s\n", outputPath)
+
+	// Banner generation (default on): prompt subjects → interactive pick →
+	// pixel-art PNG next to the digest. Never fails the digest run.
+	if cfg.Banner.Enabled && !noBanner {
+		bannerBase := fmt.Sprintf("banner_%s", now.Format("2006-01-02"))
+		if err := generateBanner(ctx, llmClient, cfg, content, outputDir, bannerBase, ""); err != nil {
+			log.Warn("Banner generation failed", "error", err)
+			fmt.Printf("   ⚠ Banner generation failed: %v\n", err)
+			fmt.Printf("     Retry later with: briefly banner %s\n", outputPath)
+		}
+	}
 
 	duration := time.Since(startTime)
 	fmt.Printf("\n✅ Successfully generated digest!\n")
