@@ -2,810 +2,90 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Version Information
+## What Briefly Is
 
-**Current Version:** v3.1.0-hierarchical-summarization
-**Architecture:** Database-driven pipeline with hierarchical summarization
+A CLI that turns a hand-curated markdown file of URLs into a scannable weekly digest for busy tech professionals, generated with Gemini. One user, one workflow: collect links during the week, run one command, paste the result into LinkedIn/Slack/email.
 
-## Development Commands
+**Version:** 4.0.0-editorial
+**History:** v3 had a database-driven aggregation pipeline (Postgres, RSS feeds, themes, web server, k-means clustering, agentic mode). All of it was removed in August 2026 — see "Removed" below. Do not reintroduce that machinery; the editorial pipeline replaced it deliberately.
 
-### Building and Running
+## Commands
+
 ```bash
-# Build the main application
-go build -o briefly ./cmd/briefly
-
-# Build and install to $GOPATH/bin
-go install ./cmd/briefly
-
-# Run from source during development
-go run ./cmd/briefly digest generate --since 7
-
-# Run tests (standard)
-go test ./...
-
-# Run tests with verbose output
-go test -v ./...
-
-# Run tests with race detection and coverage (CI mode)
-go test -race -coverprofile=coverage.out -covermode=atomic ./...
-
-# Run linting (install golangci-lint if needed)
-golangci-lint run --timeout=5m
-# If not in PATH: $(go env GOPATH)/bin/golangci-lint run --timeout=5m
-
-# Basic Go formatting and vetting
-go fmt ./...
-go vet ./...
-
-# Clean dependencies
-go mod tidy
-```
-
-### Core Commands
-
-**Feed Management:**
-```bash
-# Add RSS/Atom feeds
-briefly feed add https://hnrss.org/newest
-briefly feed add https://blog.golang.org/feed.atom
-
-# List all feeds
-briefly feed list
-
-# Remove a feed
-briefly feed remove <feed-id>
-```
-
-**News Aggregation:**
-```bash
-# Aggregate articles from feeds (run daily)
-briefly aggregate --since 24
-
-# Aggregate with specific themes
-briefly aggregate --since 24 --themes
-```
-
-**Weekly Digest Generation:**
-```bash
-# Generate LinkedIn-ready digest from classified articles (database-driven)
-briefly digest generate --since 7
-
-# Generate digest from curated markdown file (NEW - file-based, lightweight)
-briefly digest from-file input/weekly.md
-
-# Generate with specific output directory
-briefly digest from-file input/weekly.md --output digests
-
-# Disable caching for fresh fetch
+# The weekly workflow
+briefly digest from-file input/2026-08-03.md      # → digests/digest_YYYY-MM-DD.md
+briefly digest from-file input/weekly.md --format slack
 briefly digest from-file input/weekly.md --no-cache
 
-# List recent digests
-briefly digest list --limit 20
-
-# Show specific digest
-briefly digest show <digest-id>
-```
-
-**Quick Article Summary:**
-```bash
-# Get quick summary of single article
+# Quick single-article summary
 briefly read https://example.com/article
-
-# Force fresh fetch (bypass cache)
-briefly read --no-cache https://example.com/article
-
-# Raw output without formatting
 briefly read --raw https://example.com/article
-```
 
-**Cache Management:**
-```bash
-# View cache statistics
+# Cache management (SQLite in .briefly-cache/)
 briefly cache stats
-
-# Clear all cached data
 briefly cache clear --confirm
 ```
 
-**Theme Management (Phase 0):**
-```bash
-# List all enabled themes
-briefly theme list
+**Input format:** a markdown file with one URL per line (bare URLs or markdown links).
 
-# List all themes (including disabled)
-briefly theme list --all
+**Required env:** `GEMINI_API_KEY` (env or `.env`). Optional: `BRIEFLY_LOG_LEVEL` (debug|info|warn|error, default warn — logs go to stderr as JSON, stdout stays clean for output).
 
-# Add a new theme
-briefly theme add "Theme Name" --description "Description" --keywords "keyword1,keyword2"
-
-# Update a theme
-briefly theme update <id> --description "New description" --keywords "new,keywords"
-
-# Enable/disable themes
-briefly theme enable <id>
-briefly theme disable <id>
-
-# Remove a theme
-briefly theme remove <id>
-```
-
-**Manual URL Submission (Phase 0):**
-```bash
-# Submit one or more URLs for processing
-briefly url add https://example.com/article1
-briefly url add https://example.com/article1 https://example.com/article2
-
-# List submitted URLs
-briefly url list
-briefly url list --status pending
-briefly url list --status processed
-
-# Check status of a specific URL
-briefly url status <id>
-
-# Retry failed URLs
-briefly url retry <id>
-briefly url retry --all  # Retry all failed
-
-# Clear processed/failed URLs
-briefly url clear --processed --failed
-```
-
-## Architecture Overview
-
-### Design Philosophy
-
-The architecture is designed around a **database-driven news aggregation workflow** with **hierarchical summarization**:
-
-1. **Aggregate** - Fetch articles from RSS feeds and manual submissions
-2. **Classify** - Categorize articles by theme using LLM
-3. **Store** - Persist articles in PostgreSQL with relationships
-4. **Digest** - Generate weekly digests using hierarchical summarization
-5. **Render** - Create LinkedIn-ready markdown output
-
-### Key Innovation: Hierarchical Summarization
-
-The digest generation uses a **two-stage hierarchical approach**:
-
-**Stage 1: Cluster-Level Narratives**
-- For each topic cluster, generate a comprehensive narrative from **ALL articles** in that cluster
-- Each cluster narrative is 2-3 paragraphs synthesizing all related articles
-- No articles are excluded (no "top 3" limitation)
-
-**Stage 2: Executive Summary**
-- Synthesize cluster narratives into a cohesive executive summary
-- References articles by citation number `[1][2][3]`
-- Short, concise, but grounded in ALL articles
-
-**Benefits:**
-- ✅ **No information loss** - Every article contributes to the digest
-- ✅ **Well-grounded summaries** - Executive summary reflects all content
-- ✅ **Maintains conciseness** - Summary stays short by synthesizing clusters, not all 20+ individual articles
-
-### Project Structure
-
-```
-briefly/
-├── cmd/
-│   ├── briefly/main.go          # Entry point (uses ExecuteSimplified)
-│   └── handlers/                 # Cobra command handlers
-│       ├── root_simplified.go    # Root command
-│       ├── digest_generate.go    # Database-driven digest generation
-│       ├── digest.go             # Digest command group
-│       ├── aggregate.go          # News aggregation
-│       ├── feed.go               # Feed management
-│       ├── read_simplified.go    # Quick article summary
-│       ├── cache.go              # Cache management
-│       ├── theme.go              # Theme management
-│       └── manual_url.go         # Manual URL submission
-├── internal/
-│   ├── parser/                   # URL parsing from markdown
-│   ├── summarize/                # Centralized summarization with prompts
-│   ├── narrative/                # Executive summary generation
-│   ├── pipeline/                 # Orchestration layer
-│   │   ├── pipeline.go           # Core orchestrator
-│   │   ├── interfaces.go         # Component contracts
-│   │   ├── adapters.go           # Wrapper adapters for existing packages
-│   │   ├── builder.go            # Fluent API for construction
-│   │   └── theme_categorizer.go  # NEW Phase 0: Theme-based categorization
-│   ├── clustering/               # K-means topic clustering
-│   ├── core/                     # Core data structures (Article, Summary, Digest, Theme, ManualURL)
-│   ├── fetch/                    # Content fetching (HTML, PDF, YouTube)
-│   ├── llm/                      # LLM client for Gemini API
-│   │   └── traced_client.go      # PostHog-traced LLM client
-│   ├── observability/            # Observability infrastructure
-│   │   └── posthog.go            # PostHog analytics tracking
-│   ├── themes/                   # NEW Phase 0: Theme classification system
-│   │   └── classifier.go         # LLM-based theme classifier
-│   ├── persistence/              # NEW Phase 0: Database abstraction layer
-│   │   ├── interfaces.go         # Repository interfaces
-│   │   ├── postgres_repos.go     # PostgreSQL implementations
-│   │   └── migrations/           # Database migrations (001-007+)
-│   ├── sources/                  # NEW Phase 0: Feed source management
-│   │   └── manager.go            # RSS feeds + manual URL aggregation
-│   ├── server/                   # NEW Phase 0: Web server
-│   │   ├── server.go             # HTTP server setup
-│   │   ├── theme_handlers.go     # Theme management API
-│   │   ├── manual_url_handlers.go # Manual URL API
-│   │   └── web_pages.go          # Web UI pages (/themes, /submit)
-│   ├── store/                    # SQLite caching (being phased out for PostgreSQL)
-│   ├── render/                   # Output formatting
-│   ├── config/                   # Configuration management
-│   └── logger/                   # Structured logging
-├── docs/
-│   ├── executions/               # NEW Phase 0: Execution tracking
-│   │   └── 2025-10-31.md         # Phase 0-1 implementation plan
-│   └── simplified-architecture/  # Architecture design documents
-│       ├── data-flow.md
-│       ├── components.md
-│       ├── data-model.yaml
-│       ├── api-contracts.yaml
-│       └── UNUSED_PACKAGES.md
-└── test/
-    └── (integration tests removed - pending rewrite)
-```
-
-### Removed Packages (v3.0 Cleanup)
-
-**18 packages removed** (~18,797 lines) that were not part of the core weekly digest workflow:
-
-- `alerts/` - Alert monitoring system
-- `cost/` - API cost estimation
-- `deepresearch/` - Multi-stage research pipeline
-- `interactive/` - Interactive selection mode
-- `messaging/` - Slack/Discord integration
-- `ordering/` - Article ordering (stubbed in pipeline)
-- `relevance/` - Relevance scoring system
-- `research/` - Research query generation
-- `search/` - Web search integration
-- `sentiment/` - Sentiment analysis
-- `services/` - Service layer (replaced by pipeline interfaces)
-- `summaries/` - Legacy summary handling
-- `trends/` - Trend analysis
-- `tts/` - Text-to-speech generation
-- `tui/` - Terminal UI browser
-- `visual/` - Banner generation (future)
-
-Note: `feeds/` and `categorization/` were previously listed here in error — both are live (`internal/sources` and `internal/pipeline` depend on them).
-
-**Removed in 2026-08 cleanup:** `internal/agent/` (agentic digest mode), `internal/templates/` and `internal/email/` (zero production importers), `cmd/test-hdbscan` (scratch harness).
-
-### Pipeline Architecture
-
-**Core Concept:** Database-driven workflow with hierarchical summarization
-
-**Digest Generation Pipeline (9 Steps):**
-
-1. **Parse URLs** - Extract URLs from database (feeds + manual submissions)
-2. **Fetch & Summarize** - Retrieve content and generate summaries (fetch, summarize)
-3. **Generate Embeddings** - Create 768-dim vectors for clustering (llm)
-4. **Cluster Articles** - Group by topic similarity using K-means (clustering)
-5. **🆕 Generate Cluster Narratives** - Synthesize ALL articles in each cluster into 2-3 paragraph narrative (hierarchical stage 1)
-6. **Generate Digest Content** - Create executive summary from cluster narratives (hierarchical stage 2)
-7. **Build Digest** - Construct final digest structure
-8. **Render Markdown** - Create LinkedIn-ready output
-9. **Store in Database** - Persist digest with relationships
-
-**Key Files:**
-
-- `internal/pipeline/pipeline.go` - Central orchestrator (GenerateDigests)
-- `internal/narrative/generator.go` - Hierarchical summarization logic
-- `internal/core/core.go` - ClusterNarrative and TopicCluster structs
-- `internal/pipeline/interfaces.go` - Component contracts
-
-### Data Flow (Hierarchical Summarization)
-
-```
-Database (Articles) → Fetcher → Articles + Summaries (with cache)
-    ↓
-Summaries → LLM → Embeddings (768-dim vectors)
-    ↓
-Articles + Embeddings → Clusterer → TopicClusters (K-means)
-    ↓
-TopicClusters + ALL Articles → ClusterNarrative Generator → Cluster Narratives
-    ↓                                                           (2-3 paragraphs each)
-Cluster Narratives → Executive Summary Generator → Digest Summary
-    ↓
-All Data → Builder → Digest Structure
-    ↓
-Digest → Renderer → Markdown File
-    ↓
-Output: digests/digest_2025-11-06.md
-```
-
-**Hierarchical Flow:**
-```
-Stage 1: Articles (per cluster) → Cluster Narrative (synthesizes ALL)
-Stage 2: Cluster Narratives → Executive Summary (concise synthesis)
-```
-
-### Core Data Structures
-
-**Article** (`internal/core/core.go`):
-- `ID`, `URL`, `Title`, `ContentType` (html, pdf, youtube)
-- `CleanedText`, `RawContent`
-- `TopicCluster`, `ClusterConfidence`
-- `Embedding` []float64 (populated during pipeline)
-
-**Summary** (`internal/core/core.go`):
-- `ID`, `ArticleIDs` []string
-- `SummaryText`, `ModelUsed`
-- Used for both article summaries and executive summaries
-
-**ClusterNarrative** (`internal/core/core.go`) - NEW for hierarchical summarization:
-- `Title` string - Short, punchy cluster title (5-8 words)
-- `Summary` string - 2-3 paragraph narrative synthesizing ALL articles
-- `KeyThemes` []string - 3-5 main themes from the cluster
-- `ArticleRefs` []int - Citation numbers of articles included
-- `Confidence` float64 - Cluster coherence confidence (0-1)
-
-**TopicCluster** (`internal/core/core.go`):
-- `Label` - Auto-generated cluster name
-- `ArticleIDs` []string - Articles in this cluster
-- `Centroid` []float64 - K-means centroid
-- `Narrative` *ClusterNarrative - Generated cluster summary (hierarchical summarization)
-
-**Digest** (`internal/core/core.go`):
-- `ArticleGroups` []ArticleGroup - Clustered articles
-- `DigestSummary` string - Executive summary (generated from cluster narratives)
-- `KeyMoments` []KeyMoment - Important quotes with citations
-- `Metadata` - Title, date, article count
-
-### Component Interfaces (v3.0)
-
-All major components implement clean interfaces defined in `internal/pipeline/interfaces.go`:
-
-```go
-type URLParser interface {
-    ParseMarkdownFile(filePath string) ([]core.Link, error)
-}
-
-type ContentFetcher interface {
-    FetchArticle(ctx context.Context, url string) (*core.Article, error)
-}
-
-type ArticleSummarizer interface {
-    SummarizeArticle(ctx context.Context, article *core.Article) (*core.Summary, error)
-}
-
-type EmbeddingGenerator interface {
-    GenerateEmbedding(ctx context.Context, text string) ([]float64, error)
-}
-
-type TopicClusterer interface {
-    ClusterArticles(ctx context.Context, articles []core.Article,
-        summaries []core.Summary, embeddings map[string][]float64) ([]core.TopicCluster, error)
-}
-
-type NarrativeGenerator interface {
-    GenerateExecutiveSummary(ctx context.Context, clusters []core.TopicCluster,
-        articles map[string]core.Article, summaries map[string]core.Summary) (string, error)
-}
-
-type MarkdownRenderer interface {
-    RenderDigest(ctx context.Context, digest *core.Digest, outputPath string) (string, error)
-    RenderQuickRead(ctx context.Context, article *core.Article, summary *core.Summary) (string, error)
-}
-```
-
-### Configuration Management
-
-**Hierarchical Configuration (Viper):**
-
-1. Command-line flags (highest priority)
-2. Environment variables (loaded from `.env` via `godotenv`)
-3. Configuration file (`.briefly.yaml` or `--config`)
-4. Default values (lowest priority)
-
-**Key Settings:**
-```yaml
-ai:
-  gemini:
-    api_key: "your-gemini-api-key"
-    model: "gemini-2.5-flash-preview-05-20"
-
-cache:
-  enabled: true
-  directory: ".briefly-cache"
-  ttl: 24h
-
-clustering:
-  min_clusters: 2
-  max_clusters: 5
-  algorithm: "kmeans"
-```
-
-### Caching Strategy
-
-**Multi-layer SQLite caching** (`.briefly-cache/`):
-
-- **Articles**: 24-hour TTL, content hash validation
-- **Summaries**: 7-day TTL, linked to article content hash
-- **Digest metadata**: Persistent for trend analysis
-
-**Cache Commands:**
-```bash
-briefly cache stats   # View statistics
-briefly cache clear --confirm  # Clear all data
-```
-
-### Testing
-
-**Test Coverage (v3.0):**
-- `internal/parser/parser_test.go` - 7 test suites (✓ passing)
-- `internal/summarize/summarizer_test.go` - 14 test suites (✓ passing)
-- `internal/core/core_test.go` - Core data structures
-- `internal/llm/llm_test.go` - LLM operations
-- `internal/fetch/fetch_test.go` - Content fetching
-- `internal/store/store_test.go` - Store operations
-- `internal/render/render_test.go` - Render functionality
-- `cmd/handlers/digest_editorial_test.go` - Editorial digest normalization and rendering
-
-**Note:** Integration tests were removed during simplification and need rewrite.
-
-**Run Tests:**
-```bash
-# Run all unit tests
-go test ./...
-
-# Run specific package tests
-go test ./internal/parser
-go test ./internal/summarize
-
-# Run with race detection (CI mode)
-go test -race ./...
-```
-
-### `digest from-file` (Editorial Pipeline — the primary weekly workflow)
-
-**Overview:** Lightweight command for generating digests from curated markdown files without database persistence. Redesigned 2026-08: a single editorial LLM pass replaced theme classification, embeddings, k-means clustering, and cluster narratives.
-
-**Use Case:** Perfect for weekly digests where you manually curate URLs throughout the week and want to generate a digest without running the full aggregation pipeline.
-
-**Command:**
-```bash
-briefly digest from-file <input.md> [flags]
-```
-
-**Flags:**
-- `--output DIR` - Output directory (default: "digests")
-- `--no-cache` - Disable caching (fresh fetch)
-- `--format FORMAT` - markdown (default) or slack
-- `--clusters`, `--theme-threshold` - Deprecated no-ops (kept for compatibility)
-
-**How It Works (5 steps, `cmd/handlers/digest_from_file.go`):**
-1. **Parse URLs** - Extract URLs from markdown file
-2. **Fetch Articles** - Parallel (4 workers), browser UA + 1 retry; failed URLs tracked and reported in the digest footer, never silently dropped
-3. **Generate Summaries** - Parallel AI summaries
-4. **Editorial Pass** - ONE LLM call (`cmd/handlers/digest_editorial.go`) returns: digest title, executive summary, must-read pick, 2-5 topic groups, and per-article display title + one-liner takeaway + intent tag (skim/read/deep_dive). `normalizeEditorialDigest` enforces invariants (every article in exactly one topic) with a deterministic fallback if the LLM call fails.
-5. **Render** - Paste-friendly plain text (LinkedIn/Slack don't render markdown): no markdown links (bare URLs on their own line), no indentation, no `---` rules, no bold; topic headers are `EMOJI UPPERCASE`; blank lines between title/description/URL
-
-**Example Workflow:**
-```bash
-# 1. Create/update your curated list throughout the week
-echo "https://example.com/article1" >> input/weekly.md
-echo "https://example.com/article2" >> input/weekly.md
-
-# 2. Generate digest at end of week
-briefly digest from-file input/weekly.md
-
-# 3. Review and share
-open digests/digest_2025-11-10.md
-```
-
-**Key Differences from `digest generate`:**
-- ✅ **No database required** - Pure file-based processing
-- ✅ **Lightweight** - In-memory pipeline
-- ✅ **Fast iteration** - Edit markdown, regenerate instantly
-- ✅ **Optional caching** - SQLite file cache; cached articles are re-extracted from stored HTML on read
-- ❌ **No persistence** - Digests not saved to database
-
-**Performance:**
-- ~45 seconds for 9 articles (parallel fetch/summarize)
-- ~10 LLM calls total (1 summary per article + 1 editorial call)
-
-**History:** An agentic mode (`--agent`, Gemini function-calling with a reflect/revise loop, `internal/agent/`) was removed 2026-08-05. Its quality score plateaued (~0.55) because it iterated on prose while output structure is enforced by the renderer; the editorial pipeline reaches a higher ceiling at ~1/20th the cost. Lesson: judgment in the model, structure in the code.
-
-**Input File Format:**
-Simple markdown file with URLs (one per line or in markdown links):
-```markdown
-# Weekly Reading List
-
-https://example.com/article1
-https://example.com/article2
-- [Optional Title](https://example.com/article3)
-```
-
-## Development Patterns
-
-**Pipeline Construction:**
-```go
-// Build pipeline with dependencies
-builder := pipeline.NewBuilder().
-    WithLLMClient(llmClient).
-    WithCacheDir(".briefly-cache").
-    Build()
-
-pipe, err := builder.Build()
-
-// Execute digest generation
-result, err := pipe.GenerateDigest(ctx, pipeline.DigestOptions{
-    InputFile:      "input/links.md",
-    OutputPath:     "digests",
-    GenerateBanner: false,
-})
-```
-
-**Error Handling:**
-- Graceful degradation: article failures don't stop pipeline
-- Non-fatal errors: executive summary failure continues execution
-- Comprehensive logging: every step shows progress
-
-**Context Propagation:**
-```go
-// All service methods accept context for cancellation
-ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-defer cancel()
-result, err := pipe.GenerateDigest(ctx, opts)
-```
-
-## Common Workflows
-
-### Adding New Content Fetchers
-
-1. Implement content detection in `internal/fetch/processor.go`:
-   ```go
-   func (cp *ContentProcessor) detectContentType(url string) (core.ContentType, error)
-   ```
-
-2. Add processing function (e.g., `ProcessNewType`):
-   ```go
-   func ProcessNewType(link core.Link) (core.Article, error) {
-       // Fetch and parse content
-       // Populate article with URL, Title, CleanedText, ContentType
-       article := core.Article{
-           ID:          uuid.NewString(),
-           URL:         link.URL,  // IMPORTANT: Set URL field
-           Title:       extractedTitle,
-           ContentType: core.ContentTypeNew,
-           CleanedText: cleanedContent,
-           DateFetched: time.Now().UTC(),
-       }
-       return article, nil
-   }
-   ```
-
-3. Add to processor switch in `ProcessArticle()`
-
-### Extending Summarization
-
-**Add New Prompt Type:**
-
-1. Define prompt in `internal/summarize/prompts.go`:
-   ```go
-   func BuildNewStylePrompt(content string, opts PromptOptions) string
-   ```
-
-2. Use in `Summarizer.SummarizeArticle()`:
-   ```go
-   prompt := prompts.BuildNewStylePrompt(article.CleanedText, opts)
-   ```
-
-### Adding Pipeline Steps
-
-1. Define interface in `internal/pipeline/interfaces.go`
-2. Implement adapter in `internal/pipeline/adapters.go`
-3. Add to pipeline in `internal/pipeline/pipeline.go`
-4. Wire up in builder: `internal/pipeline/builder.go`
-
-### Debugging
-
-**Comprehensive Logging:**
-
-Every pipeline step logs progress:
-```
-📄 Step 1/9: Parsing URLs from input/links.md...
-   ✓ Found 16 URLs
-
-🔍 Step 2/9: Fetching and summarizing articles...
-   [1/16] Processing: https://example.com
-           ✓ Cache hit
-   [2/16] Processing: https://example.com/2
-           ✓ Fetched and summarized
-   ...
-
-🧠 Step 3/9: Generating embeddings for clustering...
-   [1/13] Generating embedding for summary abc123
-           ✓ Embedding generated (768 dimensions)
-```
-
-**Cache Debugging:**
-```bash
-# Clear cache if seeing stale data
-briefly cache clear --confirm
-
-# Check cache statistics
-briefly cache stats
-```
-
-## API Requirements
-
-**Required:**
-- `GEMINI_API_KEY` - Gemini API key for summarization and embeddings
-- `DATABASE_URL` - PostgreSQL connection string (Phase 0+)
-
-**Observability (Optional):**
-- `POSTHOG_API_KEY` - PostHog API key for analytics
-- `POSTHOG_HOST` - PostHog server URL (default: https://app.posthog.com)
-
-**Other Optional:**
-- `OPENAI_API_KEY` - For future banner generation
-
-**Configuration:**
-Set in `.env` file or environment:
-```bash
-# Required
-export GEMINI_API_KEY="your-key-here"
-export DATABASE_URL="postgresql://user:pass@localhost:5432/briefly"
-
-# Observability (optional)
-export POSTHOG_API_KEY="phc_..."
-export POSTHOG_HOST="https://app.posthog.com"
-```
-
-**Note:** LangFuse integration was removed 2026-08 — it was a no-op stub behind a real flag.
-
-## Performance Considerations
-
-- **SQLite caching** reduces redundant API calls (being migrated to PostgreSQL)
-- **Concurrent processing** planned but not yet implemented
-- **Typical processing time**: ~2-3 minutes for 13 articles
-- **Cache hit rate**: 0-60% depending on previous runs
-
-## Phase 0 Features (Implemented)
-
-### Theme System
-**Database-driven theme classification with LLM-based relevance scoring**
-
-- **10 Default Themes** seeded on first run (AI/ML, Cloud/DevOps, Software Engineering, etc.)
-- **CLI Management**: Full CRUD operations via `briefly theme` commands
-- **Web UI**: Theme management interface at `/themes`
-- **LLM Classification**: Articles automatically classified using Gemini with JSON prompts
-- **Relevance Threshold**: 0.4 (40%) minimum score required for theme assignment
-- **Theme Structure**:
-  - Name, description, keywords
-  - Enable/disable toggle
-  - Used in pipeline categorization
-
-**Files**: `internal/themes/classifier.go`, `internal/pipeline/theme_categorizer.go`, `cmd/handlers/theme.go`
-
-### Manual URL Submission
-**User-submitted URLs with status tracking and automatic processing**
-
-- **CLI Commands**: `briefly url add/list/status/retry/clear`
-- **Web UI**: Submission form at `/submit`
-- **Status Flow**: `pending` → `processing` → `processed`/`failed`
-- **Auto-Processing**: Integrated with `briefly aggregate` command
-- **Feed Integration**: Manual URLs converted to feed items for unified processing
-- **Error Handling**: Failed URLs tracked with error messages, retry capability
-
-**Files**: `internal/sources/manager.go` (AggregateManualURLs), `cmd/handlers/manual_url.go`
-
-### Observability Infrastructure
-**PostHog tracking for LLM operations and user analytics** (LangFuse was removed 2026-08; it never progressed past a local-logging stub)
-
-**PostHog (Analytics):**
-- Fully integrated with official Go SDK
-- Tracks key events:
-  - Digest generation, article processing, theme classification
-  - Manual URL submissions, article clicks, theme filters
-  - LLM calls (model, operation, tokens, latency)
-- Frontend tracking in web pages (`/themes`, `/submit`)
-- Files: `internal/observability/posthog.go`
-
-### Database Migration (PostgreSQL)
-**Replaced SQLite with PostgreSQL for production scalability**
-
-- **Repository Pattern**: Clean abstractions in `internal/persistence/interfaces.go`
-- **7 Migrations** (as of Phase 0):
-  1. Initial schema (articles, summaries, feeds)
-  2. Feed items
-  3. Themes table
-  4. Manual URLs table
-  5. Article-theme relationships
-  6. Default theme seeds
-  7. Manual submissions feed
-- **Graceful Fallback**: Observability clients optional (no crashes if disabled)
-
-## Known Issues / Future Work
-
-1. **Executive Summary Generation**: Currently failing (non-fatal)
-   - Located in `internal/narrative/generator.go`
-   - Pipeline continues without it
-
-2. **Banner Generation**: Stubbed, not implemented
-   - Interface defined in `internal/pipeline/interfaces.go`
-   - Adapter returns "not yet implemented"
-
-3. **Integration Tests**: Removed during cleanup
-   - Need rewrite for new pipeline architecture
-
-4. **Article Ordering**: Stubbed implementation
-   - `OrdererAdapter` in `internal/pipeline/adapters.go`
-   - Currently returns clusters unchanged
-
-5. **Concurrent Processing**: Not implemented
-   - Articles processed sequentially
-   - TODO in `pipeline.go:290`
-
-## Migration Notes (v2.0 → v3.0)
-
-**Breaking Changes:**
-- 8 commands → 3 commands (digest, read, cache)
-- Many advanced features removed (research, tui, messaging, etc.)
-- Service layer replaced by pipeline architecture
-- Integration tests need rewrite
-
-**Benefits:**
-- 56% fewer packages (32 → 14)
-- ~20,000 lines of code removed
-- Focused on core workflow
-- Clean architecture with interfaces
-- Comprehensive logging
-
-**Upgrade Path:**
-If you need removed features (research, sentiment, alerts, etc.), use v2.0 on the `main` branch.
-
-## Git Workflow
-
-**Branches:**
-- `main` - v2.0 with all features
-- `simplify-architecture` - v3.0 simplified (current development)
-
-**Commit Tags:**
-- `v2.0-before-simplification` - Last commit before refactor
-- Future: `v3.0.0` - Release tag when complete
-
-## Useful Commands Reference
+## Development
 
 ```bash
-# Build and test
 go build -o briefly ./cmd/briefly
-go test ./...
-
-# Add feeds
-./briefly feed add https://hnrss.org/newest
-
-# Aggregate news (run daily)
-./briefly aggregate --since 24
-
-# Generate digest (database-driven with hierarchical summarization)
-./briefly digest generate --since 7
-
-# Generate digest from curated markdown file (NEW - lightweight)
-./briefly digest from-file input/weekly.md
-
-# List recent digests
-./briefly digest list --limit 20
-
-# Quick read
-./briefly read https://example.com/article
-
-# Cache management
-./briefly cache stats
-./briefly cache clear --confirm
-
-# Linting
-golangci-lint run --timeout=5m
-
-# View help
-./briefly --help
-./briefly digest --help
-./briefly aggregate --help
+make test     # go test -race ./...
+make lint     # golangci-lint (pinned config in .golangci.yml, same as CI)
+make fmt      # gofmt -w .
 ```
 
-## Documentation
+CI (.github/workflows/test.yml) runs test/build/lint on the Go version from go.mod. Lint must stay at zero findings.
 
-- `docs/simplified-architecture/` - Architecture design documents
-- `docs/simplified-architecture/UNUSED_PACKAGES.md` - List of removed packages
-- README.md - User-facing documentation
+## Architecture
+
+### The pipeline (5 steps, `cmd/handlers/digest_from_file.go`)
+
+1. **Parse** — extract URLs from the markdown file (`internal/parser`)
+2. **Fetch** — parallel (4 workers), browser UA + one retry, 24h SQLite cache; cached entries are re-extracted from stored HTML so parser fixes apply retroactively; failures are collected, never silently dropped (`internal/fetch`, `internal/store`)
+3. **Summarize** — parallel per-article summaries, 12k-char content window (`internal/summarize`)
+4. **Editorial pass** — ONE LLM call (`cmd/handlers/digest_editorial.go`) returns title, executive summary, must-read pick, 2-5 topic groups, and per-article display title + one-liner takeaway + intent tag. `normalizeEditorialDigest` enforces invariants (every article in exactly one topic, entries backfilled from summaries) with a deterministic fallback — a bad LLM response degrades to a plainer digest, never a broken one.
+5. **Render** — paste-friendly plain text: bare URLs on their own line, no markdown links/bold/headers/rules, `EMOJI UPPERCASE` topic headers, blank lines between title/description/URL, failed links listed in a footer. Read times are computed from cleaned word count (~200 wpm), never LLM-estimated.
+
+The Slack format (`--format slack`) feeds editorial topics into `internal/narrative.GenerateSlackDigest` and renders chunked Slack mrkdwn.
+
+### Design principles (learned the hard way)
+
+- **Judgment in the model, structure in the code.** The LLM names topics and writes takeaways; the renderer and normalization code guarantee the format. An agentic reflect/revise loop was tried and removed — it iterated on prose while scannability is structural.
+- **Fail loudly, degrade gracefully.** Fetch failures appear in the digest footer and CLI output. LLM failures fall back to deterministic structure.
+- **The digest is pasted into places that don't render markdown.** Never add markdown links, bold, or horizontal rules to the renderer.
+
+### Package map
+
+```
+cmd/briefly/          Entry point
+cmd/handlers/         root, digest (from-file), read, cache + editorial pass & renderer
+internal/core/        Data structures (Article, Summary, Link, ...)
+internal/parser/      URL extraction from markdown
+internal/fetch/       HTML/PDF/YouTube fetching + content extraction + read time
+internal/summarize/   Article summarization prompts + summarizer
+internal/narrative/   Slack digest generation (+ legacy digest content types)
+internal/llm/         Gemini client (google.golang.org/genai)
+internal/store/       SQLite cache (articles, summaries)
+internal/config/      Viper config (.briefly.yaml + env)
+internal/logger/      slog JSON to stderr, BRIEFLY_LOG_LEVEL
+```
+
+Tests: `cmd/handlers` (editorial normalization/rendering), `parser`, `summarize`, `core`, `llm`, `fetch`, `store`.
+
+## Removed (August 2026) — do not resurrect without discussion
+
+The entire database/server half (~20k lines across two cleanup waves): Postgres persistence + migrations, web server + UI, RSS aggregation (`aggregate`, `classify`, `feed`, `theme`, `url`, `serve`, `migrate`, `search`, `quality` commands), k-means/Louvain/HDBSCAN clustering, embeddings + pgvector, themes/tags classification, citations tracking, quality metrics, PostHog/LangFuse observability, the agentic digest mode, and Docker/postgres infra. `DATABASE_URL` is no longer used anywhere.
+
+Rationale: the weekly curated workflow never touched any of it, and it dominated the maintenance surface (untested god functions, stubbed interfaces, three inconsistent taxonomies). If aggregation is ever wanted again, build it as a separate feed-suggestion tool that appends to the input file, not as a parallel digest pipeline.
+
+## Known gaps / future work
+
+- Summaries are not cached (re-runs re-summarize; ~30s of the ~45s runtime). Cache on article content hash in `internal/store`.
+- `internal/llm` methods mostly create `context.Background()` internally instead of accepting ctx — LLM calls aren't cancellable.
+- `internal/narrative` still carries legacy digest-content types beyond the Slack path; slimming it is safe once Slack format is confirmed stable.
+- No sentinel errors / `errors.Is` usage; some tests string-match error messages.
