@@ -127,8 +127,8 @@ func TestRenderEditorialDigest(t *testing.T) {
 		"🎯 Must-read:",
 		"🤖 AGENTS",
 		"📖 1 min",
-		"https://example.com/a",         // plain URL on its own line
-		"https://blocked.example.com",   // failure footer
+		"https://example.com/a",           // plain URL on its own line
+		"https://blocked.example.com",     // failure footer
 		"Big week for agents and models.", // citations stripped from prose
 	} {
 		if !strings.Contains(out, want) {

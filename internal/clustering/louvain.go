@@ -31,10 +31,10 @@ type LouvainClusterer struct {
 func NewLouvainClusterer(searcher VectorSearcher) *LouvainClusterer {
 	return &LouvainClusterer{
 		searcher:       searcher,
-		resolution:     1.0,  // Standard resolution (tune 0.5-2.0)
-		minSimilarity:  0.3,  // Lower threshold OK - Louvain uses edge weights
-		maxNeighbors:   10,   // More neighbors = better community detection
-		minClusterSize: 2,    // Minimum 2 articles per cluster
+		resolution:     1.0, // Standard resolution (tune 0.5-2.0)
+		minSimilarity:  0.3, // Lower threshold OK - Louvain uses edge weights
+		maxNeighbors:   10,  // More neighbors = better community detection
+		minClusterSize: 2,   // Minimum 2 articles per cluster
 		tagAware:       false,
 		log:            logger.Get(),
 	}

@@ -141,8 +141,8 @@ func (c *Classifier) ClassifyArticle(ctx context.Context, article core.Article, 
 
 	// Use the LLM to classify with structured output (guaranteed valid JSON)
 	response, err := c.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
-		Temperature:    0.3, // Low temperature for more consistent classification
-		MaxTokens:      2000, // Increased to ensure complete JSON output
+		Temperature:    0.3,    // Low temperature for more consistent classification
+		MaxTokens:      2000,   // Increased to ensure complete JSON output
 		ResponseSchema: schema, // Phase 1: Structured output eliminates JSON parsing errors
 	})
 	if err != nil {

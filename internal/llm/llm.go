@@ -48,9 +48,9 @@ type Client struct {
 
 // TextGenerationOptions contains options for text generation
 type TextGenerationOptions struct {
-	MaxTokens      int32        // Maximum number of tokens to generate
-	Temperature    float32      // Temperature for randomness (0.0 to 1.0)
-	Model          string       // Model to use (optional, defaults to client's model)
+	MaxTokens      int32         // Maximum number of tokens to generate
+	Temperature    float32       // Temperature for randomness (0.0 to 1.0)
+	Model          string        // Model to use (optional, defaults to client's model)
 	ResponseSchema *genai.Schema // Optional: Schema for structured output (Phase 1)
 }
 

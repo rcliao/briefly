@@ -25,7 +25,7 @@ type Builder struct {
 	config         *Config
 	skipCache      bool
 	skipBanner     bool
-	useThemeSystem bool // Enable theme-based categorization
+	useThemeSystem bool        // Enable theme-based categorization
 	vectorStore    VectorStore // Phase 2: Optional vector store for semantic search
 }
 
@@ -237,12 +237,12 @@ func (b *Builder) Build() (*Pipeline, error) {
 		cache,
 		banner,
 		citationTracker,
-		nil,             // digestRepo: Optional, will be wired up when needed (v2.0)
-		articleRepo,     // Phase 1: For persisting cluster assignments
-		tagClassifier,   // Phase 1: For multi-label tag classification
-		tagRepo,         // Phase 1: For tag persistence
-		b.vectorStore,   // Phase 2: Vector store for semantic search
-		coherenceRepo,   // Cluster coherence metrics persistence
+		nil,           // digestRepo: Optional, will be wired up when needed (v2.0)
+		articleRepo,   // Phase 1: For persisting cluster assignments
+		tagClassifier, // Phase 1: For multi-label tag classification
+		tagRepo,       // Phase 1: For tag persistence
+		b.vectorStore, // Phase 2: Vector store for semantic search
+		coherenceRepo, // Cluster coherence metrics persistence
 		b.config,
 	)
 

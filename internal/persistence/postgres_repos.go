@@ -621,8 +621,8 @@ func (r *postgresDigestRepo) Create(ctx context.Context, digest *core.Digest) er
 		digest.ProcessedDate,
 		digest.ArticleCount,
 		pq.Array(digest.TopDevelopments), // $13: v3.0 top_developments
-		byTheNumbersJSON,                  // $14: v3.0 by_the_numbers
-		digest.WhyItMatters,               // $15: v3.0 why_it_matters
+		byTheNumbersJSON,                 // $14: v3.0 by_the_numbers
+		digest.WhyItMatters,              // $15: v3.0 why_it_matters
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert digest: %w", err)
@@ -712,9 +712,9 @@ func (r *postgresDigestRepo) Get(ctx context.Context, id string) (*core.Digest, 
 		&digest.ArticleCount,
 		&createdAt,
 		&legacyDate,
-		pq.Array(&digest.TopDevelopments),  // v3.0
-		&byTheNumbersJSON,                   // v3.0
-		&whyItMatters,                       // v3.0
+		pq.Array(&digest.TopDevelopments), // v3.0
+		&byTheNumbersJSON,                 // v3.0
+		&whyItMatters,                     // v3.0
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("digest not found")
@@ -912,9 +912,9 @@ func (r *postgresDigestRepo) List(ctx context.Context, opts ListOptions) ([]core
 			&digest.ArticleCount,
 			&createdAt,
 			&legacyDate,
-			pq.Array(&digest.TopDevelopments),  // v3.0
-			&byTheNumbersJSON,                   // v3.0
-			&whyItMatters,                       // v3.0
+			pq.Array(&digest.TopDevelopments), // v3.0
+			&byTheNumbersJSON,                 // v3.0
+			&whyItMatters,                     // v3.0
 			&themesJSON,
 		); err != nil {
 			return nil, err
@@ -1094,20 +1094,20 @@ func (r *postgresDigestRepo) StoreWithRelationships(ctx context.Context, digest 
 
 	_, err = tx.ExecContext(ctx, query,
 		digest.ID,
-		dateValue,                        // Legacy date column
-		contentJSONBytes,                 // Legacy content JSONB column
-		digest.Title,                     // Legacy title column
-		digest.Summary,                   // v2.0 summary field
-		digest.TLDRSummary,               // v2.0 tldr
-		keyMomentsJSON,                   // v2.0
-		perspectivesJSON,                 // v2.0
-		digest.ClusterID,                 // v2.0
-		digest.ProcessedDate,             // v2.0
-		digest.ArticleCount,              // v2.0
+		dateValue,            // Legacy date column
+		contentJSONBytes,     // Legacy content JSONB column
+		digest.Title,         // Legacy title column
+		digest.Summary,       // v2.0 summary field
+		digest.TLDRSummary,   // v2.0 tldr
+		keyMomentsJSON,       // v2.0
+		perspectivesJSON,     // v2.0
+		digest.ClusterID,     // v2.0
+		digest.ProcessedDate, // v2.0
+		digest.ArticleCount,  // v2.0
 		time.Now().UTC(),
 		pq.Array(digest.TopDevelopments), // v3.0 top_developments
-		byTheNumbersJSON,                  // v3.0 by_the_numbers
-		digest.WhyItMatters,               // v3.0 why_it_matters
+		byTheNumbersJSON,                 // v3.0 by_the_numbers
+		digest.WhyItMatters,              // v3.0 why_it_matters
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert digest: %w", err)

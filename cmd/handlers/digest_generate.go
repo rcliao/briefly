@@ -775,7 +775,6 @@ func getThemeEmoji(theme string) string {
 	return "📌" // Default
 }
 
-
 // getIntentSectionTitle returns a section title for reader intent
 func getIntentSectionTitle(intent string) string {
 	switch strings.ToLower(intent) {

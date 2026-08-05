@@ -244,9 +244,9 @@ type VectorSearchResult struct {
 
 // VectorStoreStats provides metrics about the vector store (Phase 2)
 type VectorStoreStats struct {
-	TotalEmbeddings   int64   // Count of stored embeddings
+	TotalEmbeddings     int64   // Count of stored embeddings
 	EmbeddingDimensions int     // Vector size (768 for Gemini)
-	IndexType         string  // pgvector index type (ivfflat, hnsw)
-	IndexSize         int64   // Disk space used by indexes
-	AvgSearchLatency  float64 // Average search query time (ms)
+	IndexType           string  // pgvector index type (ivfflat, hnsw)
+	IndexSize           int64   // Disk space used by indexes
+	AvgSearchLatency    float64 // Average search query time (ms)
 }

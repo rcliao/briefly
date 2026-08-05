@@ -297,7 +297,6 @@ func (tc *TracedClient) RegenerateDigestWithMyTake(originalDigest, myTake, teamC
 	return tc.client.RegenerateDigestWithMyTake(originalDigest, myTake, teamContext, styleGuide)
 }
 
-
 func (tc *TracedClient) GenerateDigestTitle(digestContent string, format string) (string, error) {
 	return tc.client.GenerateDigestTitle(digestContent, format)
 }

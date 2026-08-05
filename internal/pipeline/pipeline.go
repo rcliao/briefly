@@ -27,13 +27,13 @@ type Pipeline struct {
 	narrative       NarrativeGenerator
 	renderer        MarkdownRenderer
 	cache           CacheManager
-	banner          BannerGenerator   // Optional
-	citationTracker CitationTracker   // Phase 1: Track citations for articles
-	digestRepo      DigestRepository  // Optional: For storing digests in database (v2.0)
-	articleRepo     ArticleRepository // Phase 1: For persisting cluster assignments
-	tagClassifier   TagClassifier     // Phase 1: For multi-label tag classification
-	tagRepo         TagRepository     // Phase 1: For tag persistence
-	vectorStore     VectorStore       // Phase 2: For semantic search with pgvector
+	banner          BannerGenerator                        // Optional
+	citationTracker CitationTracker                        // Phase 1: Track citations for articles
+	digestRepo      DigestRepository                       // Optional: For storing digests in database (v2.0)
+	articleRepo     ArticleRepository                      // Phase 1: For persisting cluster assignments
+	tagClassifier   TagClassifier                          // Phase 1: For multi-label tag classification
+	tagRepo         TagRepository                          // Phase 1: For tag persistence
+	vectorStore     VectorStore                            // Phase 2: For semantic search with pgvector
 	coherenceRepo   persistence.ClusterCoherenceRepository // Cluster quality metrics persistence
 
 	// Configuration
@@ -95,11 +95,11 @@ func NewPipeline(
 	cache CacheManager,
 	banner BannerGenerator,
 	citationTracker CitationTracker,
-	digestRepo DigestRepository,   // v2.0: Optional digest repository for database storage
-	articleRepo ArticleRepository,  // Phase 1: For persisting cluster assignments
-	tagClassifier TagClassifier,    // Phase 1: For multi-label tag classification
-	tagRepo TagRepository,          // Phase 1: For tag persistence
-	vectorStore VectorStore,        // Phase 2: For semantic search with pgvector
+	digestRepo DigestRepository, // v2.0: Optional digest repository for database storage
+	articleRepo ArticleRepository, // Phase 1: For persisting cluster assignments
+	tagClassifier TagClassifier, // Phase 1: For multi-label tag classification
+	tagRepo TagRepository, // Phase 1: For tag persistence
+	vectorStore VectorStore, // Phase 2: For semantic search with pgvector
 	coherenceRepo persistence.ClusterCoherenceRepository, // Cluster quality metrics persistence
 	config *Config,
 ) *Pipeline {
@@ -462,17 +462,17 @@ type QuickReadOptions struct {
 
 // DatabaseDigestOptions configures database-driven digest generation
 type DatabaseDigestOptions struct {
-	Articles      []core.Article
-	Summaries     []core.Summary
-	NumClusters   int  // 0 = auto-determine
+	Articles       []core.Article
+	Summaries      []core.Summary
+	NumClusters    int // 0 = auto-determine
 	GenerateBanner bool
 }
 
 // DatabaseDigestResult contains digests generated from database articles
 type DatabaseDigestResult struct {
-	Digests          []*core.Digest
-	Clusters         []core.TopicCluster
-	ProcessingTime   time.Duration
+	Digests        []*core.Digest
+	Clusters       []core.TopicCluster
+	ProcessingTime time.Duration
 }
 
 // GenerateDigestsFromDatabase generates multiple digests from pre-loaded database articles
@@ -636,12 +636,12 @@ func (p *Pipeline) GenerateDigestsFromDatabase(ctx context.Context, opts Databas
 			ID:              uuid.NewString(), // Use UUID for unique digest ID
 			ClusterID:       &clusterIDVal,
 			ProcessedDate:   time.Now().UTC(),
-			Title:           digestContent.Title,            // v3.0 generated title
-			TLDRSummary:     digestContent.TLDRSummary,      // v3.0 one-sentence summary
-			TopDevelopments: digestContent.TopDevelopments,  // v3.0 bullet points
-			ByTheNumbers:    statistics,                     // v3.0 statistics (converted)
-			WhyItMatters:    digestContent.WhyItMatters,     // v3.0 impact
-			Summary:         summary,                        // Built from v3.0 fields if needed
+			Title:           digestContent.Title,           // v3.0 generated title
+			TLDRSummary:     digestContent.TLDRSummary,     // v3.0 one-sentence summary
+			TopDevelopments: digestContent.TopDevelopments, // v3.0 bullet points
+			ByTheNumbers:    statistics,                    // v3.0 statistics (converted)
+			WhyItMatters:    digestContent.WhyItMatters,    // v3.0 impact
+			Summary:         summary,                       // Built from v3.0 fields if needed
 			Articles:        clusterArticles,
 			KeyMoments:      digestContent.KeyMoments,
 			Perspectives:    digestContent.Perspectives,

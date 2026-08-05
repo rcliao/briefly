@@ -1,7 +1,7 @@
 # Briefly Makefile
 # Convenient commands for development and deployment
 
-.PHONY: help build test clean docker-up docker-down docker-logs migrate db-shell
+.PHONY: help build test clean lint fmt vet docker-up docker-down docker-logs migrate db-shell
 
 # Default target
 help:
@@ -10,6 +10,9 @@ help:
 	@echo "  Development:"
 	@echo "    make build              Build the briefly binary"
 	@echo "    make test               Run all tests"
+	@echo "    make lint               Run golangci-lint"
+	@echo "    make fmt                Format all Go files"
+	@echo "    make vet                Run go vet"
 	@echo "    make clean              Clean build artifacts"
 	@echo "    make run                Run briefly locally"
 	@echo ""
@@ -46,7 +49,17 @@ build:
 # Test
 test:
 	@echo "Running tests..."
-	go test ./... -v
+	go test -race ./...
+
+# Lint (matches CI; install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)
+lint:
+	$(shell go env GOPATH)/bin/golangci-lint run
+
+fmt:
+	gofmt -w .
+
+vet:
+	go vet ./...
 
 # Clean
 clean:

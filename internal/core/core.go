@@ -222,14 +222,14 @@ type FeedItem struct {
 
 // ClusterNarrative represents a generated summary narrative for a topic cluster
 type ClusterNarrative struct {
-	Title          string      `json:"title"`            // Short, punchy cluster title (5-8 words)
-	Summary        string      `json:"summary"`          // LEGACY: 2-3 paragraph narrative (deprecated - use OneLiner + KeyDevelopments)
-	OneLiner       string      `json:"one_liner"`        // NEW v3.1: Single sentence summary
+	Title           string      `json:"title"`            // Short, punchy cluster title (5-8 words)
+	Summary         string      `json:"summary"`          // LEGACY: 2-3 paragraph narrative (deprecated - use OneLiner + KeyDevelopments)
+	OneLiner        string      `json:"one_liner"`        // NEW v3.1: Single sentence summary
 	KeyDevelopments []string    `json:"key_developments"` // NEW v3.1: 2-4 bullet points for this cluster
-	KeyStats       []Statistic `json:"key_stats"`        // NEW v3.1: 1-3 key metrics for this cluster
-	KeyThemes      []string    `json:"key_themes"`       // 3-5 main themes from the cluster
-	ArticleRefs    []int       `json:"article_refs"`     // Citation numbers of articles included
-	Confidence     float64     `json:"confidence"`       // Confidence in cluster coherence (0-1)
+	KeyStats        []Statistic `json:"key_stats"`        // NEW v3.1: 1-3 key metrics for this cluster
+	KeyThemes       []string    `json:"key_themes"`       // 3-5 main themes from the cluster
+	ArticleRefs     []int       `json:"article_refs"`     // Citation numbers of articles included
+	Confidence      float64     `json:"confidence"`       // Confidence in cluster coherence (0-1)
 }
 
 // TopicCluster represents a cluster of articles with similar topics.
@@ -348,8 +348,8 @@ type Signal struct {
 
 // ArticleGroup represents a cluster of related articles (v3.0)
 type ArticleGroup struct {
-	Category         string            `json:"category"`          // "Breaking", "Tools", "Analysis"
-	Theme            string            `json:"theme"`             // "AI Context Scaling", "Cost Optimization"
+	Category         string            `json:"category"` // "Breaking", "Tools", "Analysis"
+	Theme            string            `json:"theme"`    // "AI Context Scaling", "Cost Optimization"
 	Articles         []Article         `json:"articles"`
 	Summary          string            `json:"summary"`           // LEGACY: Group-level insight (50 words max) - deprecated
 	ClusterNarrative *ClusterNarrative `json:"cluster_narrative"` // NEW v3.1: Bullet-based cluster summary

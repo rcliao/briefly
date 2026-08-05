@@ -65,15 +65,15 @@ type MustReadHighlight struct {
 
 // DigestContent contains all generated content for a digest (v3.0 scannable format)
 type DigestContent struct {
-	Title            string             `json:"title"`              // Generated title (20-40 chars STRICT)
-	TLDRSummary      string             `json:"tldr_summary"`       // One-sentence summary (40-75 chars STRICT)
-	MustRead         *MustReadHighlight `json:"must_read"`          // Single most impactful article for senior engineers (NEW v3.1)
-	TopDevelopments  []string           `json:"top_developments"`   // 3-5 bullet points with bold lead-ins + citations (NEW v3.0)
-	ByTheNumbers     []Statistic        `json:"by_the_numbers"`     // 3-5 key metrics/stats with context (NEW v3.0)
-	WhyItMatters     string             `json:"why_it_matters"`     // Single sentence connecting to reader impact (NEW v3.0)
-	KeyMoments       []core.KeyMoment   `json:"key_moments"`        // 3-5 key developments with structured quotes and citations
-	Perspectives     []core.Perspective `json:"perspectives"`       // Supporting/opposing viewpoints (optional)
-	ExecutiveSummary string             `json:"executive_summary"`  // DEPRECATED: Legacy paragraph format (use TopDevelopments instead)
+	Title            string             `json:"title"`             // Generated title (20-40 chars STRICT)
+	TLDRSummary      string             `json:"tldr_summary"`      // One-sentence summary (40-75 chars STRICT)
+	MustRead         *MustReadHighlight `json:"must_read"`         // Single most impactful article for senior engineers (NEW v3.1)
+	TopDevelopments  []string           `json:"top_developments"`  // 3-5 bullet points with bold lead-ins + citations (NEW v3.0)
+	ByTheNumbers     []Statistic        `json:"by_the_numbers"`    // 3-5 key metrics/stats with context (NEW v3.0)
+	WhyItMatters     string             `json:"why_it_matters"`    // Single sentence connecting to reader impact (NEW v3.0)
+	KeyMoments       []core.KeyMoment   `json:"key_moments"`       // 3-5 key developments with structured quotes and citations
+	Perspectives     []core.Perspective `json:"perspectives"`      // Supporting/opposing viewpoints (optional)
+	ExecutiveSummary string             `json:"executive_summary"` // DEPRECATED: Legacy paragraph format (use TopDevelopments instead)
 }
 
 // ============================================================================
@@ -82,10 +82,10 @@ type DigestContent struct {
 
 // SlackDigestContent contains all content for Slack-formatted digest
 type SlackDigestContent struct {
-	WeekRange     string       `json:"week_range"`      // e.g., "Jan 6-10"
-	Big3          []Big3Item   `json:"big_3"`           // Top 3 impactful articles
-	AlsoOnRadar   []RadarItem  `json:"also_on_radar"`   // Secondary articles
-	ThreadContent []ThreadItem `json:"thread_content"`  // Expanded thread details
+	WeekRange     string       `json:"week_range"`     // e.g., "Jan 6-10"
+	Big3          []Big3Item   `json:"big_3"`          // Top 3 impactful articles
+	AlsoOnRadar   []RadarItem  `json:"also_on_radar"`  // Secondary articles
+	ThreadContent []ThreadItem `json:"thread_content"` // Expanded thread details
 }
 
 // Big3Item represents one of the "Big 3" featured articles with editorial voice
@@ -916,10 +916,10 @@ func (g *Generator) parseClusterNarrative(jsonResponse string) (*core.ClusterNar
 	}
 
 	var response struct {
-		Title          string   `json:"title"`
-		OneLiner       string   `json:"one_liner"`
+		Title           string   `json:"title"`
+		OneLiner        string   `json:"one_liner"`
 		KeyDevelopments []string `json:"key_developments"`
-		KeyStats       []struct {
+		KeyStats        []struct {
 			Stat    string `json:"stat"`
 			Context string `json:"context"`
 		} `json:"key_stats"`
@@ -950,14 +950,14 @@ func (g *Generator) parseClusterNarrative(jsonResponse string) (*core.ClusterNar
 	}
 
 	return &core.ClusterNarrative{
-		Title:          response.Title,
-		OneLiner:       response.OneLiner,
+		Title:           response.Title,
+		OneLiner:        response.OneLiner,
 		KeyDevelopments: response.KeyDevelopments,
-		KeyStats:       keyStats,
-		Summary:        response.Summary, // Keep for backward compatibility
-		KeyThemes:      response.KeyThemes,
-		ArticleRefs:    response.ArticleRefs,
-		Confidence:     response.Confidence,
+		KeyStats:        keyStats,
+		Summary:         response.Summary, // Keep for backward compatibility
+		KeyThemes:       response.KeyThemes,
+		ArticleRefs:     response.ArticleRefs,
+		Confidence:      response.Confidence,
 	}, nil
 }
 
@@ -1547,7 +1547,7 @@ func (g *Generator) GenerateSlackDigest(ctx context.Context, clusters []core.Top
 
 	response, err := g.llmClient.GenerateText(ctx, prompt, llm.TextGenerationOptions{
 		ResponseSchema: schema,
-		Temperature:    0.8, // Slightly higher for editorial voice creativity
+		Temperature:    0.8,   // Slightly higher for editorial voice creativity
 		MaxTokens:      16384, // Increased for generating content for all articles
 	})
 	if err != nil {

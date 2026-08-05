@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/genai"
 	"github.com/google/uuid"
+	"google.golang.org/genai"
 )
 
 // CreateStructuredSummarySchema returns the Gemini response_schema for structured summaries (Phase 1)
