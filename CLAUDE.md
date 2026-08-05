@@ -458,9 +458,9 @@ go test ./internal/summarize
 go test -race ./...
 ```
 
-### New Feature: `digest from-file` (File-Based Digest Generation)
+### `digest from-file` (Editorial Pipeline — the primary weekly workflow)
 
-**Overview:** Lightweight command for generating digests from curated markdown files without database persistence.
+**Overview:** Lightweight command for generating digests from curated markdown files without database persistence. Redesigned 2026-08: a single editorial LLM pass replaced theme classification, embeddings, k-means clustering, and cluster narratives.
 
 **Use Case:** Perfect for weekly digests where you manually curate URLs throughout the week and want to generate a digest without running the full aggregation pipeline.
 
@@ -471,20 +471,16 @@ briefly digest from-file <input.md> [flags]
 
 **Flags:**
 - `--output DIR` - Output directory (default: "digests")
-- `--clusters INT` - Number of clusters (0 = auto)
 - `--no-cache` - Disable caching (fresh fetch)
-- `--theme-threshold FLOAT` - Min theme relevance (default: 0.4)
+- `--format FORMAT` - markdown (default) or slack
+- `--clusters`, `--theme-threshold` - Deprecated no-ops (kept for compatibility)
 
-**How It Works:**
+**How It Works (5 steps, `cmd/handlers/digest_from_file.go`):**
 1. **Parse URLs** - Extract URLs from markdown file
-2. **Fetch Articles** - Retrieve content (HTML, PDF, YouTube)
-3. **Generate Summaries** - Create AI summaries with caching
-4. **Classify Themes** - Auto-classify using LLM (5 default themes)
-5. **Generate Embeddings** - Create 768-dim vectors
-6. **Cluster Articles** - Group by topic similarity (K-means++)
-7. **Generate Narratives** - Create cluster narratives from ALL articles
-8. **Executive Summary** - Synthesize cluster narratives
-9. **Render Markdown** - LinkedIn-ready output
+2. **Fetch Articles** - Parallel (4 workers), browser UA + 1 retry; failed URLs tracked and reported in the digest footer, never silently dropped
+3. **Generate Summaries** - Parallel AI summaries
+4. **Editorial Pass** - ONE LLM call (`cmd/handlers/digest_editorial.go`) returns: digest title, executive summary, must-read pick, 2-5 topic groups, and per-article display title + one-liner takeaway + intent tag (skim/read/deep_dive). `normalizeEditorialDigest` enforces invariants (every article in exactly one topic) with a deterministic fallback if the LLM call fails.
+5. **Render** - Paste-friendly plain text (LinkedIn/Slack don't render markdown): no markdown links (bare URLs on their own line), no indentation, no `---` rules, no bold; topic headers are `EMOJI UPPERCASE`; blank lines between title/description/URL
 
 **Example Workflow:**
 ```bash
@@ -503,14 +499,14 @@ open digests/digest_2025-11-10.md
 - ✅ **No database required** - Pure file-based processing
 - ✅ **Lightweight** - In-memory pipeline
 - ✅ **Fast iteration** - Edit markdown, regenerate instantly
-- ✅ **Optional caching** - SQLite file cache for summaries/articles
+- ✅ **Optional caching** - SQLite file cache; cached articles are re-extracted from stored HTML on read
 - ❌ **No persistence** - Digests not saved to database
-- ❌ **Hardcoded themes** - Uses 5 default themes (not from database)
 
 **Performance:**
-- ~26 seconds for 3 articles
-- ~2-3 minutes for 13 articles (estimate)
-- Cache improves performance on re-runs
+- ~45 seconds for 9 articles (parallel fetch/summarize)
+- ~10 LLM calls total (1 summary per article + 1 editorial call)
+
+**History:** An agentic mode (`--agent`, Gemini function-calling with a reflect/revise loop, `internal/agent/`) was removed 2026-08-05. Its quality score plateaued (~0.55) because it iterated on prose while output structure is enforced by the renderer; the editorial pipeline reaches a higher ceiling at ~1/20th the cost. Lesson: judgment in the model, structure in the code.
 
 **Input File Format:**
 Simple markdown file with URLs (one per line or in markdown links):
