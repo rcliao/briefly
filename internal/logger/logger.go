@@ -3,6 +3,7 @@ package logger
 import (
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -11,16 +12,32 @@ var (
 	once          sync.Once
 )
 
-// Init initializes the default logger with a JSON handler writing to os.Stdout.
-// It ensures that the logger is initialized only once.
+// Init initializes the default logger with a JSON handler writing to os.Stderr,
+// keeping stdout clean for command output (digests are printed/piped from stdout).
+// The level comes from BRIEFLY_LOG_LEVEL (debug|info|warn|error), defaulting to warn
+// so routine runs aren't interleaved with log noise.
 func Init() {
 	once.Do(func() {
-		defaultLogger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelDebug, // Default to Debug level, can be made configurable
+		defaultLogger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+			Level: levelFromEnv(),
 		}))
-		slog.SetDefault(defaultLogger) // Optionally set as the default logger for the slog package
-		defaultLogger.Info("Logger initialized")
+		slog.SetDefault(defaultLogger)
 	})
+}
+
+func levelFromEnv() slog.Level {
+	switch strings.ToLower(os.Getenv("BRIEFLY_LOG_LEVEL")) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "error":
+		return slog.LevelError
+	case "warn", "":
+		return slog.LevelWarn
+	default:
+		return slog.LevelWarn
+	}
 }
 
 // Get returns the initialized default logger.
