@@ -13,57 +13,22 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	App           App           `mapstructure:"app"`
-	AI            AI            `mapstructure:"ai"`
-	Database      Database      `mapstructure:"database"`
-	Server        Server        `mapstructure:"server"`
-	Search        Search        `mapstructure:"search"`
-	Output        Output        `mapstructure:"output"`
-	Cache         Cache         `mapstructure:"cache"`
-	Visual        Visual        `mapstructure:"visual"`
-	TTS           TTS           `mapstructure:"tts"`
-	Messaging     Messaging     `mapstructure:"messaging"`
-	Email         Email         `mapstructure:"email"`
-	Feeds         Feeds         `mapstructure:"feeds"`
-	Research      Research      `mapstructure:"research"`
-	Filtering     Filtering     `mapstructure:"filtering"`
-	Team          Team          `mapstructure:"team"`
-	Logging       Logging       `mapstructure:"logging"`
-	CLI           CLI           `mapstructure:"cli"`
-	Observability Observability `mapstructure:"observability"`
-	Themes        Themes        `mapstructure:"themes"`
-}
-
-// Database holds database configuration
-type Database struct {
-	ConnectionString string `mapstructure:"connection_string"`
-	MaxConnections   int    `mapstructure:"max_connections"`
-	IdleConnections  int    `mapstructure:"idle_connections"`
-}
-
-// Server holds HTTP server configuration
-type Server struct {
-	Host            string          `mapstructure:"host"`
-	Port            int             `mapstructure:"port"`
-	ReadTimeout     time.Duration   `mapstructure:"read_timeout"`
-	WriteTimeout    time.Duration   `mapstructure:"write_timeout"`
-	ShutdownTimeout time.Duration   `mapstructure:"shutdown_timeout"`
-	StaticDir       string          `mapstructure:"static_dir"`
-	TemplateDir     string          `mapstructure:"template_dir"`
-	CORS            CORSConfig      `mapstructure:"cors"`
-	RateLimit       RateLimitConfig `mapstructure:"rate_limit"`
-}
-
-// CORSConfig holds CORS configuration
-type CORSConfig struct {
-	Enabled        bool     `mapstructure:"enabled"`
-	AllowedOrigins []string `mapstructure:"allowed_origins"`
-}
-
-// RateLimitConfig holds rate limiting configuration
-type RateLimitConfig struct {
-	Enabled           bool `mapstructure:"enabled"`
-	RequestsPerMinute int  `mapstructure:"requests_per_minute"`
+	App       App       `mapstructure:"app"`
+	AI        AI        `mapstructure:"ai"`
+	Search    Search    `mapstructure:"search"`
+	Output    Output    `mapstructure:"output"`
+	Cache     Cache     `mapstructure:"cache"`
+	Visual    Visual    `mapstructure:"visual"`
+	TTS       TTS       `mapstructure:"tts"`
+	Messaging Messaging `mapstructure:"messaging"`
+	Email     Email     `mapstructure:"email"`
+	Feeds     Feeds     `mapstructure:"feeds"`
+	Research  Research  `mapstructure:"research"`
+	Filtering Filtering `mapstructure:"filtering"`
+	Team      Team      `mapstructure:"team"`
+	Logging   Logging   `mapstructure:"logging"`
+	CLI       CLI       `mapstructure:"cli"`
+	Themes    Themes    `mapstructure:"themes"`
 }
 
 // App holds general application configuration
@@ -372,18 +337,6 @@ type Team struct {
 	Priority          string   `mapstructure:"priority"`           // Current priority: performance, features, quality, etc.
 }
 
-// Observability holds observability and analytics configuration
-type Observability struct {
-	PostHog PostHogConfig `mapstructure:"posthog"`
-}
-
-// PostHogConfig holds PostHog analytics configuration
-type PostHogConfig struct {
-	Enabled bool   `mapstructure:"enabled"`
-	APIKey  string `mapstructure:"api_key"`
-	Host    string `mapstructure:"host"` // Default: https://app.posthog.com
-}
-
 // Themes holds theme classification configuration
 type Themes struct {
 	Enabled             bool    `mapstructure:"enabled"`
@@ -474,19 +427,6 @@ func setDefaults() {
 	viper.SetDefault("app.debug", false)
 	viper.SetDefault("app.log_level", "info")
 	viper.SetDefault("app.data_dir", ".briefly-cache")
-
-	// Server defaults
-	viper.SetDefault("server.host", "0.0.0.0")
-	viper.SetDefault("server.port", 8080)
-	viper.SetDefault("server.read_timeout", "15s")
-	viper.SetDefault("server.write_timeout", "15s")
-	viper.SetDefault("server.shutdown_timeout", "10s")
-	viper.SetDefault("server.static_dir", "web/static")
-	viper.SetDefault("server.template_dir", "web/templates")
-	viper.SetDefault("server.cors.enabled", true)
-	viper.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3000", "http://localhost:8080"})
-	viper.SetDefault("server.rate_limit.enabled", true)
-	viper.SetDefault("server.rate_limit.requests_per_minute", 60)
 
 	// AI defaults
 	viper.SetDefault("ai.gemini.model", "gemini-3-flash-preview")
@@ -633,10 +573,6 @@ func setDefaults() {
 	viper.SetDefault("team.team_size", 5)
 	viper.SetDefault("team.priority", "features")
 
-	// Observability defaults
-	viper.SetDefault("observability.posthog.enabled", false)
-	viper.SetDefault("observability.posthog.host", "https://app.posthog.com")
-
 	// Themes defaults
 	viper.SetDefault("themes.enabled", true)
 	viper.SetDefault("themes.min_relevance_score", 0.6)
@@ -734,21 +670,6 @@ func bindEnvironmentVariables() {
 		"VISUAL",
 	})
 
-	// Server port (Railway and other PaaS platforms)
-	bindEnvKeys("server.port", []string{
-		"PORT",
-	})
-
-	// PostHog analytics
-	bindEnvKeys("observability.posthog.api_key", []string{
-		"POSTHOG_API_KEY",
-		"POSTHOG_KEY",
-	})
-
-	bindEnvKeys("observability.posthog.host", []string{
-		"POSTHOG_HOST",
-		"POSTHOG_URL",
-	})
 }
 
 // bindEnvKeys binds the first found environment variable to a viper key
@@ -866,25 +787,22 @@ func validateConfig(config *Config) error {
 }
 
 // Convenience getters for commonly used configuration values
-func GetApp() App                     { return Get().App }
-func GetAI() AI                       { return Get().AI }
-func GetDatabase() Database           { return Get().Database }
-func GetServer() Server               { return Get().Server }
-func GetSearch() Search               { return Get().Search }
-func GetOutput() Output               { return Get().Output }
-func GetCache() Cache                 { return Get().Cache }
-func GetVisual() Visual               { return Get().Visual }
-func GetTTS() TTS                     { return Get().TTS }
-func GetMessaging() Messaging         { return Get().Messaging }
-func GetEmail() Email                 { return Get().Email }
-func GetFeeds() Feeds                 { return Get().Feeds }
-func GetResearch() Research           { return Get().Research }
-func GetFiltering() Filtering         { return Get().Filtering }
-func GetTeam() Team                   { return Get().Team }
-func GetLogging() Logging             { return Get().Logging }
-func GetCLI() CLI                     { return Get().CLI }
-func GetObservability() Observability { return Get().Observability }
-func GetThemes() Themes               { return Get().Themes }
+func GetApp() App             { return Get().App }
+func GetAI() AI               { return Get().AI }
+func GetSearch() Search       { return Get().Search }
+func GetOutput() Output       { return Get().Output }
+func GetCache() Cache         { return Get().Cache }
+func GetVisual() Visual       { return Get().Visual }
+func GetTTS() TTS             { return Get().TTS }
+func GetMessaging() Messaging { return Get().Messaging }
+func GetEmail() Email         { return Get().Email }
+func GetFeeds() Feeds         { return Get().Feeds }
+func GetResearch() Research   { return Get().Research }
+func GetFiltering() Filtering { return Get().Filtering }
+func GetTeam() Team           { return Get().Team }
+func GetLogging() Logging     { return Get().Logging }
+func GetCLI() CLI             { return Get().CLI }
+func GetThemes() Themes       { return Get().Themes }
 
 // Specific convenience getters for frequently accessed values
 func GetGeminiAPIKey() string   { return Get().AI.Gemini.APIKey }
@@ -907,10 +825,6 @@ func GetTeamInterests() []string  { return Get().Team.Interests }
 func GetTeamProductType() string  { return Get().Team.ProductType }
 func GetTeamPriority() string     { return Get().Team.Priority }
 func GetTeamContext() Team        { return Get().Team }
-
-// Observability convenience getters
-func GetPostHogConfig() PostHogConfig { return Get().Observability.PostHog }
-func IsPostHogEnabled() bool          { return Get().Observability.PostHog.Enabled }
 
 // Themes convenience getters
 func IsThemesEnabled() bool               { return Get().Themes.Enabled }

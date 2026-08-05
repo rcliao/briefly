@@ -10,68 +10,44 @@ import (
 
 var cfgFile string // Configuration file path
 
-// NewSimplifiedRootCmd creates the new simplified root command
-// This replaces the complex root.go with a clean, focused interface
+// NewSimplifiedRootCmd creates the root command
 func NewSimplifiedRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "briefly",
-		Short: "LLM-focused news aggregator and digest generator",
-		Long: `Briefly - Content Digest & News Aggregation Tool
+		Short: "Weekly digest generator for curated links",
+		Long: `Briefly — turn a curated list of URLs into a scannable weekly digest.
 
-A focused tool for:
-  • Automated news aggregation from RSS/Atom feeds
-  • Quality weekly digests from classified articles
-  • Quick summaries of individual articles
+Workflow:
+  1. Collect links during the week in a markdown file (input/YYYY-MM-DD.md)
+  2. Generate the digest: briefly digest from-file input/YYYY-MM-DD.md
+  3. Paste the result into LinkedIn/Slack/email
 
-Core workflows:
-  • News Aggregation: Fetch and store articles from feeds
-  • Weekly Digest: Generate LinkedIn-ready digest from classified articles
-  • Quick Read: Single URL → Fast summary with key points
-  • Feed Management: Add/remove/manage RSS feed sources
+Commands:
+  digest from-file  Generate a digest from a curated markdown file
+  read              Quick summary of a single article
+  cache             Manage the local article/summary cache
 
-Features:
-  • RSS/Atom feed support with conditional GET
-  • Smart caching (avoid redundant API calls)
-  • Topic clustering (automatic article grouping)
-  • Hierarchical summarization (ALL articles included)
-  • Executive summaries (story-driven narratives)
-  • LinkedIn-optimized output
-  • PostgreSQL persistence for scalable storage
+Requires GEMINI_API_KEY (env or .env file).
 
 Examples:
-  # Add RSS feeds
-  briefly feed add https://hnrss.org/newest
-
-  # Aggregate news (run daily)
-  briefly aggregate --since 24
-
-  # Generate weekly digest from database
-  briefly digest generate --since 7
+  # Generate weekly digest
+  briefly digest from-file input/weekly.md
 
   # Quick read a single article
   briefly read https://example.com/article
 
   # Check cache statistics
   briefly cache stats`,
-		Version: "3.1.0-hierarchical-summarization",
+		Version: "4.0.0-editorial",
 	}
 
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .briefly.yaml)")
 
 	// Add subcommands
-	rootCmd.AddCommand(NewMigrateCmd())        // NEW: Database migrations
-	rootCmd.AddCommand(NewAggregateCmd())      // NEW: News aggregation
-	rootCmd.AddCommand(NewClassifyCmd())       // NEW: Article classification (Phase 1)
-	rootCmd.AddCommand(NewFeedCmd())           // NEW: Feed management
-	rootCmd.AddCommand(NewThemeCmd())          // NEW: Theme management (Phase 0)
-	rootCmd.AddCommand(NewManualURLCmd())      // NEW: Manual URL management (Phase 0)
-	rootCmd.AddCommand(NewServeCmd())          // NEW: HTTP server
-	rootCmd.AddCommand(NewQualityCmd())        // NEW: Quality evaluation and metrics (Phase 1)
-	rootCmd.AddCommand(NewDigestCmd())         // Digest commands (file-based and database-based)
-	rootCmd.AddCommand(NewReadSimplifiedCmd()) // Existing: Quick read
-	rootCmd.AddCommand(NewCacheCmd())          // Existing: Cache management
-	rootCmd.AddCommand(NewSearchCmd())         // NEW: Semantic search (Phase 2)
+	rootCmd.AddCommand(NewDigestCmd())
+	rootCmd.AddCommand(NewReadSimplifiedCmd())
+	rootCmd.AddCommand(NewCacheCmd())
 
 	// Initialize config before running any command
 	cobra.OnInitialize(initSimplifiedConfig)

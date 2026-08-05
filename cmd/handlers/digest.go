@@ -8,35 +8,21 @@ import (
 func NewDigestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "digest",
-		Short: "Manage and generate digests",
-		Long: `Generate and manage digests from classified articles in database.
+		Short: "Generate digests from curated links",
+		Long: `Generate a digest from a curated markdown file of URLs.
 
 Subcommands:
-  generate  - Generate digest from classified articles in database
   from-file - Generate digest from curated markdown file
-  list      - List recent digests from database
-  show      - Display a specific digest
 
 Examples:
-  # Generate from database (last 7 days)
-  briefly digest generate --since 7
-
   # Generate from curated markdown file
   briefly digest from-file input/weekly.md
 
-  # List recent digests
-  briefly digest list --limit 20
-
-  # Show a specific digest
-  briefly digest show abc123`,
+  # Slack-optimized format
+  briefly digest from-file input/weekly.md --format slack`,
 	}
 
-	// Add subcommands
-	cmd.AddCommand(NewDigestGenerateCmd()) // Database-driven digest generation
-	cmd.AddCommand(NewDigestFromFileCmd()) // File-based digest generation
-	cmd.AddCommand(NewDigestListCmd())     // List recent digests
-	cmd.AddCommand(NewDigestShowCmd())     // Show specific digest
-	cmd.AddCommand(NewDigestCompareCmd())  // Compare digests (A/B testing)
+	cmd.AddCommand(NewDigestFromFileCmd())
 
 	return cmd
 }

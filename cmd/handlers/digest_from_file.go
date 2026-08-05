@@ -21,6 +21,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// llmClientAdapter adapts llm.Client to summarize.LLMClient interface
+type llmClientAdapter struct {
+	client *llm.Client
+}
+
+// GenerateText implements summarize.LLMClient interface
+func (a *llmClientAdapter) GenerateText(ctx context.Context, prompt string, opts any) (string, error) {
+	return a.client.GenerateText(ctx, prompt, llm.TextGenerationOptions{})
+}
+
+// narrativeLLMAdapter adapts llm.Client to narrative.LLMClient interface
+type narrativeLLMAdapter struct {
+	client *llm.Client
+}
+
+// GenerateText implements narrative.LLMClient interface (v2.0 with options)
+func (a *narrativeLLMAdapter) GenerateText(ctx context.Context, prompt string, options llm.TextGenerationOptions) (string, error) {
+	return a.client.GenerateText(ctx, prompt, options)
+}
+
 // NewDigestFromFileCmd creates the digest from-file command for processing curated markdown files
 func NewDigestFromFileCmd() *cobra.Command {
 	var (
