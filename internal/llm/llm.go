@@ -17,7 +17,7 @@ import (
 
 const (
 	// DefaultModel is the default Gemini model to use for summarization.
-	DefaultModel = "gemini-3-flash-preview" // Gemini 3 Flash Preview
+	DefaultModel = "gemini-3.6-flash"
 	// DefaultEmbeddingModel is the default model for generating embeddings
 	DefaultEmbeddingModel = "gemini-embedding-001"
 	// DefaultEmbeddingDimensions is the output dimension for embeddings (Matryoshka)

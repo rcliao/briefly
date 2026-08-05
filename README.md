@@ -83,7 +83,7 @@ Optional `.briefly.yaml`:
 ```yaml
 ai:
   gemini:
-    model: "gemini-3-flash-preview"
+    model: "gemini-3.6-flash"
 cache:
   directory: ".briefly-cache"
 ```

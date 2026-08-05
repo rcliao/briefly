@@ -429,7 +429,7 @@ func setDefaults() {
 	viper.SetDefault("app.data_dir", ".briefly-cache")
 
 	// AI defaults
-	viper.SetDefault("ai.gemini.model", "gemini-3-flash-preview")
+	viper.SetDefault("ai.gemini.model", "gemini-3.6-flash")
 	viper.SetDefault("ai.gemini.timeout", "30s")
 	viper.SetDefault("ai.gemini.max_tokens", 8192)
 	viper.SetDefault("ai.gemini.temperature", 0.7)
@@ -576,7 +576,6 @@ func setDefaults() {
 	// Themes defaults
 	viper.SetDefault("themes.enabled", true)
 	viper.SetDefault("themes.min_relevance_score", 0.6)
-	viper.SetDefault("themes.classification_model", "gemini-3-flash-preview")
 }
 
 // bindEnvironmentVariables sets up flexible environment variable binding
