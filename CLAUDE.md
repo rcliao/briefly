@@ -230,9 +230,7 @@ briefly/
 │   │   ├── manual_url_handlers.go # Manual URL API
 │   │   └── web_pages.go          # Web UI pages (/themes, /submit)
 │   ├── store/                    # SQLite caching (being phased out for PostgreSQL)
-│   ├── templates/                # Digest format templates
 │   ├── render/                   # Output formatting
-│   ├── email/                    # HTML email templates
 │   ├── config/                   # Configuration management
 │   └── logger/                   # Structured logging
 ├── docs/
@@ -253,10 +251,8 @@ briefly/
 **18 packages removed** (~18,797 lines) that were not part of the core weekly digest workflow:
 
 - `alerts/` - Alert monitoring system
-- `categorization/` - Replaced by clustering
 - `cost/` - API cost estimation
 - `deepresearch/` - Multi-stage research pipeline
-- `feeds/` - RSS feed processing
 - `interactive/` - Interactive selection mode
 - `messaging/` - Slack/Discord integration
 - `ordering/` - Article ordering (stubbed in pipeline)
@@ -270,6 +266,10 @@ briefly/
 - `tts/` - Text-to-speech generation
 - `tui/` - Terminal UI browser
 - `visual/` - Banner generation (future)
+
+Note: `feeds/` and `categorization/` were previously listed here in error — both are live (`internal/sources` and `internal/pipeline` depend on them).
+
+**Removed in 2026-08 cleanup:** `internal/agent/` (agentic digest mode), `internal/templates/` and `internal/email/` (zero production importers), `cmd/test-hdbscan` (scratch harness).
 
 ### Pipeline Architecture
 
@@ -437,11 +437,10 @@ briefly cache clear --confirm  # Clear all data
 - `internal/summarize/summarizer_test.go` - 14 test suites (✓ passing)
 - `internal/core/core_test.go` - Core data structures
 - `internal/llm/llm_test.go` - LLM operations
-- `internal/templates/templates_test.go` - Template rendering
 - `internal/fetch/fetch_test.go` - Content fetching
 - `internal/store/store_test.go` - Store operations
-- `internal/email/email_test.go` - Email generation
 - `internal/render/render_test.go` - Render functionality
+- `cmd/handlers/digest_editorial_test.go` - Editorial digest normalization and rendering
 
 **Note:** Integration tests were removed during simplification and need rewrite.
 

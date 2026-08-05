@@ -5,7 +5,6 @@ import (
 	"briefly/internal/core"
 	"briefly/internal/llm"
 	"briefly/internal/logger"
-	"briefly/internal/narrative"
 	"briefly/internal/persistence"
 	"briefly/internal/pipeline"
 	"briefly/internal/summarize"
@@ -455,31 +454,6 @@ func generateFallbackExecutiveSummary(articleGroups []core.ArticleGroup) string 
 		totalArticles, len(themes), strings.Join(themes, ", ")))
 
 	return summary.String()
-}
-
-// convertStatistics converts narrative.Statistic to core.Statistic
-func convertStatistics(narrativeStats []narrative.Statistic) []core.Statistic {
-	coreStats := make([]core.Statistic, len(narrativeStats))
-	for i, stat := range narrativeStats {
-		coreStats[i] = core.Statistic{
-			Stat:    stat.Stat,
-			Context: stat.Context,
-		}
-	}
-	return coreStats
-}
-
-// convertMustRead converts narrative.MustReadHighlight to core.MustReadHighlight
-func convertMustRead(narrativeMustRead *narrative.MustReadHighlight) *core.MustReadHighlight {
-	if narrativeMustRead == nil {
-		return nil
-	}
-	return &core.MustReadHighlight{
-		ArticleNum:  narrativeMustRead.ArticleNum,
-		Title:       narrativeMustRead.Title,
-		WhyMustRead: narrativeMustRead.WhyMustRead,
-		ReadTime:    narrativeMustRead.ReadTime,
-	}
 }
 
 // saveDigestMarkdown renders digest to LinkedIn-ready markdown file
