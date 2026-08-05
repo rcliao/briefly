@@ -55,7 +55,7 @@ echo "https://example.com/article" >> input/weekly.md
 
 # 2. Generate the digest (~45s for 10 links)
 briefly digest from-file input/weekly.md
-# → digests/digest_2026-08-05.md
+# → digests/2026-08-05/digest.md (+ banner.jpg, banner.prompt.txt)
 
 # Slack-optimized format
 briefly digest from-file input/weekly.md --format slack
@@ -69,7 +69,7 @@ briefly cache clear --confirm
 
 # Regenerate the banner image for a digest (runs automatically during
 # digest generation; pick 1 of 3 suggested prompts, or bring your own)
-briefly banner digests/digest_2026-08-05.md
+briefly banner digests/2026-08-05/digest.md
 ```
 
 ## How it works

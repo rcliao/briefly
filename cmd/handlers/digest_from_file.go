@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -363,9 +364,16 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 	// Step 5: Render markdown
 	fmt.Printf("\n📄 Step 5/5: Rendering markdown digest...\n")
 
+	// Everything for one digest (doc, banner, prompt) lives in a dated folder
+	// so the week's shareable assets sit together: digests/2026-08-05/
 	now := time.Now()
+	digestDir := filepath.Join(outputDir, now.Format("2006-01-02"))
+	if err := os.MkdirAll(digestDir, 0755); err != nil {
+		return fmt.Errorf("failed to create digest directory: %w", err)
+	}
+
 	content := renderEditorialDigest(editorial, articles, failed, now)
-	outputPath := fmt.Sprintf("%s/digest_%s.md", outputDir, now.Format("2006-01-02"))
+	outputPath := filepath.Join(digestDir, "digest.md")
 	if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write digest: %w", err)
 	}
@@ -375,8 +383,7 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 	// Banner generation (default on): prompt subjects → interactive pick →
 	// pixel-art PNG next to the digest. Never fails the digest run.
 	if cfg.Banner.Enabled && !noBanner {
-		bannerBase := fmt.Sprintf("banner_%s", now.Format("2006-01-02"))
-		if err := generateBanner(ctx, llmClient, cfg, content, outputDir, bannerBase, ""); err != nil {
+		if err := generateBanner(ctx, llmClient, cfg, content, digestDir, "banner", ""); err != nil {
 			log.Warn("Banner generation failed", "error", err)
 			fmt.Printf("   ⚠ Banner generation failed: %v\n", err)
 			fmt.Printf("     Retry later with: briefly banner %s\n", outputPath)
@@ -443,10 +450,12 @@ func generateSlackDigest(ctx context.Context, narrativeGen *narrative.Generator,
 
 	output := renderSlackFormat(slackContent, articles, clusters)
 
-	// Save to file
-	timestamp := time.Now().Format("2006-01-02")
-	filename := fmt.Sprintf("digest_slack_%s.md", timestamp)
-	outputPath := fmt.Sprintf("%s/%s", outputDir, filename)
+	// Save into the dated digest folder alongside any other assets
+	digestDir := filepath.Join(outputDir, time.Now().Format("2006-01-02"))
+	if err := os.MkdirAll(digestDir, 0755); err != nil {
+		return fmt.Errorf("failed to create digest directory: %w", err)
+	}
+	outputPath := filepath.Join(digestDir, "digest_slack.md")
 
 	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
 		return fmt.Errorf("failed to write Slack digest: %w", err)

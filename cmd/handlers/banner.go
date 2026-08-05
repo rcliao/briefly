@@ -57,11 +57,11 @@ Examples:
 			}
 			defer llmClient.Close()
 
-			base := strings.TrimSuffix(filepath.Base(digestPath), ".md")
-			base = strings.Replace(base, "digest_", "banner_", 1)
+			// Banner assets live next to the digest file (dated-folder layout
+			// means simple names; legacy flat files get "banner" beside them too)
 			outDir := filepath.Dir(digestPath)
 
-			return generateBanner(cmd.Context(), llmClient, cfg, string(content), outDir, base, promptOverride)
+			return generateBanner(cmd.Context(), llmClient, cfg, string(content), outDir, "banner", promptOverride)
 		},
 	}
 
