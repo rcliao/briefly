@@ -62,12 +62,6 @@ func TestCacheArticle_GetCachedArticle(t *testing.T) {
 		Embedding:       []float64{0.1, 0.2, 0.3},
 		TopicCluster:    "Technology",
 		TopicConfidence: 0.95,
-		SentimentScore:  0.7,
-		SentimentLabel:  "positive",
-		SentimentEmoji:  "😊",
-		AlertTriggered:  true,
-		AlertConditions: []string{"condition1", "condition2"},
-		ResearchQueries: []string{"query1", "query2"},
 	}
 
 	// Cache the article
@@ -105,15 +99,6 @@ func TestCacheArticle_GetCachedArticle(t *testing.T) {
 	if cachedArticle.TopicConfidence != article.TopicConfidence {
 		t.Errorf("Expected TopicConfidence %f, got %f", article.TopicConfidence, cachedArticle.TopicConfidence)
 	}
-	if cachedArticle.SentimentScore != article.SentimentScore {
-		t.Errorf("Expected SentimentScore %f, got %f", article.SentimentScore, cachedArticle.SentimentScore)
-	}
-	if cachedArticle.SentimentLabel != article.SentimentLabel {
-		t.Errorf("Expected SentimentLabel %s, got %s", article.SentimentLabel, cachedArticle.SentimentLabel)
-	}
-	if cachedArticle.AlertTriggered != article.AlertTriggered {
-		t.Errorf("Expected AlertTriggered %t, got %t", article.AlertTriggered, cachedArticle.AlertTriggered)
-	}
 
 	// Check embedding
 	if len(cachedArticle.Embedding) != len(article.Embedding) {
@@ -125,15 +110,6 @@ func TestCacheArticle_GetCachedArticle(t *testing.T) {
 		}
 	}
 
-	// Check alert conditions
-	if len(cachedArticle.AlertConditions) != len(article.AlertConditions) {
-		t.Errorf("Expected %d alert conditions, got %d", len(article.AlertConditions), len(cachedArticle.AlertConditions))
-	}
-
-	// Check research queries
-	if len(cachedArticle.ResearchQueries) != len(article.ResearchQueries) {
-		t.Errorf("Expected %d research queries, got %d", len(article.ResearchQueries), len(cachedArticle.ResearchQueries))
-	}
 }
 
 func TestGetCachedArticle_CacheMiss(t *testing.T) {

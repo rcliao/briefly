@@ -122,15 +122,10 @@ func (s *Store) CacheArticle(article core.Article) error {
 		return fmt.Errorf("failed to serialize embedding: %w", err)
 	}
 
-	// Serialize alert conditions and research queries
-	alertConditionsJSON, _ := json.Marshal(article.AlertConditions)
-	researchQueriesJSON, _ := json.Marshal(article.ResearchQueries)
-
 	query := `
-	INSERT OR REPLACE INTO articles 
-	(url, title, content, html_content, my_take, date_fetched, content_hash, metadata, embedding, topic_cluster, topic_confidence,
-	 sentiment_score, sentiment_label, sentiment_emoji, alert_triggered, alert_conditions, research_queries)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	INSERT OR REPLACE INTO articles
+	(url, title, content, html_content, my_take, date_fetched, content_hash, metadata, embedding, topic_cluster, topic_confidence)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = s.db.Exec(query,
 		url,
@@ -144,12 +139,6 @@ func (s *Store) CacheArticle(article core.Article) error {
 		embeddingData,
 		article.TopicCluster,
 		article.TopicConfidence,
-		article.SentimentScore,
-		article.SentimentLabel,
-		article.SentimentEmoji,
-		article.AlertTriggered,
-		string(alertConditionsJSON),
-		string(researchQueriesJSON),
 	)
 
 	return err
@@ -158,9 +147,8 @@ func (s *Store) CacheArticle(article core.Article) error {
 // GetCachedArticle retrieves an article from the cache
 func (s *Store) GetCachedArticle(url string, maxAge time.Duration) (*core.Article, error) {
 	query := `
-	SELECT url, title, content, html_content, my_take, date_fetched, metadata, embedding, topic_cluster, topic_confidence,
-	       sentiment_score, sentiment_label, sentiment_emoji, alert_triggered, alert_conditions, research_queries
-	FROM articles 
+	SELECT url, title, content, html_content, my_take, date_fetched, metadata, embedding, topic_cluster, topic_confidence
+	FROM articles
 	WHERE url = ? AND date_fetched > ?`
 
 	cutoff := time.Now().UTC().Add(-maxAge)
@@ -172,12 +160,6 @@ func (s *Store) GetCachedArticle(url string, maxAge time.Duration) (*core.Articl
 	var embeddingData []byte
 	var topicCluster sql.NullString
 	var topicConfidence sql.NullFloat64
-	var sentimentScore sql.NullFloat64
-	var sentimentLabel sql.NullString
-	var sentimentEmoji sql.NullString
-	var alertTriggered sql.NullBool
-	var alertConditionsJSON sql.NullString
-	var researchQueriesJSON sql.NullString
 
 	err := row.Scan(
 		&article.URL,
@@ -190,12 +172,6 @@ func (s *Store) GetCachedArticle(url string, maxAge time.Duration) (*core.Articl
 		&embeddingData,
 		&topicCluster,
 		&topicConfidence,
-		&sentimentScore,
-		&sentimentLabel,
-		&sentimentEmoji,
-		&alertTriggered,
-		&alertConditionsJSON,
-		&researchQueriesJSON,
 	)
 
 	if err == sql.ErrNoRows {
@@ -232,26 +208,6 @@ func (s *Store) GetCachedArticle(url string, maxAge time.Duration) (*core.Articl
 	}
 	if topicConfidence.Valid {
 		article.TopicConfidence = topicConfidence.Float64
-	}
-
-	// Handle insights fields
-	if sentimentScore.Valid {
-		article.SentimentScore = sentimentScore.Float64
-	}
-	if sentimentLabel.Valid {
-		article.SentimentLabel = sentimentLabel.String
-	}
-	if sentimentEmoji.Valid {
-		article.SentimentEmoji = sentimentEmoji.String
-	}
-	if alertTriggered.Valid {
-		article.AlertTriggered = alertTriggered.Bool
-	}
-	if alertConditionsJSON.Valid && alertConditionsJSON.String != "" {
-		_ = json.Unmarshal([]byte(alertConditionsJSON.String), &article.AlertConditions)
-	}
-	if researchQueriesJSON.Valid && researchQueriesJSON.String != "" {
-		_ = json.Unmarshal([]byte(researchQueriesJSON.String), &article.ResearchQueries)
 	}
 
 	article.DateFetched = dateFetched
