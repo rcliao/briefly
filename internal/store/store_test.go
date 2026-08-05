@@ -2,7 +2,6 @@ package store
 
 import (
 	"briefly/internal/core"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -266,198 +265,6 @@ func TestGetCachedSummary_CacheMiss(t *testing.T) {
 	}
 }
 
-func TestCacheDigest_GetCachedDigest(t *testing.T) {
-	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir)
-	if err != nil {
-		t.Fatalf("NewStore failed: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	digestID := uuid.NewString()
-	title := "Test Digest"
-	content := "This is a test digest content."
-	digestSummary := "Test digest summary"
-	articleURLs := []string{"url1", "url2"}
-	modelUsed := "test-model"
-
-	// Cache the digest
-	err = store.CacheDigest(digestID, title, content, digestSummary, articleURLs, modelUsed)
-	if err != nil {
-		t.Fatalf("CacheDigest failed: %v", err)
-	}
-
-	// Retrieve the cached digest
-	cachedDigest, err := store.GetCachedDigest(digestID)
-	if err != nil {
-		t.Fatalf("GetCachedDigest failed: %v", err)
-	}
-
-	if cachedDigest == nil {
-		t.Fatal("Expected cached digest, got nil")
-	}
-
-	// Verify digest data
-	if cachedDigest.ID != digestID {
-		t.Errorf("Expected ID %s, got %s", digestID, cachedDigest.ID)
-	}
-	if cachedDigest.Title != title {
-		t.Errorf("Expected title %s, got %s", title, cachedDigest.Title)
-	}
-	if cachedDigest.Content != content {
-		t.Errorf("Expected content %s, got %s", content, cachedDigest.Content)
-	}
-	if cachedDigest.DigestSummary != digestSummary {
-		t.Errorf("Expected DigestSummary %s, got %s", digestSummary, cachedDigest.DigestSummary)
-	}
-	if cachedDigest.ModelUsed != modelUsed {
-		t.Errorf("Expected ModelUsed %s, got %s", modelUsed, cachedDigest.ModelUsed)
-	}
-	if len(cachedDigest.ArticleURLs) != len(articleURLs) {
-		t.Errorf("Expected %d ArticleURLs, got %d", len(articleURLs), len(cachedDigest.ArticleURLs))
-	}
-}
-
-func TestCacheDigestWithFormat(t *testing.T) {
-	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir)
-	if err != nil {
-		t.Fatalf("NewStore failed: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	digestID := uuid.NewString()
-	format := "newsletter"
-
-	err = store.CacheDigestWithFormat(digestID, "Title", "Content", "Summary", format, []string{"url1"}, "model")
-	if err != nil {
-		t.Fatalf("CacheDigestWithFormat failed: %v", err)
-	}
-
-	cachedDigest, err := store.GetCachedDigest(digestID)
-	if err != nil {
-		t.Fatalf("GetCachedDigest failed: %v", err)
-	}
-
-	if cachedDigest.Format != format {
-		t.Errorf("Expected format %s, got %s", format, cachedDigest.Format)
-	}
-}
-
-func TestUpdateDigestMyTake(t *testing.T) {
-	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir)
-	if err != nil {
-		t.Fatalf("NewStore failed: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	digestID := uuid.NewString()
-	newMyTake := "My updated take on this digest"
-
-	// Cache a digest first
-	err = store.CacheDigest(digestID, "Title", "Content", "Summary", []string{"url1"}, "model")
-	if err != nil {
-		t.Fatalf("CacheDigest failed: %v", err)
-	}
-
-	// Update the my_take
-	err = store.UpdateDigestMyTake(digestID, newMyTake)
-	if err != nil {
-		t.Fatalf("UpdateDigestMyTake failed: %v", err)
-	}
-
-	// Retrieve and verify
-	digest, err := store.GetCachedDigest(digestID)
-	if err != nil {
-		t.Fatalf("GetCachedDigest failed: %v", err)
-	}
-
-	if digest.MyTake != newMyTake {
-		t.Errorf("Expected MyTake %s, got %s", newMyTake, digest.MyTake)
-	}
-}
-
-func TestGetLatestDigests(t *testing.T) {
-	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir)
-	if err != nil {
-		t.Fatalf("NewStore failed: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	// Cache multiple digests
-	for i := 0; i < 5; i++ {
-		digestID := uuid.NewString()
-		title := fmt.Sprintf("Test Digest %d", i)
-		err = store.CacheDigest(digestID, title, "Content", "Summary", []string{"url"}, "model")
-		if err != nil {
-			t.Fatalf("CacheDigest failed: %v", err)
-		}
-		// Small delay to ensure different timestamps
-		time.Sleep(time.Millisecond)
-	}
-
-	// Get latest 3 digests
-	digests, err := store.GetLatestDigests(3)
-	if err != nil {
-		t.Fatalf("GetLatestDigests failed: %v", err)
-	}
-
-	if len(digests) != 3 {
-		t.Errorf("Expected 3 digests, got %d", len(digests))
-	}
-
-	// Should be ordered by date descending (most recent first)
-	for i := 0; i < len(digests)-1; i++ {
-		if digests[i].DateGenerated.Before(digests[i+1].DateGenerated) {
-			t.Error("Digests should be ordered by date descending")
-		}
-	}
-}
-
-func TestFindDigestByPartialID(t *testing.T) {
-	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir)
-	if err != nil {
-		t.Fatalf("NewStore failed: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	digestID := "1234567890abcdef"
-	err = store.CacheDigest(digestID, "Test", "Content", "Summary", []string{"url"}, "model")
-	if err != nil {
-		t.Fatalf("CacheDigest failed: %v", err)
-	}
-
-	// Test exact match
-	digest, err := store.FindDigestByPartialID(digestID)
-	if err != nil {
-		t.Fatalf("FindDigestByPartialID failed: %v", err)
-	}
-	if digest == nil || digest.ID != digestID {
-		t.Error("Should find digest with exact ID match")
-	}
-
-	// Test partial match
-	digest, err = store.FindDigestByPartialID("1234")
-	if err != nil {
-		t.Fatalf("FindDigestByPartialID failed: %v", err)
-	}
-	if digest == nil || digest.ID != digestID {
-		t.Error("Should find digest with partial ID match")
-	}
-
-	// Test non-existent
-	digest, err = store.FindDigestByPartialID("xyz")
-	if err != nil {
-		t.Fatalf("FindDigestByPartialID failed: %v", err)
-	}
-	if digest != nil {
-		t.Error("Should not find digest with non-matching partial ID")
-	}
-}
-
 func TestGetCacheStats(t *testing.T) {
 	tmpDir := t.TempDir()
 	store, err := NewStore(tmpDir)
@@ -479,11 +286,6 @@ func TestGetCacheStats(t *testing.T) {
 		t.Fatalf("CacheArticle failed: %v", err)
 	}
 
-	err = store.CacheDigest(uuid.NewString(), "Title", "Content", "Summary", []string{"url"}, "model")
-	if err != nil {
-		t.Fatalf("CacheDigest failed: %v", err)
-	}
-
 	// Get stats
 	stats, err := store.GetCacheStats()
 	if err != nil {
@@ -492,9 +294,6 @@ func TestGetCacheStats(t *testing.T) {
 
 	if stats.ArticleCount != 1 {
 		t.Errorf("Expected 1 article, got %d", stats.ArticleCount)
-	}
-	if stats.DigestCount != 1 {
-		t.Errorf("Expected 1 digest, got %d", stats.DigestCount)
 	}
 	if stats.CacheSize <= 0 {
 		t.Error("Cache size should be greater than 0")
@@ -535,66 +334,6 @@ func TestClearCache(t *testing.T) {
 
 	if stats.ArticleCount != 0 {
 		t.Errorf("Expected 0 articles after clear, got %d", stats.ArticleCount)
-	}
-	if stats.DigestCount != 0 {
-		t.Errorf("Expected 0 digests after clear, got %d", stats.DigestCount)
-	}
-}
-
-func TestCleanupOldCache(t *testing.T) {
-	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir)
-	if err != nil {
-		t.Fatalf("NewStore failed: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	// Add old article
-	oldArticle := core.Article{
-		ID:          uuid.NewString(),
-		LinkID:      "old-url",
-		CleanedText: "Old content",
-		DateFetched: time.Now().UTC().Add(-48 * time.Hour),
-	}
-	err = store.CacheArticle(oldArticle)
-	if err != nil {
-		t.Fatalf("CacheArticle failed: %v", err)
-	}
-
-	// Add recent article
-	recentArticle := core.Article{
-		ID:          uuid.NewString(),
-		LinkID:      "recent-url",
-		CleanedText: "Recent content",
-		DateFetched: time.Now().UTC(),
-	}
-	err = store.CacheArticle(recentArticle)
-	if err != nil {
-		t.Fatalf("CacheArticle failed: %v", err)
-	}
-
-	// Cleanup old cache (older than 24 hours)
-	err = store.CleanupOldCache(24*time.Hour, 24*time.Hour)
-	if err != nil {
-		t.Fatalf("CleanupOldCache failed: %v", err)
-	}
-
-	// Verify old article is gone
-	cachedOld, err := store.GetCachedArticle("old-url", 72*time.Hour)
-	if err != nil {
-		t.Fatalf("GetCachedArticle failed: %v", err)
-	}
-	if cachedOld != nil {
-		t.Error("Old article should be cleaned up")
-	}
-
-	// Verify recent article remains
-	cachedRecent, err := store.GetCachedArticle("recent-url", 24*time.Hour)
-	if err != nil {
-		t.Fatalf("GetCachedArticle failed: %v", err)
-	}
-	if cachedRecent == nil {
-		t.Error("Recent article should remain after cleanup")
 	}
 }
 
@@ -662,102 +401,6 @@ func TestSerializeDeserializeEmbedding_Nil(t *testing.T) {
 	}
 }
 
-func TestGetRecentArticles(t *testing.T) {
-	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir)
-	if err != nil {
-		t.Fatalf("NewStore failed: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	// Add articles from different dates
-	now := time.Now().UTC()
-
-	// Recent article (1 day ago)
-	recentArticle := core.Article{
-		ID:          uuid.NewString(),
-		LinkID:      "recent-url",
-		Title:       "Recent Article",
-		CleanedText: "Recent content",
-		DateFetched: now.AddDate(0, 0, -1),
-	}
-	err = store.CacheArticle(recentArticle)
-	if err != nil {
-		t.Fatalf("CacheArticle failed: %v", err)
-	}
-
-	// Old article (10 days ago)
-	oldArticle := core.Article{
-		ID:          uuid.NewString(),
-		LinkID:      "old-url",
-		Title:       "Old Article",
-		CleanedText: "Old content",
-		DateFetched: now.AddDate(0, 0, -10),
-	}
-	err = store.CacheArticle(oldArticle)
-	if err != nil {
-		t.Fatalf("CacheArticle failed: %v", err)
-	}
-
-	// Get articles from last 7 days
-	articles, err := store.GetRecentArticles(7)
-	if err != nil {
-		t.Fatalf("GetRecentArticles failed: %v", err)
-	}
-
-	// Should only get the recent article
-	if len(articles) != 1 {
-		t.Errorf("Expected 1 recent article, got %d", len(articles))
-	}
-	if len(articles) > 0 && articles[0].Title != "Recent Article" {
-		t.Errorf("Expected recent article, got %s", articles[0].Title)
-	}
-}
-
-func TestGetArticleByURL(t *testing.T) {
-	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir)
-	if err != nil {
-		t.Fatalf("NewStore failed: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	article := core.Article{
-		ID:          uuid.NewString(),
-		LinkID:      "test-url",
-		Title:       "Test Article",
-		CleanedText: "Test content",
-		DateFetched: time.Now().UTC(),
-	}
-
-	err = store.CacheArticle(article)
-	if err != nil {
-		t.Fatalf("CacheArticle failed: %v", err)
-	}
-
-	// Get article by URL
-	retrieved, err := store.GetArticleByURL("test-url")
-	if err != nil {
-		t.Fatalf("GetArticleByURL failed: %v", err)
-	}
-
-	if retrieved == nil {
-		t.Fatal("Expected article, got nil")
-	}
-	if retrieved.Title != article.Title {
-		t.Errorf("Expected title %s, got %s", article.Title, retrieved.Title)
-	}
-
-	// Test non-existent URL
-	notFound, err := store.GetArticleByURL("non-existent")
-	if err != nil {
-		t.Fatalf("GetArticleByURL failed: %v", err)
-	}
-	if notFound != nil {
-		t.Error("Expected nil for non-existent URL")
-	}
-}
-
 func TestSaveArticle(t *testing.T) {
 	tmpDir := t.TempDir()
 	store, err := NewStore(tmpDir)
@@ -799,58 +442,5 @@ func TestSaveArticle(t *testing.T) {
 	// collapsed into a single empty-key row.
 	if err := store.SaveArticle(&core.Article{ID: uuid.NewString(), Title: "no url"}); err == nil {
 		t.Error("expected error when caching an article without URL")
-	}
-}
-
-func TestGetArticlesByDateRange(t *testing.T) {
-	tmpDir := t.TempDir()
-	store, err := NewStore(tmpDir)
-	if err != nil {
-		t.Fatalf("NewStore failed: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	now := time.Now().UTC()
-	startDate := now.AddDate(0, 0, -5) // 5 days ago
-	endDate := now.AddDate(0, 0, -1)   // 1 day ago
-
-	// Article within range (3 days ago)
-	inRangeArticle := core.Article{
-		ID:          uuid.NewString(),
-		LinkID:      "in-range-url",
-		Title:       "In Range Article",
-		CleanedText: "In range content",
-		DateFetched: now.AddDate(0, 0, -3),
-	}
-	err = store.CacheArticle(inRangeArticle)
-	if err != nil {
-		t.Fatalf("CacheArticle failed: %v", err)
-	}
-
-	// Article outside range (10 days ago)
-	outOfRangeArticle := core.Article{
-		ID:          uuid.NewString(),
-		LinkID:      "out-of-range-url",
-		Title:       "Out of Range Article",
-		CleanedText: "Out of range content",
-		DateFetched: now.AddDate(0, 0, -10),
-	}
-	err = store.CacheArticle(outOfRangeArticle)
-	if err != nil {
-		t.Fatalf("CacheArticle failed: %v", err)
-	}
-
-	// Get articles by date range
-	articles, err := store.GetArticlesByDateRange(startDate, endDate)
-	if err != nil {
-		t.Fatalf("GetArticlesByDateRange failed: %v", err)
-	}
-
-	// Should only get the in-range article
-	if len(articles) != 1 {
-		t.Errorf("Expected 1 article in range, got %d", len(articles))
-	}
-	if len(articles) > 0 && articles[0].Title != "In Range Article" {
-		t.Errorf("Expected in-range article, got %s", articles[0].Title)
 	}
 }

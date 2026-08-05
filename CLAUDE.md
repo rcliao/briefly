@@ -51,7 +51,7 @@ CI (.github/workflows/test.yml) runs test/build/lint on the Go version from go.m
 ### The pipeline (5 steps, `cmd/handlers/digest_from_file.go`)
 
 1. **Parse** — extract URLs from the markdown file (`internal/parser`)
-2. **Fetch** — parallel (4 workers), browser UA + one retry, 24h SQLite cache; cached entries are re-extracted from stored HTML so parser fixes apply retroactively; failures are collected, never silently dropped (`internal/fetch`, `internal/store`)
+2. **Fetch** — parallel (4 workers), browser UA + one retry, 24h SQLite cache; cached entries are re-extracted from stored HTML so parser fixes apply retroactively; failures AND pages with <30 words of readable text are collected into the failed list, never silently dropped (`internal/fetch`, `internal/store`). HTML and PDF only — YouTube support was removed 2026-08 (it fabricated content from video titles)
 3. **Summarize** — parallel per-article summaries, 12k-char content window (`internal/summarize`)
 4. **Editorial pass** — ONE LLM call (`cmd/handlers/digest_editorial.go`) returns title, executive summary, must-read pick, 2-5 topic groups, and per-article display title + one-liner takeaway + intent tag. `normalizeEditorialDigest` enforces invariants (every article in exactly one topic, entries backfilled from summaries) with a deterministic fallback — a bad LLM response degrades to a plainer digest, never a broken one.
 5. **Render** — paste-friendly plain text: bare URLs on their own line, no markdown links/bold/headers/rules, `EMOJI UPPERCASE` topic headers, blank lines between title/description/URL, failed links listed in a footer. Read times are computed from cleaned word count (~200 wpm), never LLM-estimated.
@@ -73,9 +73,9 @@ cmd/briefly/          Entry point
 cmd/handlers/         root, digest (from-file), read, cache + editorial pass & renderer
 internal/core/        Data structures (Article, Summary, Link, ...)
 internal/parser/      URL extraction from markdown
-internal/fetch/       HTML/PDF/YouTube fetching + content extraction + read time
+internal/fetch/       HTML/PDF fetching + content extraction + read time
 internal/summarize/   Article summarization prompts + summarizer
-internal/narrative/   Slack digest generation (+ legacy digest content types)
+internal/narrative/   Slack digest generation
 internal/llm/         Gemini client (google.golang.org/genai)
 internal/store/       SQLite cache (articles, summaries)
 internal/config/      Viper config (.briefly.yaml + env)
