@@ -109,12 +109,28 @@ func readSimplifiedRun(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Summarize
-	summarizer := summarize.NewSummarizerWithDefaults(&llmClientAdapter{client: llmClient})
-	summary, err := summarizer.SummarizeArticle(ctx, article)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "\n❌ Failed to summarize article: %v\n", err)
-		os.Exit(1)
+	// Summarize (cached by content hash)
+	contentHash := store.ContentHash(article.CleanedText)
+	var summary *core.Summary
+	if cache != nil {
+		if cached, err := cache.GetCachedSummary(article.URL, contentHash, 7*24*time.Hour); err == nil && cached != nil && cached.SummaryText != "" {
+			summary = cached
+		}
+	}
+	if summary == nil {
+		summarizer := summarize.NewSummarizerWithDefaults(&llmClientAdapter{client: llmClient})
+		s, err := summarizer.SummarizeArticle(ctx, article)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\n❌ Failed to summarize article: %v\n", err)
+			os.Exit(1)
+		}
+		summary = s
+		if cache != nil {
+			if summary.DateGenerated.IsZero() {
+				summary.DateGenerated = time.Now().UTC()
+			}
+			_ = cache.CacheSummary(*summary, article.URL, contentHash)
+		}
 	}
 
 	elapsed := time.Since(startTime)

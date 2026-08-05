@@ -598,22 +598,18 @@ func TestCleanupOldCache(t *testing.T) {
 	}
 }
 
-func TestGenerateContentHash(t *testing.T) {
-	testCases := []struct {
-		content  string
-		expected string
-	}{
-		{"", "empty"},
-		{"a", "1-a-a"},
-		{"hello", "5-h-o"},
-		{"hello world", "11-h-d"},
+func TestContentHash(t *testing.T) {
+	if ContentHash("") != "empty" {
+		t.Errorf("ContentHash(\"\") = %q, expected \"empty\"", ContentHash(""))
 	}
-
-	for _, tc := range testCases {
-		result := generateContentHash(tc.content)
-		if result != tc.expected {
-			t.Errorf("generateContentHash(%q) = %q, expected %q", tc.content, result, tc.expected)
-		}
+	// Stable for identical content
+	first := ContentHash("hello")
+	if second := ContentHash("hello"); first != second {
+		t.Errorf("ContentHash should be deterministic: %q != %q", first, second)
+	}
+	// Distinct for content the old length-based hash could not tell apart
+	if ContentHash("hxxxo") == ContentHash("hello") {
+		t.Error("ContentHash should differ for different content of same length/ends")
 	}
 }
 
@@ -772,7 +768,7 @@ func TestSaveArticle(t *testing.T) {
 
 	article := &core.Article{
 		ID:          uuid.NewString(),
-		LinkID:      "test-url",
+		URL:         "https://example.com/article",
 		Title:       "Test Article",
 		CleanedText: "Test content",
 		DateFetched: time.Now().UTC(),
@@ -783,13 +779,26 @@ func TestSaveArticle(t *testing.T) {
 		t.Fatalf("SaveArticle failed: %v", err)
 	}
 
-	// Verify it was saved
-	retrieved, err := store.GetArticleByURL("test-url")
+	// Regression: articles must be cached under their URL (an earlier bug
+	// keyed them on the usually-empty LinkID) and must round-trip URL and ID.
+	retrieved, err := store.GetCachedArticle("https://example.com/article", time.Hour)
 	if err != nil {
-		t.Fatalf("GetArticleByURL failed: %v", err)
+		t.Fatalf("GetCachedArticle failed: %v", err)
 	}
 	if retrieved == nil {
-		t.Error("Article should be saved")
+		t.Fatal("expected cache hit for saved article URL")
+	}
+	if retrieved.URL != article.URL {
+		t.Errorf("cached article URL = %q, want %q", retrieved.URL, article.URL)
+	}
+	if retrieved.ID != article.ID {
+		t.Errorf("cached article ID = %q, want %q", retrieved.ID, article.ID)
+	}
+
+	// An article with neither URL nor LinkID must be rejected, not silently
+	// collapsed into a single empty-key row.
+	if err := store.SaveArticle(&core.Article{ID: uuid.NewString(), Title: "no url"}); err == nil {
+		t.Error("expected error when caching an article without URL")
 	}
 }
 

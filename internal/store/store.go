@@ -3,13 +3,17 @@ package store
 import (
 	"briefly/internal/core"
 	"bytes"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/google/uuid"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -285,7 +289,19 @@ func (s *Store) DB() *sql.DB {
 
 // CacheArticle stores an article in the cache
 func (s *Store) CacheArticle(article core.Article) error {
+	// The url column is the primary key. Older code wrote article.LinkID here,
+	// which is empty in the digest path — every article collapsed into one row
+	// with an empty URL and lookups by real URL never hit.
+	url := article.URL
+	if url == "" {
+		url = article.LinkID // legacy callers that only set LinkID
+	}
+	if url == "" {
+		return fmt.Errorf("article has neither URL nor LinkID; refusing to cache")
+	}
+
 	metadata, _ := json.Marshal(map[string]any{
+		"id":      article.ID,
 		"link_id": article.LinkID,
 	})
 
@@ -306,13 +322,13 @@ func (s *Store) CacheArticle(article core.Article) error {
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = s.db.Exec(query,
-		article.LinkID, // Use LinkID as URL identifier
+		url,
 		article.Title,
 		article.CleanedText,
 		article.FetchedHTML,
 		article.MyTake,
 		article.DateFetched,
-		generateContentHash(article.CleanedText),
+		ContentHash(article.CleanedText),
 		string(metadata),
 		embeddingData,
 		article.TopicCluster,
@@ -353,7 +369,7 @@ func (s *Store) GetCachedArticle(url string, maxAge time.Duration) (*core.Articl
 	var researchQueriesJSON sql.NullString
 
 	err := row.Scan(
-		&article.LinkID, // Use LinkID as URL identifier
+		&article.URL,
 		&article.Title,
 		&article.CleanedText,
 		&article.FetchedHTML,
@@ -376,6 +392,19 @@ func (s *Store) GetCachedArticle(url string, maxAge time.Duration) (*core.Articl
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan article: %w", err)
+	}
+
+	// Restore identity fields from metadata; callers key maps on article.ID,
+	// so a cached article must never come back with an empty one.
+	var meta struct {
+		ID     string `json:"id"`
+		LinkID string `json:"link_id"`
+	}
+	_ = json.Unmarshal([]byte(metadata), &meta)
+	article.ID = meta.ID
+	article.LinkID = meta.LinkID
+	if article.ID == "" {
+		article.ID = uuid.NewString()
 	}
 
 	// Deserialize embedding
@@ -1146,13 +1175,14 @@ func (s *Store) CleanupOldCache(articleMaxAge, summaryMaxAge time.Duration) erro
 	return nil
 }
 
-// generateContentHash creates a simple hash of content for cache validation
-func generateContentHash(content string) string {
-	// Simple hash based on content length and first/last chars
+// ContentHash returns a stable hash of article content, used to key cached
+// summaries so they invalidate when the underlying content changes.
+func ContentHash(content string) string {
 	if len(content) == 0 {
 		return "empty"
 	}
-	return fmt.Sprintf("%d-%c-%c", len(content), content[0], content[len(content)-1])
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:8])
 }
 
 // serializeEmbedding converts a float64 slice to bytes for database storage

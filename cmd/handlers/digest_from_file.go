@@ -258,7 +258,8 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 
 	fmt.Printf("   ✓ Successfully fetched %d/%d articles\n", len(articles), len(links))
 
-	// Step 3: Generate summaries in parallel
+	// Step 3: Generate summaries in parallel, cached by article content hash
+	// so unchanged articles skip the LLM call on re-runs.
 	fmt.Printf("\n📝 Step 3/5: Generating article summaries (%d workers)...\n", fetchWorkers)
 	adapter := &llmClientAdapter{client: llmClient}
 	summarizer := summarize.NewSummarizerWithDefaults(adapter)
@@ -271,6 +272,19 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			contentHash := store.ContentHash(articles[i].CleanedText)
+			if cache != nil {
+				cacheMu.Lock()
+				cached, err := cache.GetCachedSummary(articles[i].URL, contentHash, 7*24*time.Hour)
+				cacheMu.Unlock()
+				if err == nil && cached != nil && cached.SummaryText != "" {
+					cached.ArticleIDs = []string{articles[i].ID}
+					summaries[i] = cached
+					fmt.Printf("   ✓ [%d/%d] Summary cache hit: %s\n", i+1, len(articles), articles[i].Title)
+					return
+				}
+			}
+
 			summary, err := summarizer.SummarizeArticle(ctx, &articles[i])
 			if err != nil {
 				log.Warn("Failed to generate summary", "article_id", articles[i].ID, "error", err)
@@ -282,6 +296,19 @@ func runDigestFromFile(ctx context.Context, inputFile string, outputDir string, 
 					ModelUsed:   "fallback",
 				}
 			} else {
+				if cache != nil {
+					if summary.ID == "" {
+						summary.ID = uuid.NewString()
+					}
+					if summary.DateGenerated.IsZero() {
+						summary.DateGenerated = time.Now().UTC()
+					}
+					cacheMu.Lock()
+					if err := cache.CacheSummary(*summary, articles[i].URL, contentHash); err != nil {
+						log.Warn("Failed to cache summary", "url", articles[i].URL, "error", err)
+					}
+					cacheMu.Unlock()
+				}
 				fmt.Printf("   ✓ [%d/%d] Summarized: %s\n", i+1, len(articles), articles[i].Title)
 			}
 			summaries[i] = summary
