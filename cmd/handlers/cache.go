@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"briefly/internal/config"
 	"briefly/internal/logger"
 	"briefly/internal/store"
 	"fmt"
@@ -61,7 +62,7 @@ func runCacheStats() error {
 	fmt.Println("==================")
 
 	// Initialize cache store
-	cacheStore, err := store.NewStore(".briefly-cache")
+	cacheStore, err := store.NewStore(cacheDirFromConfig())
 	if err != nil {
 		return fmt.Errorf("failed to initialize cache store: %w", err)
 	}
@@ -80,10 +81,8 @@ func runCacheStats() error {
 	// Display statistics
 	fmt.Printf("📄 Articles cached: %d\n", stats.ArticleCount)
 	fmt.Printf("📝 Summaries cached: %d\n", stats.SummaryCount)
-	fmt.Printf("📊 Digests cached: %d\n", stats.DigestCount)
 	fmt.Printf("💾 Cache size: %.2f MB\n", float64(stats.CacheSize)/1024/1024)
 	fmt.Printf("📅 Last updated: %s\n", stats.LastUpdated.Format("2006-01-02 15:04:05"))
-	fmt.Printf("📡 RSS feeds: %d\n", stats.FeedCount)
 
 	return nil
 }
@@ -102,7 +101,7 @@ func runCacheClear(confirm bool) error {
 	fmt.Println("🗑️  Clearing cache...")
 
 	// Initialize cache store
-	cacheStore, err := store.NewStore(".briefly-cache")
+	cacheStore, err := store.NewStore(cacheDirFromConfig())
 	if err != nil {
 		return fmt.Errorf("failed to initialize cache store: %w", err)
 	}
@@ -119,4 +118,14 @@ func runCacheClear(confirm bool) error {
 
 	fmt.Println("✅ Cache cleared successfully")
 	return nil
+}
+
+// cacheDirFromConfig resolves the cache directory the same way the digest
+// pipeline does, so cache stats/clear operate on the cache actually in use.
+func cacheDirFromConfig() string {
+	_, _ = config.Load(cfgFile)
+	if dir := config.Get().Cache.Directory; dir != "" {
+		return dir
+	}
+	return ".briefly-cache"
 }

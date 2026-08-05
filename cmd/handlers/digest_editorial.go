@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // editorialArticle is the per-article editorial output from the single triage call.
@@ -48,8 +49,9 @@ type failedLink struct {
 }
 
 // siteSuffixRegex matches trailing site-name boilerplate like " · GitHub",
-// " | Anthropic", " — Google DeepMind" when the suffix is short (≤4 words).
-var siteSuffixRegex = regexp.MustCompile(`\s*[\|·—–\\-]\s*[^|·—–\\-]{1,40}$`)
+// " | Anthropic", " — Google DeepMind". Separators must be surrounded by
+// whitespace so hyphenated compounds ("computer-use") are never split.
+var siteSuffixRegex = regexp.MustCompile(`\s+[|·—–\\-]\s+[^|·—–\\]{1,40}$`)
 
 // cleanArticleTitle strips common site boilerplate from raw <title> text.
 // The editorial LLM writes better display titles; this is the fallback and
@@ -235,13 +237,28 @@ func stripCitations(text string) string {
 }
 
 // firstSentence returns the first sentence of text, capped at 200 chars.
+// Sentence ends only count when followed by whitespace or end-of-text, so
+// dots inside version numbers ("Claude 4.5") don't truncate; the length cap
+// respects rune boundaries.
 func firstSentence(text string) string {
 	text = strings.TrimSpace(text)
-	if idx := strings.IndexAny(text, ".!?"); idx > 20 && idx < len(text)-1 {
-		text = text[:idx+1]
+	for i, r := range text {
+		if i <= 20 {
+			continue
+		}
+		if r == '.' || r == '!' || r == '?' {
+			if i+1 >= len(text) || text[i+1] == ' ' || text[i+1] == '\n' {
+				text = text[:i+1]
+				break
+			}
+		}
 	}
 	if len(text) > 200 {
-		text = text[:200] + "..."
+		cut := 200
+		for cut > 0 && !utf8.RuneStart(text[cut]) {
+			cut--
+		}
+		text = text[:cut] + "..."
 	}
 	return text
 }

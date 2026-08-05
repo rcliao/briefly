@@ -70,7 +70,7 @@ func readSimplifiedRun(cmd *cobra.Command, args []string) {
 	// Optional cache
 	var cache *store.Store
 	if !noCache {
-		if s, err := store.NewStore(".briefly-cache"); err == nil {
+		if s, err := store.NewStore(cacheDirFromConfig()); err == nil {
 			cache = s
 			defer func() { _ = cache.Close() }()
 		}
