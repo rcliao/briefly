@@ -7,261 +7,87 @@ import (
 	"time"
 )
 
-// TracedClient wraps an LLM Client with LangFuse tracing
+// TracedClient wraps an LLM Client with PostHog analytics tracking
 type TracedClient struct {
-	client   *Client
-	langfuse *observability.LangFuseClient
-	posthog  *observability.PostHogClient
+	client  *Client
+	posthog *observability.PostHogClient
 }
 
 // NewTracedClient creates a new traced LLM client
-func NewTracedClient(modelName string, langfuse *observability.LangFuseClient, posthog *observability.PostHogClient) (*TracedClient, error) {
+func NewTracedClient(modelName string, posthog *observability.PostHogClient) (*TracedClient, error) {
 	client, err := NewClient(modelName)
 	if err != nil {
 		return nil, err
 	}
 
 	return &TracedClient{
-		client:   client,
-		langfuse: langfuse,
-		posthog:  posthog,
+		client:  client,
+		posthog: posthog,
 	}, nil
 }
 
-// GetUntracedClient returns the underlying untrace client (for methods that don't need tracing)
+// GetUnderlyingClient returns the underlying untraced client (for methods that don't need tracing)
 func (tc *TracedClient) GetUnderlyingClient() *Client {
 	return tc.client
 }
 
-// GenerateText generates text with tracing
+// trackLLMCall records an LLM call in PostHog when enabled; failures are logged nowhere
+// by design — analytics must never break the pipeline.
+func (tc *TracedClient) trackLLMCall(ctx context.Context, model, operation string, tokens int, latencyMs int64) {
+	if tc.posthog != nil && tc.posthog.IsEnabled() {
+		_ = tc.posthog.TrackLLMCall(ctx, model, operation, tokens, latencyMs, 0)
+	}
+}
+
+// GenerateText generates text with tracking
 func (tc *TracedClient) GenerateText(ctx context.Context, prompt string, options TextGenerationOptions) (string, error) {
-	if !tc.langfuse.IsEnabled() {
-		// No tracing, call directly
-		return tc.client.GenerateText(ctx, prompt, options)
-	}
-
-	// Create trace
-	trace, err := tc.langfuse.CreateTrace(ctx, observability.TraceOptions{
-		Name: "text_generation",
-		Tags: []string{"llm", "generation"},
-	})
-	if err != nil {
-		// If tracing fails, continue without it
-		return tc.client.GenerateText(ctx, prompt, options)
-	}
-
-	// Track start time
 	startTime := time.Now()
-
-	// Call the underlying method
 	result, err := tc.client.GenerateText(ctx, prompt, options)
 
-	// Calculate latency
-	latencyMs := time.Since(startTime).Milliseconds()
-
-	// Track generation in LangFuse
-	if trace != nil {
-		model := options.Model
-		if model == "" {
-			model = tc.client.modelName
-		}
-
-		_ = tc.langfuse.TrackGeneration(trace, observability.GenerationOptions{
-			Model:       model,
-			Prompt:      prompt,
-			Completion:  result,
-			Temperature: options.Temperature,
-			MaxTokens:   options.MaxTokens,
-			TotalTokens: estimateTokens(prompt, result),
-			LatencyMs:   latencyMs,
-		})
+	model := options.Model
+	if model == "" {
+		model = tc.client.modelName
 	}
-
-	// Track in PostHog for analytics
-	if tc.posthog.IsEnabled() {
-		model := options.Model
-		if model == "" {
-			model = tc.client.modelName
-		}
-		_ = tc.posthog.TrackLLMCall(ctx, model, "text_generation", estimateTokens(prompt, result), latencyMs, 0)
-	}
+	tc.trackLLMCall(ctx, model, "text_generation", estimateTokens(prompt, result), time.Since(startTime).Milliseconds())
 
 	return result, err
 }
 
-// GenerateEmbedding generates embeddings with tracing
+// GenerateEmbedding generates embeddings with tracking
 func (tc *TracedClient) GenerateEmbedding(text string) ([]float64, error) {
-	ctx := context.Background()
-
-	if !tc.langfuse.IsEnabled() {
-		return tc.client.GenerateEmbedding(text)
-	}
-
-	// Create trace
-	trace, err := tc.langfuse.CreateTrace(ctx, observability.TraceOptions{
-		Name: "embedding_generation",
-		Tags: []string{"llm", "embedding"},
-	})
-	if err != nil {
-		return tc.client.GenerateEmbedding(text)
-	}
-
 	startTime := time.Now()
 	result, err := tc.client.GenerateEmbedding(text)
-	latencyMs := time.Since(startTime).Milliseconds()
-
-	if trace != nil {
-		_ = tc.langfuse.TrackGeneration(trace, observability.GenerationOptions{
-			Model:       DefaultEmbeddingModel,
-			Prompt:      text,
-			Completion:  "embedding_vector",
-			TotalTokens: estimateTokens(text, ""),
-			LatencyMs:   latencyMs,
-		})
-	}
-
-	if tc.posthog.IsEnabled() {
-		_ = tc.posthog.TrackLLMCall(ctx, DefaultEmbeddingModel, "embedding", estimateTokens(text, ""), latencyMs, 0)
-	}
-
+	tc.trackLLMCall(context.Background(), DefaultEmbeddingModel, "embedding", estimateTokens(text, ""), time.Since(startTime).Milliseconds())
 	return result, err
 }
 
-// SummarizeArticleText summarizes article with tracing
+// SummarizeArticleText summarizes article with tracking
 func (tc *TracedClient) SummarizeArticleText(article core.Article) (core.Summary, error) {
-	ctx := context.Background()
-
-	if !tc.langfuse.IsEnabled() {
-		return tc.client.SummarizeArticleText(article)
-	}
-
-	trace, err := tc.langfuse.CreateTrace(ctx, observability.TraceOptions{
-		Name: "article_summarization",
-		Tags: []string{"llm", "summarization"},
-		Metadata: map[string]string{
-			"article_id":  article.ID,
-			"article_url": article.URL,
-		},
-	})
-	if err != nil {
-		return tc.client.SummarizeArticleText(article)
-	}
-
 	startTime := time.Now()
 	result, err := tc.client.SummarizeArticleText(article)
-	latencyMs := time.Since(startTime).Milliseconds()
-
-	if trace != nil {
-		_ = tc.langfuse.TrackGeneration(trace, observability.GenerationOptions{
-			Model:       tc.client.modelName,
-			Prompt:      article.CleanedText,
-			Completion:  result.SummaryText,
-			TotalTokens: estimateTokens(article.CleanedText, result.SummaryText),
-			LatencyMs:   latencyMs,
-		})
-	}
-
-	if tc.posthog.IsEnabled() {
-		_ = tc.posthog.TrackLLMCall(ctx, tc.client.modelName, "summarization", estimateTokens(article.CleanedText, result.SummaryText), latencyMs, 0)
-	}
-
+	tc.trackLLMCall(context.Background(), tc.client.modelName, "summarization", estimateTokens(article.CleanedText, result.SummaryText), time.Since(startTime).Milliseconds())
 	return result, err
 }
 
-// SummarizeArticleTextWithFormat summarizes article with format and tracing
+// SummarizeArticleTextWithFormat summarizes article with format and tracking
 func (tc *TracedClient) SummarizeArticleTextWithFormat(article core.Article, format string) (core.Summary, error) {
-	ctx := context.Background()
-
-	if !tc.langfuse.IsEnabled() {
-		return tc.client.SummarizeArticleTextWithFormat(article, format)
-	}
-
-	trace, err := tc.langfuse.CreateTrace(ctx, observability.TraceOptions{
-		Name: "article_summarization_formatted",
-		Tags: []string{"llm", "summarization", format},
-		Metadata: map[string]string{
-			"article_id":  article.ID,
-			"article_url": article.URL,
-			"format":      format,
-		},
-	})
-	if err != nil {
-		return tc.client.SummarizeArticleTextWithFormat(article, format)
-	}
-
 	startTime := time.Now()
 	result, err := tc.client.SummarizeArticleTextWithFormat(article, format)
-	latencyMs := time.Since(startTime).Milliseconds()
-
-	if trace != nil {
-		_ = tc.langfuse.TrackGeneration(trace, observability.GenerationOptions{
-			Model:       tc.client.modelName,
-			Prompt:      article.CleanedText,
-			Completion:  result.SummaryText,
-			TotalTokens: estimateTokens(article.CleanedText, result.SummaryText),
-			LatencyMs:   latencyMs,
-		})
-	}
-
-	if tc.posthog.IsEnabled() {
-		_ = tc.posthog.TrackLLMCall(ctx, tc.client.modelName, "summarization", estimateTokens(article.CleanedText, result.SummaryText), latencyMs, 0)
-	}
-
+	tc.trackLLMCall(context.Background(), tc.client.modelName, "summarization", estimateTokens(article.CleanedText, result.SummaryText), time.Since(startTime).Milliseconds())
 	return result, err
 }
 
-// CategorizeArticle categorizes article with tracing (used for theme classification)
+// CategorizeArticle categorizes article with tracking (used for theme classification)
 func (tc *TracedClient) CategorizeArticle(ctx context.Context, article core.Article, categories map[string]Category) (CategoryResult, error) {
-	if !tc.langfuse.IsEnabled() {
-		return tc.client.CategorizeArticle(ctx, article, categories)
-	}
-
-	trace, err := tc.langfuse.CreateTrace(ctx, observability.TraceOptions{
-		Name: "article_categorization",
-		Tags: []string{"llm", "categorization", "classification"},
-		Metadata: map[string]string{
-			"article_id":  article.ID,
-			"article_url": article.URL,
-		},
-	})
-	if err != nil {
-		return tc.client.CategorizeArticle(ctx, article, categories)
-	}
-
 	startTime := time.Now()
 	result, err := tc.client.CategorizeArticle(ctx, article, categories)
-	latencyMs := time.Since(startTime).Milliseconds()
-
-	if trace != nil {
-		// Build completion string from result
-		completion := result.Category.Name
-		if result.Reasoning != "" {
-			completion += " (reason: " + result.Reasoning + ")"
-		}
-
-		_ = tc.langfuse.TrackGeneration(trace, observability.GenerationOptions{
-			Model:       tc.client.modelName,
-			Prompt:      article.CleanedText,
-			Completion:  completion,
-			TotalTokens: estimateTokens(article.CleanedText, completion),
-			LatencyMs:   latencyMs,
-		})
-	}
-
-	if tc.posthog.IsEnabled() {
-		_ = tc.posthog.TrackLLMCall(ctx, tc.client.modelName, "categorization", estimateTokens(article.CleanedText, result.Category.Name), latencyMs, 0)
-	}
-
+	tc.trackLLMCall(ctx, tc.client.modelName, "categorization", estimateTokens(article.CleanedText, result.Category.Name), time.Since(startTime).Milliseconds())
 	return result, err
 }
 
-// Close closes both the underlying client and flushes observability
+// Close closes the underlying client and flushes analytics
 func (tc *TracedClient) Close() {
 	tc.client.Close()
-
-	if tc.langfuse != nil && tc.langfuse.IsEnabled() {
-		_ = tc.langfuse.Flush()
-	}
 
 	if tc.posthog != nil && tc.posthog.IsEnabled() {
 		_ = tc.posthog.Flush()
@@ -302,7 +128,6 @@ func (tc *TracedClient) GenerateDigestTitle(digestContent string, format string)
 }
 
 func (tc *TracedClient) GenerateEmbeddingForArticle(article core.Article) ([]float64, error) {
-	// This could use tracing, but for simplicity we'll just pass through
 	return tc.client.GenerateEmbeddingForArticle(article)
 }
 

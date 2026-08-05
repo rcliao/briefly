@@ -20,7 +20,6 @@ type Builder struct {
 	llmClient      *llm.Client
 	tracedClient   *llm.TracedClient    // For theme classification with observability
 	db             persistence.Database // Optional: for theme-based categorization
-	langfuse       *observability.LangFuseClient
 	posthog        *observability.PostHogClient
 	config         *Config
 	skipCache      bool
@@ -96,8 +95,7 @@ func (b *Builder) WithTracedClient(client *llm.TracedClient) *Builder {
 }
 
 // WithObservability sets the observability clients
-func (b *Builder) WithObservability(langfuse *observability.LangFuseClient, posthog *observability.PostHogClient) *Builder {
-	b.langfuse = langfuse
+func (b *Builder) WithObservability(posthog *observability.PostHogClient) *Builder {
 	b.posthog = posthog
 	return b
 }
@@ -166,14 +164,7 @@ func (b *Builder) Build() (*Pipeline, error) {
 
 	// Create summarizer adapter using the new summarize package
 	llmClientForSummarize := &LLMClientForSummarize{client: b.llmClient}
-	var summarizerCore summarize.SummarizerInterface
-	summarizerCore = summarize.NewSummarizerWithDefaults(llmClientForSummarize)
-
-	// Phase 1: Wrap with LangFuse tracking if available
-	if b.langfuse != nil && b.langfuse.IsEnabled() {
-		fmt.Println("📊 LangFuse tracking enabled for summarization")
-		summarizerCore = summarize.NewTracedSummarizer(summarizerCore.(*summarize.Summarizer), b.langfuse)
-	}
+	var summarizerCore summarize.SummarizerInterface = summarize.NewSummarizerWithDefaults(llmClientForSummarize)
 
 	summarizer := &SummarizerAdapter{
 		summarizer:    summarizerCore,

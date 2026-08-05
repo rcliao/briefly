@@ -45,7 +45,6 @@ func NewAggregateCmd() *cobra.Command {
 		dryRun       bool
 		minRelevance float64
 		themeFilter  string
-		withLangfuse bool
 	)
 
 	cmd := &cobra.Command{
@@ -78,13 +77,13 @@ Examples:
   # Only articles matching specific theme
   briefly aggregate --theme "AI & Machine Learning" --min-relevance 0.6
 
-  # Limit processing and enable observability
-  briefly aggregate --max-articles 20 --with-langfuse
+  # Limit processing
+  briefly aggregate --max-articles 20
 
   # Dry run to see what would be fetched
   briefly aggregate --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAggregateWithClassification(cmd.Context(), maxArticles, concurrency, sinceHours, minRelevance, themeFilter, dryRun, withLangfuse)
+			return runAggregateWithClassification(cmd.Context(), maxArticles, concurrency, sinceHours, minRelevance, themeFilter, dryRun)
 		},
 	}
 
@@ -94,12 +93,11 @@ Examples:
 	cmd.Flags().Float64Var(&minRelevance, "min-relevance", 0.4, "Minimum relevance score to keep article (0.0-1.0)")
 	cmd.Flags().StringVar(&themeFilter, "theme", "", "Only process articles matching this theme name")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be fetched without storing")
-	cmd.Flags().BoolVar(&withLangfuse, "with-langfuse", false, "Enable LangFuse observability tracking")
 
 	return cmd
 }
 
-func runAggregateWithClassification(ctx context.Context, maxArticles, concurrency, sinceHours int, minRelevance float64, themeFilter string, dryRun bool, withLangfuse bool) error {
+func runAggregateWithClassification(ctx context.Context, maxArticles, concurrency, sinceHours int, minRelevance float64, themeFilter string, dryRun bool) error {
 	log := logger.Get()
 	log.Info("Starting news aggregation with classification",
 		"max_articles", maxArticles,
@@ -108,7 +106,6 @@ func runAggregateWithClassification(ctx context.Context, maxArticles, concurrenc
 		"min_relevance", minRelevance,
 		"theme_filter", themeFilter,
 		"dry_run", dryRun,
-		"with_langfuse", withLangfuse,
 	)
 
 	// Load configuration
@@ -153,11 +150,8 @@ func runAggregateWithClassification(ctx context.Context, maxArticles, concurrenc
 		return fmt.Errorf("failed to create LLM client: %w", err)
 	}
 
-	// Initialize observability clients
-	var posthogClient *observability.PostHogClient
-	var langfuseClient *observability.LangFuseClient
-
 	// Initialize PostHog if configured
+	var posthogClient *observability.PostHogClient
 	posthogAPIKey := cfg.Observability.PostHog.APIKey
 	if posthogAPIKey == "" {
 		posthogAPIKey = os.Getenv("POSTHOG_API_KEY")
@@ -171,35 +165,12 @@ func runAggregateWithClassification(ctx context.Context, maxArticles, concurrenc
 		}
 	}
 
-	// Initialize LangFuse if requested
-	if withLangfuse {
-		var err error
-		langfuseClient, err = observability.NewLangFuseClient()
-		if err != nil {
-			log.Warn("Failed to initialize LangFuse", "error", err)
-			langfuseClient = nil
-		} else {
-			log.Info("LangFuse observability enabled for classification tracking")
-		}
-	}
-
-	// Create base classifier with PostHog tracking
+	// Create classifier with PostHog tracking
 	var posthogTracker themes.PostHogTracker
 	if posthogClient != nil {
 		posthogTracker = posthogClient
 	}
-	baseClassifier := themes.NewClassifier(llmClient, posthogTracker)
-
-	// Optionally wrap with LangFuse tracking
-	var finalClassifier *themes.Classifier
-	if langfuseClient != nil && langfuseClient.IsEnabled() {
-		tracedClassifier := themes.NewTracedClassifier(baseClassifier, langfuseClient)
-		// For now, use base classifier (TracedClassifier wrapping will be fixed later)
-		finalClassifier = baseClassifier
-		_ = tracedClassifier
-	} else {
-		finalClassifier = baseClassifier
-	}
+	finalClassifier := themes.NewClassifier(llmClient, posthogTracker)
 
 	// Create article processor
 	processor := fetch.NewContentProcessor()

@@ -44,7 +44,6 @@ func NewClassifyCmd() *cobra.Command {
 		themeFilter  string
 		concurrency  int
 		dryRun       bool
-		withLangfuse bool
 	)
 
 	cmd := &cobra.Command{
@@ -63,7 +62,6 @@ Phase 1 RSS Enhancement:
   • Theme-based filtering with relevance scoring
   • Configurable minimum relevance threshold (0.0-1.0)
   • Optional theme filter to only process specific themes
-  • LangFuse observability for classification performance
 
 Typical usage:
   • Run after aggregation: briefly classify
@@ -84,12 +82,9 @@ Examples:
   briefly classify --max-articles 50 --concurrency 10
 
   # Dry run to see what would be processed
-  briefly classify --dry-run
-
-  # Enable LangFuse tracking
-  briefly classify --with-langfuse`,
+  briefly classify --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runClassify(cmd.Context(), maxArticles, minRelevance, themeFilter, concurrency, dryRun, withLangfuse)
+			return runClassify(cmd.Context(), maxArticles, minRelevance, themeFilter, concurrency, dryRun)
 		},
 	}
 
@@ -98,12 +93,11 @@ Examples:
 	cmd.Flags().StringVar(&themeFilter, "theme", "", "Only classify articles matching this theme name")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 5, "Number of articles to process concurrently")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be processed without storing")
-	cmd.Flags().BoolVar(&withLangfuse, "with-langfuse", false, "Enable LangFuse observability tracking")
 
 	return cmd
 }
 
-func runClassify(ctx context.Context, maxArticles int, minRelevance float64, themeFilter string, concurrency int, dryRun bool, withLangfuse bool) error {
+func runClassify(ctx context.Context, maxArticles int, minRelevance float64, themeFilter string, concurrency int, dryRun bool) error {
 	log := logger.Get()
 	log.Info("Starting article classification",
 		"max_articles", maxArticles,
@@ -111,7 +105,6 @@ func runClassify(ctx context.Context, maxArticles int, minRelevance float64, the
 		"theme_filter", themeFilter,
 		"concurrency", concurrency,
 		"dry_run", dryRun,
-		"with_langfuse", withLangfuse,
 	)
 
 	// Load configuration
@@ -157,11 +150,8 @@ func runClassify(ctx context.Context, maxArticles int, minRelevance float64, the
 		return fmt.Errorf("failed to create LLM client: %w", err)
 	}
 
-	// Initialize observability clients
-	var posthogClient *observability.PostHogClient
-	var langfuseClient *observability.LangFuseClient
-
 	// Initialize PostHog if configured
+	var posthogClient *observability.PostHogClient
 	posthogAPIKey := cfg.Observability.PostHog.APIKey
 	if posthogAPIKey == "" {
 		posthogAPIKey = os.Getenv("POSTHOG_API_KEY")
@@ -175,36 +165,13 @@ func runClassify(ctx context.Context, maxArticles int, minRelevance float64, the
 		}
 	}
 
-	// Initialize LangFuse if requested
-	if withLangfuse {
-		var err error
-		langfuseClient, err = observability.NewLangFuseClient()
-		if err != nil {
-			log.Warn("Failed to initialize LangFuse", "error", err)
-			langfuseClient = nil
-		} else {
-			log.Info("LangFuse observability enabled for classification tracking")
-		}
-	}
-
-	// Create base classifier with PostHog tracking
+	// Create classifier with PostHog tracking
 	// Important: Pass nil directly (not through interface) to avoid Go's interface nil gotcha
 	var posthogTracker themes.PostHogTracker
 	if posthogClient != nil {
 		posthogTracker = posthogClient
 	}
-	baseClassifier := themes.NewClassifier(llmClient, posthogTracker)
-
-	// Optionally wrap with LangFuse tracking
-	var finalClassifier *themes.Classifier
-	if langfuseClient != nil && langfuseClient.IsEnabled() {
-		tracedClassifier := themes.NewTracedClassifier(baseClassifier, langfuseClient)
-		// For now, use base classifier (TracedClassifier wrapping will be fixed later)
-		finalClassifier = baseClassifier
-		_ = tracedClassifier // Acknowledge we're not using it yet
-	} else {
-		finalClassifier = baseClassifier
-	}
+	finalClassifier := themes.NewClassifier(llmClient, posthogTracker)
 
 	// Create a simple wrapper that implements ThemeClassifier interface
 	classifier := &simpleClassifierWrapper{classifier: finalClassifier}

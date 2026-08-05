@@ -212,9 +212,8 @@ briefly/
 │   ├── core/                     # Core data structures (Article, Summary, Digest, Theme, ManualURL)
 │   ├── fetch/                    # Content fetching (HTML, PDF, YouTube)
 │   ├── llm/                      # LLM client for Gemini API
-│   │   └── traced_client.go      # NEW Phase 0: LangFuse-traced LLM client
-│   ├── observability/            # NEW Phase 0: Observability infrastructure
-│   │   ├── langfuse.go           # LangFuse tracing (local logging mode)
+│   │   └── traced_client.go      # PostHog-traced LLM client
+│   ├── observability/            # Observability infrastructure
 │   │   └── posthog.go            # PostHog analytics tracking
 │   ├── themes/                   # NEW Phase 0: Theme classification system
 │   │   └── classifier.go         # LLM-based theme classifier
@@ -635,10 +634,7 @@ briefly cache stats
 - `GEMINI_API_KEY` - Gemini API key for summarization and embeddings
 - `DATABASE_URL` - PostgreSQL connection string (Phase 0+)
 
-**Phase 0 Observability (Optional but Recommended):**
-- `LANGFUSE_PUBLIC_KEY` - LangFuse public key for LLM tracing
-- `LANGFUSE_SECRET_KEY` - LangFuse secret key
-- `LANGFUSE_HOST` - LangFuse server URL (default: https://cloud.langfuse.com)
+**Observability (Optional):**
 - `POSTHOG_API_KEY` - PostHog API key for analytics
 - `POSTHOG_HOST` - PostHog server URL (default: https://app.posthog.com)
 
@@ -652,15 +648,12 @@ Set in `.env` file or environment:
 export GEMINI_API_KEY="your-key-here"
 export DATABASE_URL="postgresql://user:pass@localhost:5432/briefly"
 
-# Observability (Phase 0)
-export LANGFUSE_PUBLIC_KEY="pk-lf-..."
-export LANGFUSE_SECRET_KEY="sk-lf-..."
-export LANGFUSE_HOST="https://cloud.langfuse.com"
+# Observability (optional)
 export POSTHOG_API_KEY="phc_..."
 export POSTHOG_HOST="https://app.posthog.com"
 ```
 
-**Note:** LangFuse is currently in local logging mode. HTTP API integration pending.
+**Note:** LangFuse integration was removed 2026-08 — it was a no-op stub behind a real flag.
 
 ## Performance Considerations
 
@@ -699,14 +692,7 @@ export POSTHOG_HOST="https://app.posthog.com"
 **Files**: `internal/sources/manager.go` (AggregateManualURLs), `cmd/handlers/manual_url.go`
 
 ### Observability Infrastructure
-**LangFuse + PostHog tracking for LLM operations and user analytics**
-
-**LangFuse (LLM Tracing):**
-- Wraps all Gemini API calls via `TracedClient`
-- Tracks: prompts, completions, tokens, latency, costs
-- Currently: Local logging mode (stdout)
-- Future: HTTP API integration when SDK stabilizes
-- Files: `internal/observability/langfuse.go`, `internal/llm/traced_client.go`
+**PostHog tracking for LLM operations and user analytics** (LangFuse was removed 2026-08; it never progressed past a local-logging stub)
 
 **PostHog (Analytics):**
 - Fully integrated with official Go SDK

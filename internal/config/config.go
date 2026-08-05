@@ -374,16 +374,7 @@ type Team struct {
 
 // Observability holds observability and analytics configuration
 type Observability struct {
-	LangFuse LangFuseConfig `mapstructure:"langfuse"`
-	PostHog  PostHogConfig  `mapstructure:"posthog"`
-}
-
-// LangFuseConfig holds LangFuse observability configuration
-type LangFuseConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	PublicKey string `mapstructure:"public_key"`
-	SecretKey string `mapstructure:"secret_key"`
-	Host      string `mapstructure:"host"` // Default: https://cloud.langfuse.com
+	PostHog PostHogConfig `mapstructure:"posthog"`
 }
 
 // PostHogConfig holds PostHog analytics configuration
@@ -640,8 +631,6 @@ func setDefaults() {
 	viper.SetDefault("team.priority", "features")
 
 	// Observability defaults
-	viper.SetDefault("observability.langfuse.enabled", false)
-	viper.SetDefault("observability.langfuse.host", "https://cloud.langfuse.com")
 	viper.SetDefault("observability.posthog.enabled", false)
 	viper.SetDefault("observability.posthog.host", "https://app.posthog.com")
 
@@ -747,21 +736,6 @@ func bindEnvironmentVariables() {
 		"PORT",
 	})
 
-	// LangFuse observability
-	bindEnvKeys("observability.langfuse.public_key", []string{
-		"LANGFUSE_PUBLIC_KEY",
-		"LANGFUSE_PK",
-	})
-
-	bindEnvKeys("observability.langfuse.secret_key", []string{
-		"LANGFUSE_SECRET_KEY",
-		"LANGFUSE_SK",
-	})
-
-	bindEnvKeys("observability.langfuse.host", []string{
-		"LANGFUSE_HOST",
-		"LANGFUSE_URL",
-	})
 
 	// PostHog analytics
 	bindEnvKeys("observability.posthog.api_key", []string{
@@ -933,10 +907,8 @@ func GetTeamPriority() string     { return Get().Team.Priority }
 func GetTeamContext() Team        { return Get().Team }
 
 // Observability convenience getters
-func GetLangFuseConfig() LangFuseConfig { return Get().Observability.LangFuse }
-func GetPostHogConfig() PostHogConfig   { return Get().Observability.PostHog }
-func IsLangFuseEnabled() bool           { return Get().Observability.LangFuse.Enabled }
-func IsPostHogEnabled() bool            { return Get().Observability.PostHog.Enabled }
+func GetPostHogConfig() PostHogConfig { return Get().Observability.PostHog }
+func IsPostHogEnabled() bool          { return Get().Observability.PostHog.Enabled }
 
 // Themes convenience getters
 func IsThemesEnabled() bool               { return Get().Themes.Enabled }
