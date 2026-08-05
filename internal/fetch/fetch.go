@@ -109,25 +109,51 @@ func ReadLinksFromFile(filePath string) ([]core.Link, error) {
 	return links, nil
 }
 
+// browserUserAgent mimics a real browser; hosts like Substack block Go's default UA.
+const browserUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
+// maxFetchBytes caps response bodies to avoid pathological pages.
+const maxFetchBytes = 10 << 20 // 10 MB
+
 // FetchArticle fetches the content from a given core.Link and returns a core.Article.
 // It currently only fetches the raw HTML content.
 func FetchArticle(link core.Link) (core.Article, error) {
-	// Create HTTP client with timeout to prevent hanging
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	resp, err := client.Get(link.URL)
+	fetchOnce := func() (*http.Response, error) {
+		req, err := http.NewRequest(http.MethodGet, link.URL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", browserUserAgent)
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("status code %d", resp.StatusCode)
+		}
+		return resp, nil
+	}
+
+	resp, err := fetchOnce()
+	if err != nil {
+		// One retry: transient errors and rate limits are common on first hit
+		time.Sleep(2 * time.Second)
+		resp, err = fetchOnce()
+	}
 	if err != nil {
 		return core.Article{}, fmt.Errorf("failed to fetch URL %s: %w", link.URL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		return core.Article{}, fmt.Errorf("failed to fetch URL %s: status code %d", link.URL, resp.StatusCode)
-	}
-
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxFetchBytes))
 	if err != nil {
 		return core.Article{}, fmt.Errorf("failed to read response body from %s: %w", link.URL, err)
 	}
@@ -188,49 +214,61 @@ func ParseArticleContent(article *core.Article) error {
 	}
 
 	// Remove common non-content elements
-	// This list is similar to the one in main.go, can be expanded.
-	doc.Find("script, style, nav, footer, header, aside, form, iframe, noscript, .sidebar, #sidebar, .ad, .advertisement, .popup, .modal, .cookie-banner").Remove()
+	doc.Find("script, style, nav, footer, header, aside, form, iframe, noscript, svg, button, .sidebar, #sidebar, .ad, .advertisement, .popup, .modal, .cookie-banner, .comments, #comments").Remove()
 
-	// Attempt to find main content using common selectors (inspired by main.go)
-	var textBuilder strings.Builder
+	// Attempt to find the main content container. Pages can contain several
+	// matches (comment cards, related-post teasers), so take the largest one.
 	mainContentSelectors := []string{
-		"article", "main", ".main-content", ".entry-content", ".post-content", ".post-body", ".article-body", // Common semantic tags and classes
-		"[role='main']",        // ARIA role
-		".content", "#content", // Generic content containers
-		// Add more specific selectors if common patterns are observed in target sites
+		"article", "main", ".main-content", ".entry-content", ".post-content", ".post-body", ".article-body",
+		"[role='main']",
+		".content", "#content",
 	}
 
-	foundMainContent := false
+	var container *goquery.Selection
 	for _, selector := range mainContentSelectors {
-		doc.Find(selector).Each(func(i int, s *goquery.Selection) {
-			// Extract text and preserve paragraph breaks better by adding newlines after block elements
-			s.Find("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, div").Each(func(_ int, item *goquery.Selection) {
-				textBuilder.WriteString(strings.TrimSpace(item.Text()))
-				textBuilder.WriteString("\\n\\n") // Add double newline to simulate paragraph breaks
-			})
+		var best *goquery.Selection
+		bestLen := 0
+		doc.Find(selector).Each(func(_ int, s *goquery.Selection) {
+			if l := len(strings.TrimSpace(s.Text())); l > bestLen {
+				best, bestLen = s, l
+			}
 		})
-		if textBuilder.Len() > 0 {
-			foundMainContent = true
+		// Require some substance so a match on an empty wrapper doesn't win
+		if best != nil && bestLen > 200 {
+			container = best
 			break
 		}
 	}
-
-	// If no specific main content found, get all text from the body, then try to clean it
-	if !foundMainContent {
-		doc.Find("body").Find("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, div").Each(func(_ int, item *goquery.Selection) {
-			textBuilder.WriteString(strings.TrimSpace(item.Text()))
-			textBuilder.WriteString("\\n\\n")
-		})
+	if container == nil {
+		container = doc.Find("body")
 	}
 
-	fullText := textBuilder.String()
+	// Extract text from leaf block elements only. Selecting "div" here caused
+	// massive duplication (every nested div re-emits all descendant text).
+	var textBuilder strings.Builder
+	seen := make(map[string]bool)
+	container.Find("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td").Each(func(_ int, item *goquery.Selection) {
+		// Skip elements that contain other block elements (e.g. li wrapping a nested list)
+		if item.Find("p, li, blockquote, pre").Length() > 0 {
+			return
+		}
+		text := strings.TrimSpace(item.Text())
+		if text == "" || seen[text] {
+			return
+		}
+		seen[text] = true
+		textBuilder.WriteString(text)
+		textBuilder.WriteString("\n\n")
+	})
 
-	// Basic cleaning:
-	// 1. Replace multiple newlines with a single newline.
-	// 2. Trim leading/trailing whitespace from the result.
-	// This is a simplified version of the cleaning in main.go's extractTextFromHTML
-	newlineRegex := regexp.MustCompile(`(\\n\\s*){2,}`)
-	cleanedText := newlineRegex.ReplaceAllString(fullText, "\\n")
+	// Fallback: container had no block elements at all — take its raw text
+	if textBuilder.Len() == 0 {
+		textBuilder.WriteString(strings.TrimSpace(container.Text()))
+	}
+
+	// Collapse runs of blank lines and normalize whitespace
+	newlineRegex := regexp.MustCompile(`\n{3,}`)
+	cleanedText := newlineRegex.ReplaceAllString(textBuilder.String(), "\n\n")
 	cleanedText = strings.TrimSpace(cleanedText)
 
 	article.CleanedText = cleanedText
