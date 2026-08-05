@@ -1,870 +1,103 @@
-# Briefly: AI-Powered News Aggregator & Digest Generator
+# Briefly
 
-Briefly is a modern command-line application written in Go that transforms RSS feeds and curated articles into intelligent, LinkedIn-ready digests. With **v3.1 Hierarchical Summarization**, it generates comprehensive digests that synthesize ALL articles while maintaining conciseness, featuring database-driven workflows, theme-based classification, and executive summaries grounded in complete content coverage.
+Turn a hand-curated list of URLs into a scannable weekly digest, generated with Gemini.
 
-## Features
+Built for one workflow: you collect interesting links during the week, run one command, and paste the result into LinkedIn, Slack, or email. The output is plain text that survives paste targets that don't render markdown.
 
-### 🎯 Phase 1: Digest Generation & Web Viewer (New - Complete)
+## Example output
 
-- **Hierarchical Summarization (v3.1)**: Revolutionary two-stage digest generation
-  - **Stage 1**: Generate comprehensive cluster narratives from **ALL articles** in each topic cluster (not just top 3)
-  - **Stage 2**: Synthesize cluster narratives into concise executive summary
-  - **Result**: Short digests that are grounded in complete content coverage
-  - **No information loss**: Every article contributes to the final digest
-  - **Better credibility**: Summaries accurately reflect all underlying content
-- **Database-Driven Digest Generation**: Generate digests from classified articles stored in PostgreSQL
-  - Command: `briefly digest generate --since N` for date-based digest creation
-  - LLM-powered article summarization with intelligent caching
-  - K-means clustering for automatic topic grouping
-  - Theme-based classification with relevance scores
-  - ON CONFLICT upsert for digest regeneration
-  - LinkedIn-ready markdown output
-- **Web Digest Viewer**: Beautiful, responsive digest viewing experience
-  - Digest list page with card layout (`/digests`)
-  - Digest detail page with full content (`/digests/{id}`)
-  - Markdown-rendered executive summaries using marked.js
-  - Theme-grouped article display with emoji indicators
-  - Article summaries with relevance scoring
-  - REST API endpoints: list, detail, latest digest
-  - Mobile-responsive TailwindCSS design
-  - PostHog analytics integration
+```
+🗞️ MCP Spec Update and 2.8T Kimi K3 Model Release
 
-### 🔍 Phase 0: Observability & Manual Curation (Complete)
+9 links this week · August 5, 2026
 
-- **Theme-Based Classification**: LLM-powered article categorization with 10 predefined themes (AI & ML, Cloud & DevOps, Software Engineering, Web Development, Data Engineering, Security, Programming Languages, Mobile, Open Source, Product & Startup)
-- **Manual URL Submission**: Submit individual articles via CLI, REST API, or web form for one-off processing
-- **LangFuse Observability**: Track all LLM API calls with cost estimation, token counting, and performance metrics
-- **PostHog Analytics**: Product analytics integrated across CLI, API, and web pages for usage insights
-- **Theme Management**: Full CRUD operations via CLI and REST API for managing classification themes
-- **Web Interface**: HTML pages for theme management and URL submission with integrated PostHog tracking
-- **Status Tracking**: Complete workflow for manual URLs (pending → processing → processed/failed)
+The Model Context Protocol (MCP) reaches a major milestone with header-based
+routing, while the open-weight landscape shifts with the 2.8T parameter
+Kimi K3 architecture. ...
 
-### 🎯 v2.0 Smart Concise Digests (Phase 1 - Implemented)
+🎯 Must-read: Anatomy of a Frontier Lab Agent Intrusion — a rare, highly
+technical post-mortem of an autonomous agent attack. 📖 34 min
 
-- **Intelligent Content Filtering**: Advanced relevance scoring automatically filters articles by importance, keeping only high-value content (🔥 Critical ≥0.8, ⭐ Important 0.6-0.8, 💡 Optional <0.6)
-- **Word Count Optimization**: Generates precise 200-500 word digests with real-time word counting and read time estimates ("📊 342 words • ⏱️ 2m read")
-- **Unified Relevance Architecture**: Reusable scoring system serves digest filtering, research ranking, and interactive browsing with context-aware weight profiles
-- **Actionable Recommendations**: "⚡ Try This Week" section with 2-3 specific, implementable actions (5-8 words each) like "Test the mentioned API in a small project this week"
-- **Smart Theme Detection**: Automatically infers digest themes (AI, security, performance, etc.) for targeted relevance scoring
-- **Configurable Filtering**: Command-line control with `--min-relevance`, `--max-words`, and `--enable-filtering` flags
+https://huggingface.co/blog/agent-intrusion-technical-timeline
 
-### 🚀 Core Features
+🛠️ AGENTIC INFRASTRUCTURE & PROTOCOLS
 
-- **Smart Content Processing**: Reads URLs from Markdown files and intelligently extracts main article content  
-- **AI-Powered Summarization**: Uses Gemini API to generate concise, meaningful summaries with word-based limits (15-25 words per article)
-- **Multiple Output Formats**: Choose from brief (200 words), standard (400 words), detailed, newsletter (500 words), or HTML email formats
-- **AI-Powered Insights**: Comprehensive insights automatically integrated into every digest:
-  - **Sentiment Analysis**: Emotional tone analysis with emoji indicators (😊 positive, 😞 negative, 🤔 neutral)
-  - **Alert Monitoring**: Configurable alert conditions with automatic evaluation and notifications
-  - **Trend Analysis**: Week-over-week comparison of topics and themes when historical data is available
-  - **Deep Research**: AI-driven research suggestions and topic exploration with configurable depth
-- **Prompt Corner**: Newsletter format includes AI-generated prompts based on digest content that readers can copy and use with any LLM (ChatGPT, Gemini, Claude, etc.)
-- **Personal Commentary**: Add your own "My Take" to any digest with AI-powered regeneration that integrates your voice throughout the entire content
-- **Intelligent Caching**: SQLite-based caching system to avoid re-processing articles and summaries
-- **Cost Estimation**: Dry-run mode to estimate API costs before processing
-- **Template System**: Customizable output formats with built-in templates
-- **Terminal UI**: Interactive TUI for browsing articles and summaries
-- **Modern CLI**: Built with Cobra for intuitive command-line experience
-- **Structured Logging**: Comprehensive logging with multiple output formats
-- **Configuration Management**: Flexible configuration via files, environment variables, or flags
-- **Multi-Channel Output** (v1.0): Rich output options for different platforms:
-  - **HTML Email**: Responsive email templates with inline CSS for maximum compatibility
-  - **Slack/Discord**: Platform-optimized messages with webhooks, sentiment emojis, and rich formatting
-  - **Text-to-Speech**: Generate MP3 audio files using OpenAI TTS, ElevenLabs, or other providers
+MCP Specification 2026-07-28 · 📖 11 min
 
-## Prerequisites
+The updated protocol introduces multi-round-trip requests and header-based
+routing to scale agentic workflows.
 
-- Go (version 1.23 or higher recommended)
-- A Gemini API Key (required for core functionality)
-
-### Optional for v1.0 Multi-Channel Features:
-- OpenAI API Key (for TTS audio generation)
-- ElevenLabs API Key (for premium TTS voices)
-- Slack/Discord webhook URLs (for messaging integration)
-
-## Installation
-
-### From Source
-
-1. **Clone the Repository:**
-
-   ```bash
-   git clone https://github.com/rcliao/briefly.git
-   cd briefly
-   ```
-
-2. **Install Dependencies:**
-
-   ```bash
-   go mod tidy
-   ```
-
-3. **Build the Application:**
-
-   ```bash
-   # Build for current platform
-   go build -o briefly ./cmd/briefly
-   
-   # Or build and install to $GOPATH/bin
-   go install ./cmd/briefly
-   ```
-
-### Pre-built Binaries
-
-Check the [Releases](https://github.com/rcliao/briefly/releases) page for pre-built binaries for your platform.
-
-### Phase 0: New Commands
-
-**Theme Management:**
-```bash
-# List all themes
-briefly theme list
-
-# Add a new theme
-briefly theme add "Blockchain" -d "Blockchain and cryptocurrency" -k "blockchain,crypto,web3"
-
-# Enable/disable a theme
-briefly theme enable <theme-id>
-briefly theme disable <theme-id>
-
-# Update theme keywords
-briefly theme update <theme-id> -k "blockchain,crypto,web3,defi"
-
-# Delete a theme
-briefly theme delete <theme-id>
+https://blog.modelcontextprotocol.io/posts/2026-07-28
+...
 ```
 
-**Manual URL Submission:**
-```bash
-# Submit URLs for processing
-briefly manual-url add https://example.com/article
+Every article gets a cleaned title, an honest read-time estimate, a one-sentence editorial takeaway, and its URL in plain sight. Links that fail to fetch are listed in a footer — never silently dropped.
 
-# Submit multiple URLs at once
-briefly manual-url add https://example.com/article1 https://example.com/article2
-
-# List all submitted URLs
-briefly manual-url list
-
-# Filter by status
-briefly manual-url list --status pending
-briefly manual-url list --status failed
-
-# Retry a failed URL
-briefly manual-url retry <url-id>
-
-# Delete a submitted URL
-briefly manual-url delete <url-id>
-```
-
-**Digest Generation (Phase 1):**
-```bash
-# Generate digest from classified articles in database
-briefly digest generate --since 7   # Last 7 days
-
-# Filter by theme
-briefly digest generate --theme "AI & Machine Learning" --since 7
-
-# Generates:
-# - LLM-powered article summaries (cached when available)
-# - Executive summary from top articles
-# - Theme-grouped LinkedIn-ready markdown
-# - Saves to database and digests/ directory
-```
-
-**Web Server (Phase 0 + Phase 1):**
-```bash
-# Start web server (includes digest viewer, theme management, URL submission)
-briefly serve
-
-# Access web interfaces:
-# - http://localhost:8080/ - Homepage
-# - http://localhost:8080/digests - View all digests (Phase 1)
-# - http://localhost:8080/digests/{id} - View digest detail (Phase 1)
-# - http://localhost:8080/themes - Theme management
-# - http://localhost:8080/submit - URL submission
-
-# REST API endpoints:
-# - GET /api/digests - List digests (Phase 1)
-# - GET /api/digests/{id} - Get digest detail (Phase 1)
-# - GET /api/digests/latest - Get latest digest (Phase 1)
-# - GET /api/themes - Theme REST API
-# - POST /api/themes - Create theme
-# - GET /api/manual-urls - Manual URL REST API
-```
-
-## Configuration
-
-### Quick Start
-
-Copy the example configuration files and customize them:
+## Install
 
 ```bash
-# Copy configuration templates
-cp .env.example .env
-cp .briefly.yaml.example .briefly.yaml
-
-# Edit with your API keys
-nano .env
+go install ./cmd/briefly
+# or
+go build -o briefly ./cmd/briefly
 ```
 
-**📖 For detailed configuration guide, see [CONFIGURATION.md](CONFIGURATION.md)**
-
-### Required: Gemini API Key
-
-Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey) and set it:
+Requires a Gemini API key ([get one here](https://aistudio.google.com/apikey)):
 
 ```bash
-# In .env file (recommended)
-GEMINI_API_KEY=your-gemini-api-key-here
+export GEMINI_API_KEY="your-key"   # or put it in .env
 ```
-
-### Optional: Search Providers
-
-For research features, configure a search provider:
-
-```bash
-# Google Custom Search (recommended)
-GOOGLE_CSE_API_KEY=your-google-api-key
-GOOGLE_CSE_ID=your-search-engine-id
-
-# Or SerpAPI (premium)
-SERPAPI_KEY=your-serpapi-key
-```
-
-### Configuration Methods
-
-1. **Environment Variables (`.env` file)**
-2. **YAML Configuration (`.briefly.yaml`)**
-3. **Command-line flags**
-
-**Examples:**
-
-**`.env` file:**
-```env
-# Required
-GEMINI_API_KEY=your-gemini-key
-
-# Optional - Search Providers
-GOOGLE_CSE_API_KEY=your-google-key
-GOOGLE_CSE_ID=your-search-engine-id
-
-# Optional - Phase 0 Observability
-LANGFUSE_PUBLIC_KEY=pk_...
-LANGFUSE_SECRET_KEY=sk_...
-LANGFUSE_HOST=https://cloud.langfuse.com
-POSTHOG_API_KEY=phc_...
-POSTHOG_HOST=https://app.posthog.com
-
-# Optional - Multi-channel output
-SLACK_WEBHOOK_URL=https://hooks.slack.com/...
-OPENAI_API_KEY=your-openai-key
-```
-
-**`.briefly.yaml` file:**
-```yaml
-gemini:
-  model: "gemini-1.5-pro"
-output:
-  directory: "my-digests"
-research:
-  default_provider: "google"
-deep_research:
-  max_sources: 30
-
-# Phase 0: Observability (optional)
-observability:
-  langfuse:
-    enabled: true
-    public_key: "pk_..."
-    secret_key: "sk_..."
-    host: "https://cloud.langfuse.com"
-  posthog:
-    enabled: true
-    api_key: "phc_..."
-    host: "https://app.posthog.com"
-```
-
-### Configuration Precedence
-
-Configuration is loaded in the following order (later sources override earlier ones):
-1. Default values
-2. Configuration file (`.briefly.yaml`)
-3. Environment variables
-4. Command-line flags
 
 ## Usage
 
-Briefly uses a modern CLI interface with subcommands. Here's the recommended workflow:
-
-### Complete Workflow (Database-Driven)
-
 ```bash
-# 1. Add RSS/Atom feeds
-briefly feed add https://hnrss.org/newest
-briefly feed add https://blog.golang.org/feed.atom
+# 1. Collect links during the week — one URL per line
+echo "https://example.com/article" >> input/weekly.md
 
-# 2. Aggregate news (run daily via cron)
-briefly aggregate --since 24  # Fetches articles from last 24 hours
+# 2. Generate the digest (~45s for 10 links)
+briefly digest from-file input/weekly.md
+# → digests/digest_2026-08-05.md
 
-# 3. Generate weekly digest with hierarchical summarization
-briefly digest generate --since 7  # Last 7 days
-```
+# Slack-optimized format
+briefly digest from-file input/weekly.md --format slack
 
-### Generate a Digest
-
-**Using Database (Recommended - with Hierarchical Summarization):**
-
-```bash
-# Basic usage - generates digest from classified articles in database
-briefly digest generate --since 7
-
-# Specify custom output directory
-briefly digest generate --since 7 --output ./my-digests
-
-# Filter by specific theme
-briefly digest generate --theme "AI & Machine Learning" --since 7
-
-# View recent digests
-briefly digest list --limit 20
-
-# Show specific digest
-briefly digest show <digest-id>
-```
-
-### Feed Management
-
-```bash
-# Add RSS/Atom feeds
-briefly feed add https://example.com/feed.xml
-
-# List all feeds
-briefly feed list
-
-# Remove a feed
-briefly feed remove <feed-id>
-```
-
-### News Aggregation
-
-```bash
-# Aggregate articles from all feeds (last 24 hours)
-briefly aggregate --since 24
-
-# Aggregate with theme classification
-briefly aggregate --since 24 --themes
-```
-
-### Quick Article Summary
-
-```bash
-# Get quick summary of a single article
+# Quick summary of a single article
 briefly read https://example.com/article
 
-# Force fresh fetch (bypass cache)
-briefly read --no-cache https://example.com/article
-```
-
-### Cache Management
-
-```bash
-# View cache statistics
+# Cache management (SQLite, .briefly-cache/)
 briefly cache stats
-
-# Clear all cached data
 briefly cache clear --confirm
 ```
 
-### Web Interface
+## How it works
 
-```bash
-# Start web server
-briefly serve
+Five steps: parse URLs → fetch in parallel (browser UA, retry, 24h cache) → summarize each article → **one editorial LLM pass** that picks the title, executive summary, must-read, topic groups, and per-article takeaways → render plain text.
 
-# Access:
-# - http://localhost:8080/digests - View all digests
-# - http://localhost:8080/themes - Theme management
-# - http://localhost:8080/submit - Submit URLs
-```
+The design principle throughout: *judgment in the model, structure in the code*. The LLM makes editorial decisions; deterministic code guarantees the format, enforces invariants (every article appears in exactly one topic), and degrades gracefully when the LLM misbehaves.
 
-## How Hierarchical Summarization Works
+Read-time estimates come from actual cleaned word counts, never from the LLM.
 
-Briefly uses a revolutionary **two-stage hierarchical approach** to generate digests that are both concise and comprehensive:
+## Configuration
 
-### Stage 1: Cluster-Level Narratives
-
-For each topic cluster discovered by K-means clustering:
-1. **Collect ALL articles** in the cluster (not just top 3)
-2. **Generate a comprehensive narrative** (2-3 paragraphs) synthesizing all articles
-3. **Extract key themes** and maintain article citations
-4. **Result**: Each cluster has a cohesive summary covering all related articles
-
-### Stage 2: Executive Summary
-
-From the cluster narratives:
-1. **Synthesize cluster narratives** into a concise executive summary
-2. **Show connections** between different clusters
-3. **Include citations** to specific articles using `[1][2][3]` format
-4. **Result**: Short, readable digest grounded in complete content coverage
-
-### Benefits
-
-- ✅ **No Information Loss**: Every article contributes to the final digest
-- ✅ **Better Credibility**: Summaries accurately reflect all content
-- ✅ **Maintains Conciseness**: Executive summary stays short by synthesizing clusters, not all individual articles
-- ✅ **Natural Flow**: Cluster narratives create coherent story arcs
-# - highlights: Top 5 key highlights only
-```
-
-#### Text-to-Speech Audio
-```bash
-# Generate MP3 using OpenAI TTS
-briefly generate-tts input/links.md --provider openai --voice alloy
-
-# Generate using ElevenLabs
-briefly generate-tts input/links.md --provider elevenlabs --voice Rachel
-
-# Customize audio generation
-briefly generate-tts input/links.md \
-  --provider openai \
-  --voice nova \
-  --speed 1.2 \
-  --max-articles 5 \
-  --output audio/
-
-# Available providers:
-# - openai: High-quality voices (alloy, echo, fable, onyx, nova, shimmer)
-# - elevenlabs: Premium natural voices (Rachel, Domi, Bella, Antoni, Arnold)
-# - mock: For testing (creates text file instead of audio)
-```
-
-### Terminal User Interface
-
-Launch an interactive TUI to browse articles and summaries:
-
-```bash
-briefly tui
-```
-
-### Prompt Corner Feature
-
-The newsletter format includes a special "Prompt Corner" section that automatically generates interesting prompts based on the digest content. These prompts are designed to be copied and pasted into any LLM (ChatGPT, Gemini, Claude, etc.) for further exploration of the topics covered.
-
-**Example Prompt Corner Output:**
-```markdown
-## 🎯 Prompt Corner
-
-Here are some prompts inspired by today's digest:
-
-```
-"Act as a senior software engineer. I'm trying to refactor a legacy section of Python code. Using the capabilities of a hypothetical 'Claude Opus 4' coding model with access to the filesystem and web search, propose a refactoring plan, including justifications and potential risks."
-```
-This prompt simulates using advanced AI coding features for real-world refactoring problems.
-
-```
-"I have a list of small bug fixes for a Node.js application. As GitHub Copilot Coding Agent, suggest a prioritized order for these tasks, outlining the approach and estimated time for each."
-```
-This prompt leverages AI task delegation capabilities for project management.
-```
-
-The prompts are:
-- **Contextual**: Directly inspired by the articles in your digest
-- **Practical**: Ready to use for real development scenarios  
-- **Portable**: Work with any LLM platform
-- **Educational**: Include explanations of what each prompt accomplishes
-
-### Command-line Options
-
-**Global Flags:**
-- `--config`: Specify a configuration file
-
-**Digest Command Flags:**
-- `--output, -o`: Output directory for digest files (default: "digests")
-- `--format, -f`: Digest format: brief, standard, detailed, newsletter (default: "standard")
-- `--dry-run`: Estimate costs without making API calls
-- `--min-relevance`: Minimum relevance threshold for article inclusion (0.0-1.0, default: 0.6)
-- `--max-words`: Maximum words for entire digest (0 for template default)
-- `--enable-filtering`: Enable relevance-based content filtering (default: true)
-
-### Examples
-
-```bash
-# Basic digest generation
-briefly digest input/weekly-links.md
-
-# Newsletter format with custom output directory
-briefly digest --format newsletter --output ./newsletters input/links.md
-
-# Cost estimation before processing
-briefly digest --dry-run input/expensive-links.md
-
-# Using environment variable for API key
-export GEMINI_API_KEY="your_key_here"
-briefly digest input/links.md
-
-# Complete workflow with AI-powered personal commentary
-briefly digest input/weekly-links.md                    # Generate digest
-briefly my-take list                                     # See available digests  
-briefly my-take add 1234abcd "Great insights this week!" # Add your perspective
-briefly my-take regenerate 1234abcd                     # AI regenerates entire digest with your voice integrated throughout
-
-# AI-powered insights and research workflow
-briefly digest input/weekly-links.md                    # Generate digest with automatic insights
-briefly insights alerts list                            # View current alert configurations
-briefly insights alerts add --keyword "AI" --priority high  # Add new alert condition
-briefly research --topic "AI development trends" --depth 2  # Deep research on emerging topics
-```
-
-## AI-Powered Insights Features
-
-### Automatic Insights Integration
-
-Every digest automatically includes a comprehensive "AI-Powered Insights" section with:
-
-- **📊 Sentiment Analysis**: Emotional tone analysis with emoji indicators
-- **🚨 Alert Monitoring**: Configurable alert conditions and notifications  
-- **📈 Trend Analysis**: Week-over-week topic and theme comparison
-- **🔍 Research Suggestions**: AI-generated queries for deeper topic exploration
-
-### Insights Commands
-
-```bash
-# Alert Management
-briefly insights alerts list                              # List all configured alerts
-briefly insights alerts add --keyword "security" --priority high  # Add keyword alert
-briefly insights alerts add --topic "AI" --threshold 3   # Add topic frequency alert
-briefly insights alerts remove <alert-id>                # Remove specific alert
-
-# Trend Analysis  
-briefly insights trends                                   # Show recent trend analysis
-briefly insights trends --days 14                        # Trends over specific period
-briefly insights trends --topic "AI"                     # Trends for specific topic
-
-# Deep Research
-briefly research --topic "machine learning" --depth 2    # Research with 2 iterations
-briefly research --topic "cybersecurity" --depth 3 --max-results 10  # Detailed research
-briefly research --list                                   # Show recent research sessions
-```
-
-### Research Integration
-
-The deep research feature provides AI-driven topic exploration:
-
-1. **AI Query Generation**: Gemini generates relevant search queries for your topic
-2. **Iterative Research**: Configurable depth for multi-level topic exploration  
-3. **Source Discovery**: Finds and processes additional relevant sources
-4. **Integration**: Research results can be integrated into future digests
-5. **Mock Search Provider**: Currently uses a mock search provider for demonstration
-
-**Example Research Session:**
-```bash
-briefly research --topic "AI coding assistants" --depth 2
-
-# Output:
-# 🔍 Starting Deep Research Session
-# Topic: AI coding assistants
-# Depth: 2 iterations
-# 
-# Iteration 1: Generated 3 search queries
-# - "best AI coding assistants 2025 comparison"
-# - "GitHub Copilot vs ChatGPT vs Claude coding"  
-# - "AI pair programming tools developer productivity"
-# 
-# Iteration 2: Generated 3 additional queries
-# - "AI code completion accuracy benchmarks"
-# - "enterprise AI coding tools integration"
-# - "future of AI-assisted software development"
-# 
-# Research completed. Found 6 relevant sources.
-# Results stored and can be included in future digests.
-```
-
-## Input File Format
-
-Input files should be Markdown files containing URLs. Briefly will extract all HTTP/HTTPS URLs found anywhere in the file.
-
-### Example Input File
-
-```markdown
----
-date: 2025-05-30
-title: "Weekly Tech Links"
----
-
-# Interesting Articles This Week
-
-Here are some articles I found interesting:
-
-- https://example.com/article-1
-- https://news.site.com/important-update
-- Check this out: https://blog.example.org/research-paper
-
-## AI and Development
-
-- [Claude 4 Release](https://anthropic.com/news/claude-4)
-- https://zed.dev/blog/fastest-ai-code-editor
-
-Some inline links like https://github.com/project/repo are also extracted.
-```
-
-The application will automatically extract all URLs regardless of their formatting (plain text, markdown links, inline, etc.).
-
-## How It Works
-
-### Digest Generation (v2.0 Enhanced)
-
-1. **URL Extraction**: Parses the input Markdown file to find all HTTP/HTTPS URLs
-2. **Content Fetching**: Downloads and extracts main content from each URL using intelligent HTML parsing
-3. **Smart Caching**: Checks cache for previously processed articles to avoid redundant API calls
-4. **Content Cleaning**: Removes boilerplate content (navigation, ads, etc.) to focus on main article text
-5. **AI Summarization**: Uses Gemini API to generate word-limited summaries (15-25 words per article)
-6. **🎯 v2.0 Relevance Filtering**: 
-   - **Theme Detection**: Automatically infers digest theme from article titles and content
-   - **Relevance Scoring**: Uses KeywordScorer to evaluate content relevance with configurable weights
-   - **Quality Filtering**: Removes low-quality content (short articles, spam domains, missing titles)
-   - **Threshold Filtering**: Keeps only articles meeting minimum relevance score (default 0.6)
-   - **Word Budget Management**: Prioritizes high-relevance content when approaching word limits
-7. **AI-Powered Insights Generation**: Automatically analyzes filtered content for:
-   - **Sentiment Analysis**: Determines emotional tone and assigns appropriate emoji indicators
-   - **Alert Evaluation**: Checks configured alert conditions against article content and topics
-   - **Trend Detection**: Compares current topics with historical data when available
-   - **Research Suggestions**: Generates AI-driven research queries for deeper topic exploration
-8. **🎯 v2.0 Actionable Recommendations**: Generates "⚡ Try This Week" section with 2-3 specific, technology-aware action items
-9. **Template Processing**: Applies word-optimized format templates with integrated insights and recommendations
-10. **Word Count Optimization**: Ensures output meets target word limits (200-500 words) with read time estimates
-11. **Final Digest Generation**: Creates cohesive, scannable digest with proper citations and comprehensive sections
-12. **Output**: Saves the final digest as a Markdown file with word count statistics and filtering results
-
-### AI-Powered Insights
-
-Every digest automatically includes a comprehensive "AI-Powered Insights" section featuring:
-
-1. **Sentiment Analysis**: 
-   - Analyzes the emotional tone of each article using AI
-   - Displays sentiment with emoji indicators (😊 positive, 😞 negative, 🤔 neutral/mixed)
-   - Provides overall digest sentiment summary
-
-2. **Alert Monitoring**:
-   - Evaluates configurable alert conditions against article content
-   - Triggers notifications for high-priority topics or keywords
-   - Displays triggered alerts with context and priority levels
-
-3. **Trend Analysis**:
-   - Compares current digest topics with historical data when available
-   - Identifies emerging themes and topic frequency changes
-   - Provides week-over-week trend insights
-
-4. **Deep Research Suggestions**:
-   - AI generates relevant research queries based on digest content
-   - Provides suggestions for deeper exploration of covered topics
-   - Can automatically execute research with configurable depth using `briefly research` command
-
-### My Take Regeneration
-
-1. **Personal Perspective Storage**: Your "my take" is stored in the local database linked to the specific digest
-2. **Content Retrieval**: System retrieves the original digest content and your personal take
-3. **AI-Powered Rewriting**: Gemini LLM receives sophisticated prompts to completely rewrite the digest incorporating your voice naturally throughout
-4. **Cohesive Integration**: Your perspective becomes part of the narrative flow rather than a separate section
-5. **Timestamped Output**: Creates a new file with `_with_my_take_` suffix while preserving the original
-
-### Intelligent Features
-
-- **Caching**: Articles and summaries are cached to avoid re-processing
-- **Content Extraction**: Advanced HTML parsing focuses on main article content
-- **Cost Estimation**: Dry-run mode provides cost estimates before processing
-- **Error Handling**: Graceful handling of failed URLs with detailed logging
-- **Multiple Formats**: Choose from different digest styles for various use cases
-- **AI-Powered Insights**: Automatic sentiment analysis, alert monitoring, trend detection, and research suggestions
-- **Alert System**: Configurable conditions for monitoring specific topics, keywords, or content patterns
-- **Research Integration**: AI-driven deep research capabilities with iterative topic exploration
-
-## Advanced Usage
-
-### Configuration Management
-
-Create a `.briefly.yaml` configuration file for persistent settings:
+Optional `.briefly.yaml`:
 
 ```yaml
-# Gemini AI Configuration
-gemini:
-  api_key: ""  # Or use GEMINI_API_KEY environment variable
-  model: "gemini-2.5-flash-preview-05-20"
-
-# Output Configuration
-output:
-  directory: "digests"
-
-# Future configuration options can be added here
-# cache:
-#   enabled: true
-#   ttl: "24h"
+ai:
+  gemini:
+    model: "gemini-3-flash-preview"
+cache:
+  directory: ".briefly-cache"
 ```
 
-### Development and Testing
+`BRIEFLY_LOG_LEVEL` (debug|info|warn|error, default warn) controls JSON logging to stderr; stdout carries only command output.
+
+## Development
 
 ```bash
-# Run from source during development
-go run ./cmd/briefly digest input/test-links.md
-
-# Run tests
-go test ./...
-
-# Build for multiple platforms
-GOOS=linux GOARCH=amd64 go build -o briefly-linux-amd64 ./cmd/briefly
-GOOS=windows GOARCH=amd64 go build -o briefly-windows-amd64.exe ./cmd/briefly
-GOOS=darwin GOARCH=amd64 go build -o briefly-darwin-amd64 ./cmd/briefly
+make test   # go test -race ./...
+make lint   # golangci-lint, pinned config, zero-findings policy
+make fmt
 ```
 
-### API Cost Management
+## History
 
-Briefly includes built-in cost estimation to help manage Gemini API usage:
-
-```bash
-# Estimate costs before processing
-briefly digest --dry-run input/large-link-list.md
-
-# Example output:
-# Cost Estimation for Digest Generation
-# =====================================
-# Articles to process: 25
-# Estimated tokens per article: ~2000
-# Total estimated input tokens: ~50,000
-# Estimated output tokens: ~5,000
-# 
-# Estimated costs (USD):
-# - Input tokens: $0.025
-# - Output tokens: $0.015
-# - Total estimated cost: $0.040
-```
-
-### Troubleshooting
-
-**Common Issues:**
-
-1. **API Key not found**: Ensure `GEMINI_API_KEY` is set or configured in `.briefly.yaml`
-2. **Permission denied**: Make sure the output directory is writable
-3. **Network timeouts**: Some websites may be slow or block requests
-4. **Cache issues**: Clear cache with `briefly cache clear --confirm`
-
-**Debug Logging:**
-
-The application provides detailed logging. Check logs for specific error messages when articles fail to process.
-
-## Project Structure
-
-```
-briefly/
-├── cmd/
-│   ├── briefly/              # Main application entry point
-│   │   └── main.go
-│   ├── cmd/                  # CLI commands and configuration
-│   │   └── root.go          # Cobra CLI setup and command definitions
-│   └── main.go              # Alternative entry point
-├── internal/                # Internal packages
-│   ├── alerts/              # Alert monitoring and evaluation system
-│   ├── clustering/          # Topic clustering and analysis
-│   ├── core/                # Core data structures (Article, Summary, etc.)
-│   ├── cost/                # Cost estimation functionality
-│   ├── feeds/               # RSS feed processing (future feature)
-│   ├── fetch/               # URL fetching and content extraction
-│   ├── llm/                 # LLM client abstraction
-│   ├── logger/              # Structured logging setup
-│   ├── relevance/           # 🎯 v2.0 Unified relevance scoring architecture
-│   ├── render/              # Digest rendering and output
-│   ├── research/            # Deep research and AI query generation
-│   ├── sentiment/           # Sentiment analysis functionality
-│   ├── store/               # SQLite caching system
-│   ├── templates/           # Word-optimized digest format templates
-│   ├── trends/              # Trend analysis and historical comparison  
-│   └── tui/                 # Terminal user interface
-├── llmclient/               # Legacy Gemini client (being phased out)
-│   └── gemini_client.go
-├── input/                   # Example input files
-├── digests/                 # Generated digest outputs
-├── temp_content/            # Cached article content
-├── docs/                    # Documentation
-├── .env                     # Environment variables (local)
-├── .briefly.yaml           # Configuration file
-├── go.mod                   # Go module definition
-├── go.sum                   # Dependency checksums
-└── README.md               # This file
-```
-
-### Key Components
-
-- **`cmd/briefly/main.go`**: Application entry point
-- **`cmd/handlers/root_simplified.go`**: CLI command definitions and routing
-- **`cmd/handlers/theme.go`**: 🔍 Phase 0 - Theme management CLI
-- **`cmd/handlers/manual_url.go`**: 🔍 Phase 0 - Manual URL management CLI
-- **`internal/core/`**: Core data structures (Article, Summary, Theme, ManualURL)
-- **`internal/fetch/`**: Web scraping and content extraction
-- **`internal/llm/`**: AI/LLM integration layer
-- **`internal/llm/traced_client.go`**: 🔍 Phase 0 - Observability-wrapped LLM client
-- **`internal/themes/`**: 🔍 Phase 0 - LLM-based theme classification
-- **`internal/observability/`**: 🔍 Phase 0 - LangFuse and PostHog clients
-- **`internal/persistence/`**: PostgreSQL storage with theme and manual URL repositories
-- **`internal/server/`**: HTTP server with theme and manual URL endpoints
-- **`internal/store/`**: SQLite-based caching system
-- **`internal/templates/`**: Output format templates
-- **`internal/tui/`**: Interactive terminal interface
-- **`internal/alerts/`**: Alert monitoring and evaluation system
-- **`internal/relevance/`**: 🎯 v2.0 Unified relevance scoring system with interfaces, keyword scorer, and filtering logic
-- **`internal/sentiment/`**: Sentiment analysis functionality
-- **`internal/trends/`**: Trend analysis and historical comparison
-- **`internal/research/`**: Deep research and AI query generation
-- **`internal/clustering/`**: Topic clustering and analysis
-
-## Further Development
-
-See [`docs/executions/2025-10-31.md`](docs/executions/2025-10-31.md) for the current implementation roadmap.
-
-**Current Status**:
-- ✅ **Phase 0: Observability & Manual Curation - Complete**
-- 🎯 **Phase 1: Digest Generation & Web Viewer - 85% Complete**
-
-### ✅ Phase 0 Complete (Observability & Manual Curation)
-- ✅ Theme-based article classification with LLM (10 default themes)
-- ✅ Manual URL submission system (CLI, API, Web)
-- ✅ LangFuse integration for LLM observability
-- ✅ PostHog integration for product analytics
-- ✅ Theme management with full CRUD operations
-- ✅ Web pages with PostHog tracking
-- ✅ TracedClient pattern for observability-wrapped LLM calls
-- ✅ Database migrations for themes, manual URLs, and article themes
-
-### 🎯 Phase 1: Digest Generation & Web Viewer (85% Complete)
-✅ **Completed Features**:
-- ✅ **Digest Generation Command** - `briefly digest generate --since N`
-  - Generate digests from database articles by date/theme
-  - LLM-powered article summarization with caching
-  - Executive summary generation from top articles
-  - Theme-based grouping with relevance scores
-  - Save to PostgreSQL with ON CONFLICT upsert
-  - LinkedIn-ready markdown output
-- ✅ **Web Digest Viewer**
-  - REST API: GET /api/digests (list, detail, latest)
-  - HTML pages: /digests (list), /digests/{id} (detail)
-  - Markdown rendering for executive summaries
-  - Theme-grouped article display
-  - Mobile-responsive TailwindCSS design
-
-⏳ **Remaining**:
-- RSS feed aggregation with inline theme classification
-- Scheduled digest generation automation
-
-### Phase 2: REST API Enhancements (Planned)
-- Implement full CRUD for articles, digests, feeds
-- Add pagination, filtering, search
-- Populate database statistics in status endpoint
-- Theme-based filtering for all endpoints
-
-### Phase 3: Production Deployment (Planned)
-- Dockerfile and containerization
-- Deploy to Railway/Fly.io
-- Production database setup and migrations
-- Monitoring and alerting
-
-**v1.0 Multi-Channel Features** (Production Ready):
-- ✅ HTML email output with responsive templates
-- ✅ Slack/Discord integration with webhook support
-- ✅ Text-to-Speech (TTS) MP3 generation with multiple providers
-- ✅ AI banner image generation with DALL-E integration
+v3 was a full news-aggregation platform (Postgres, RSS feeds, theme classification, embeddings + clustering, a web UI, an agentic LLM loop). In August 2026 all of it was removed (~35k lines) in favor of the single curated-digest pipeline — the platform half was never part of the weekly workflow it existed to serve. See `CLAUDE.md` for the architecture notes and the reasoning.
